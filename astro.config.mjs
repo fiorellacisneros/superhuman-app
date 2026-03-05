@@ -6,6 +6,11 @@ import { esES } from '@clerk/localizations';
 export default defineConfig({
   output: 'server',
   adapter: vercel(),
+  security: {
+    // We handle CSRF checks in middleware with same-site fallbacks
+    // (Origin/Referer/Sec-Fetch-Site) to avoid false positives on forms.
+    checkOrigin: false,
+  },
   integrations: [
     clerk({
       localization: esES,
