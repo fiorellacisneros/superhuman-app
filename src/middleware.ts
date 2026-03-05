@@ -55,7 +55,8 @@ export const onRequest = clerkMiddleware(async (auth, context, next) => {
   // Basic CSRF mitigation for API mutations: block cross-origin requests.
   const method = context.request.method.toUpperCase();
   const isMutation = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
-  if (isMutation && url.pathname.startsWith('/api/')) {
+  const enforceCsrf = import.meta.env.ENABLE_CSRF_PROTECTION === 'true';
+  if (enforceCsrf && isMutation && url.pathname.startsWith('/api/')) {
     const origin = context.request.headers.get('origin');
     const referer = context.request.headers.get('referer');
     const secFetchSite = context.request.headers.get('sec-fetch-site');
