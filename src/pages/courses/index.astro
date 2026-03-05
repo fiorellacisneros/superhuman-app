@@ -12,20 +12,25 @@ const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
 const role = (userRow?.role as string) ?? 'student';
 
-// Si es admin, redirigir al panel de cursos de admin
-if (role === 'admin') {
-  return Astro.redirect('/admin/courses');
-}
-
-const { data: enrollmentRows } = await supabase
-  .from('enrollments')
-  .select('course_id, courses(id, slug, title, cover_image, description)')
-  .eq('user_id', userId);
-
 const enrolledCourses: { id: string; slug: string; title: string; cover_image: string | null; description: string | null; totalLessons: number; completedLessons: number }[] = [];
-const enrolledCourseRows = (enrollmentRows ?? [])
-  .map((row) => (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses)
-  .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
+let enrolledCourseRows: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null }[] = [];
+if (role === 'admin') {
+  const { data: coursesRows } = await supabase
+    .from('courses')
+    .select('id, slug, title, cover_image, description')
+    .order('created_at', { ascending: false });
+  enrolledCourseRows = (coursesRows ?? []).filter(
+    (course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id),
+  );
+} else {
+  const { data: enrollmentRows } = await supabase
+    .from('enrollments')
+    .select('course_id, courses(id, slug, title, cover_image, description)')
+    .eq('user_id', userId);
+  enrolledCourseRows = (enrollmentRows ?? [])
+    .map((row) => (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses)
+    .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
+}
 
 const enrolledIds = enrolledCourseRows.map((course) => course.id);
 const lessonsByCourse = new Map<string, { total: number; completed: number }>();
@@ -52,7 +57,7 @@ for (const course of enrolledCourseRows) {
   const stats = lessonsByCourse.get(course.id) ?? { total: 0, completed: 0 };
   enrolledCourses.push({
     id: course.id,
-    slug: course.slug ?? course.id,
+    slug: typeof course.slug === 'string' && course.slug.trim() ? course.slug.trim() : course.id,
     title: course.title ?? 'Curso',
     cover_image: course.cover_image ?? null,
     description: course.description ?? null,
@@ -62,7 +67,7 @@ for (const course of enrolledCourseRows) {
 }
 ---
 
-<DashboardLayout role="student">
+<DashboardLayout role={role === 'admin' ? 'admin' : 'student'}>
   <section class="space-y-6">
     <nav class="text-sm text-muted">
       <a href="/dashboard" class="hover:text-white">Panel</a>
@@ -71,8 +76,10 @@ for (const course of enrolledCourseRows) {
     </nav>
 
     <header>
-      <h1 class="text-2xl font-semibold tracking-tight text-white">Mis cursos</h1>
-      <p class="mt-1 text-sm text-muted">Cursos en los que estás inscrito.</p>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">{role === 'admin' ? 'Cursos' : 'Mis cursos'}</h1>
+      <p class="mt-1 text-sm text-muted">
+        {role === 'admin' ? 'Vista general de cursos creados.' : 'Cursos en los que estás inscrito.'}
+      </p>
     </header>
 
     {enrolledCourses.length > 0 ? (
@@ -121,8 +128,10 @@ for (const course of enrolledCourseRows) {
       </ul>
     ) : (
       <div class="rounded-xl border border-dashed border-border bg-surface-2/60 p-8 text-center">
-        <p class="text-sm font-medium text-white">Aún no estás inscrito en ningún curso.</p>
-        <p class="mt-1 text-sm text-muted">Cuando te inscribas, tus cursos aparecerán aquí.</p>
+        <p class="text-sm font-medium text-white">{role === 'admin' ? 'Aún no hay cursos creados.' : 'Aún no estás inscrito en ningún curso.'}</p>
+        <p class="mt-1 text-sm text-muted">
+          {role === 'admin' ? 'Crea cursos desde el panel de administración.' : 'Cuando te inscribas, tus cursos aparecerán aquí.'}
+        </p>
         <a
           href="/dashboard"
           class="mt-4 inline-block rounded-lg border border-lime bg-lime/15 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/25"

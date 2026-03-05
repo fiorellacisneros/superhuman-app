@@ -175,7 +175,7 @@ if (role !== 'admin' || preview) {
     const stats = lessonsByCourse.get(course.id) ?? { total: 0, completed: 0 };
     enrolledCourses.push({
       id: course.id,
-      slug: course.slug ?? course.id,
+      slug: typeof course.slug === 'string' && course.slug.trim() ? course.slug.trim() : course.id,
       title: course.title ?? 'Curso',
       cover_image: course.cover_image ?? null,
       description: course.description ?? null,

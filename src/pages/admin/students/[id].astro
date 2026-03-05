@@ -76,7 +76,7 @@ const enrolledCourses = (enrollmentsRows ?? []).map((e) => {
   const c = e.courses as { id: string; slug: string | null; title: string | null } | null;
   return {
     id: c?.id ?? e.course_id,
-    slug: c?.slug ?? c?.id ?? e.course_id,
+    slug: typeof c?.slug === 'string' && c.slug.trim() ? c.slug.trim() : (c?.id ?? e.course_id),
     title: c?.title ?? 'Curso',
     enrolledAt: e.enrolled_at as string | null,
   };

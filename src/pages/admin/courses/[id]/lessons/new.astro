@@ -37,7 +37,7 @@ if (!course) {
       <span class="mx-1">/</span>
       <a href={`/admin/courses/${courseId}/edit`} class="hover:text-white">{course.title}</a>
       <span class="mx-1">/</span>
-      <span class="text-muted">/{course.slug ?? course.id}</span>
+      <span class="text-muted">/{typeof course.slug === 'string' && course.slug.trim() ? course.slug.trim() : course.id}</span>
       <span class="mx-1">/</span>
       <span class="text-white">Nueva clase</span>
     </nav>

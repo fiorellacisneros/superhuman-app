@@ -32,7 +32,7 @@ for (const c of coursesRows ?? []) {
     .eq('course_id', c.id);
   courses.push({
     id: c.id,
-    slug: c.slug ?? c.id,
+    slug: typeof c.slug === 'string' && c.slug.trim() ? c.slug.trim() : c.id,
     title: c.title ?? 'Sin título',
     description: c.description ?? null,
     cover_image: c.cover_image ?? null,
