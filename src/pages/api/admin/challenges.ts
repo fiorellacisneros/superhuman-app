@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { safeRedirectPath } from '../../../lib/request-security';
+import { safeRedirectPath, withToastParams } from '../../../lib/request-security';
 import { requireAdmin } from '../../../lib/api-admin';
 import { isRateLimited } from '../../../lib/rate-limit';
 import { recordAdminAudit } from '../../../lib/security-audit';
@@ -11,20 +11,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const formData = await request.formData();
   const action = formData.get('action');
-  if (action !== 'create' && action !== 'toggle' && action !== 'delete' && action !== 'update') {
-    return new Response(JSON.stringify({ error: 'action=create|toggle|delete|update required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
+  const redirect = safeRedirectPath(formData.get('redirect_to'), '/admin/challenges');
+  const errorRedirect = (message: string, status = 303) =>
+    new Response(null, {
+      status,
+      headers: { Location: withToastParams(redirect, message, 'error') },
     });
+  if (action !== 'create' && action !== 'toggle' && action !== 'delete' && action !== 'update') {
+    return errorRedirect('Invalid challenge action', 303);
   }
   if (isRateLimited(`admin-challenges:${userId}`, 40, 60_000)) {
-    return new Response(JSON.stringify({ error: 'Too many challenge requests, try again shortly' }), {
-      status: 429,
-      headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
-    });
+    return errorRedirect('Too many challenge requests, try again in a minute', 303);
   }
-
-  const url = safeRedirectPath(formData.get('redirect_to'), '/admin/challenges');
 
   if (action === 'create') {
     const title = typeof formData.get('title') === 'string' ? String(formData.get('title')).trim().slice(0, 140) : '';
@@ -40,19 +38,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const scheduled_at = typeof scheduledAtRaw === 'string' && scheduledAtRaw.trim() ? scheduledAtRaw.trim() : null;
 
     if (!title) {
-      return new Response(JSON.stringify({ error: 'title required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return errorRedirect('Title is required', 303);
     }
     if (!Number.isFinite(points_reward) || points_reward < 0 || points_reward > 1000) {
-      return new Response(JSON.stringify({ error: 'points_reward must be between 0 and 1000' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return errorRedirect('Points must be between 0 and 1000', 303);
     }
 
-    await db.from('challenges').insert({
+    const { error: insertError } = await db.from('challenges').insert({
       title,
       description,
       points_reward: Number.isFinite(points_reward) ? points_reward : 30,
@@ -61,49 +53,46 @@ export const POST: APIRoute = async ({ request, locals }) => {
       is_active: activateNow,
       scheduled_at: activateNow ? null : scheduled_at,
     });
+    if (insertError) return errorRedirect(`Could not create challenge: ${insertError.message}`, 303);
     await recordAdminAudit(db, userId, 'challenge.create', { title, courseId, activateNow });
+    const url = withToastParams(redirect, 'Challenge created', 'success');
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
   if (action === 'toggle') {
     const challenge_id = formData.get('challenge_id');
     if (typeof challenge_id !== 'string' || !challenge_id.trim()) {
-      return new Response(JSON.stringify({ error: 'challenge_id required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return errorRedirect('Challenge id is required', 303);
     }
     const { data: row } = await db.from('challenges').select('is_active').eq('id', challenge_id.trim()).maybeSingle();
     if (row) {
-      await db.from('challenges').update({ is_active: !row.is_active }).eq('id', challenge_id.trim());
+      const { error: toggleError } = await db.from('challenges').update({ is_active: !row.is_active }).eq('id', challenge_id.trim());
+      if (toggleError) return errorRedirect(`Could not update challenge: ${toggleError.message}`, 303);
       await recordAdminAudit(db, userId, 'challenge.toggle', {
         challengeId: challenge_id.trim(),
         toActive: !row.is_active,
       });
     }
+    const url = withToastParams(redirect, row ? `Challenge ${!row.is_active ? 'activated' : 'paused'}` : 'Challenge updated', 'success');
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
   if (action === 'delete') {
     const challenge_id = formData.get('challenge_id');
     if (typeof challenge_id !== 'string' || !challenge_id.trim()) {
-      return new Response(JSON.stringify({ error: 'challenge_id required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return errorRedirect('Challenge id is required', 303);
     }
-    await db.from('challenges').delete().eq('id', challenge_id.trim());
+    const { error: deleteError } = await db.from('challenges').delete().eq('id', challenge_id.trim());
+    if (deleteError) return errorRedirect(`Could not delete challenge: ${deleteError.message}`, 303);
     await recordAdminAudit(db, userId, 'challenge.delete', { challengeId: challenge_id.trim() });
+    const url = withToastParams(redirect, 'Challenge deleted', 'success');
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
   if (action === 'update') {
     const challenge_id = formData.get('challenge_id');
     if (typeof challenge_id !== 'string' || !challenge_id.trim()) {
-      return new Response(JSON.stringify({ error: 'challenge_id required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return errorRedirect('Challenge id is required', 303);
     }
     const title = formData.get('title');
     const description = formData.get('description');
@@ -118,21 +107,21 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (typeof points_reward === 'string' && points_reward !== '') {
       const parsedPoints = Number(points_reward);
       if (!Number.isFinite(parsedPoints) || parsedPoints < 0 || parsedPoints > 1000) {
-        return new Response(JSON.stringify({ error: 'points_reward must be between 0 and 1000' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return errorRedirect('Points must be between 0 and 1000', 303);
       }
       update.points_reward = parsedPoints;
     }
     if (typeof course_id === 'string') update.course_id = course_id.trim() || null;
     update.is_active = is_active;
     if (Object.keys(update).length > 0) {
-      await db.from('challenges').update(update).eq('id', challenge_id.trim());
+      const { error: updateError } = await db.from('challenges').update(update).eq('id', challenge_id.trim());
+      if (updateError) return errorRedirect(`Could not update challenge: ${updateError.message}`, 303);
       await recordAdminAudit(db, userId, 'challenge.update', { challengeId: challenge_id.trim() });
     }
+    const url = withToastParams(redirect, 'Challenge updated', 'success');
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
+  const url = withToastParams(redirect, 'Challenge updated', 'success');
   return new Response(null, { status: 303, headers: { Location: url } });
 };

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { safeRedirectPath, sanitizeHttpUrl } from '../../../lib/request-security';
+import { safeRedirectPath, sanitizeHttpUrl, withToastParams } from '../../../lib/request-security';
 import { requireAdmin } from '../../../lib/api-admin';
 import { isRateLimited } from '../../../lib/rate-limit';
 import { recordAdminAudit } from '../../../lib/security-audit';
@@ -159,6 +159,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  const url = safeRedirectPath(formData.get('redirect_to'), '/admin/courses');
+  const redirect = safeRedirectPath(formData.get('redirect_to'), '/admin/courses');
+  const url = withToastParams(redirect, action === 'create' ? 'Lesson created' : 'Lesson updated', 'success');
   return new Response(null, { status: 303, headers: { Location: url } });
 };

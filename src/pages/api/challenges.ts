@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
-import { safeRedirectPath, sanitizeHttpUrl } from '../../lib/request-security';
+import { safeRedirectPath, sanitizeHttpUrl, withToastParams } from '../../lib/request-security';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
@@ -68,8 +68,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (existing) {
     if (mode === 'update' && canEditByDeadline) {
       await db.from('submissions').update({ link: linkStr }).eq('id', existing.id);
+      const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
+      const url = withToastParams(redirect, 'Submission updated', 'success');
+      return new Response(null, { status: 303, headers: { Location: url } });
     }
-    const url = safeRedirectPath(formData.get('redirect_to'), '/challenges');
+    const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
+    const url = withToastParams(redirect, 'Submission already sent', 'info');
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
@@ -80,6 +84,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     submitted_at: new Date().toISOString(),
   });
 
-  const url = safeRedirectPath(formData.get('redirect_to'), '/challenges');
+  const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
+  const url = withToastParams(redirect, 'Submission sent successfully', 'success');
   return new Response(null, { status: 303, headers: { Location: url } });
 };

@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { addPointsForEvent } from '../../../lib/points';
 import { checkBadgesAfterAttendance } from '../../../lib/badges';
-import { safeRedirectPath } from '../../../lib/request-security';
+import { safeRedirectPath, withToastParams } from '../../../lib/request-security';
 import { requireAdmin } from '../../../lib/api-admin';
 import { isRateLimited } from '../../../lib/rate-limit';
 import { recordAdminAudit } from '../../../lib/security-audit';
@@ -48,7 +48,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const enrolledSet = new Set((enrolledRows ?? []).map((r) => r.user_id as string));
   const validUserIds = uniqueSelectedUserIds.filter((id) => enrolledSet.has(id));
   if (validUserIds.length === 0) {
-    const url = safeRedirectPath(formData.get('redirect_to'), '/admin/attendance');
+    const redirect = safeRedirectPath(formData.get('redirect_to'), '/admin/attendance');
+    const url = withToastParams(redirect, 'No students selected for this lesson', 'info');
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
@@ -80,6 +81,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     addedCount: toInsert.length,
   });
 
-  const url = safeRedirectPath(formData.get('redirect_to'), '/admin/attendance');
+  const redirect = safeRedirectPath(formData.get('redirect_to'), '/admin/attendance');
+  const url = withToastParams(
+    redirect,
+    toInsert.length > 0
+      ? `Attendance saved (${toInsert.length} student${toInsert.length === 1 ? '' : 's'})`
+      : 'Attendance already up to date',
+    toInsert.length > 0 ? 'success' : 'info',
+  );
   return new Response(null, { status: 303, headers: { Location: url } });
 };

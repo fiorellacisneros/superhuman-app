@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { addPointsForEvent } from '../../../lib/points';
 import { checkBadgesAfterApproval } from '../../../lib/badges';
-import { safeRedirectPath } from '../../../lib/request-security';
+import { safeRedirectPath, withToastParams } from '../../../lib/request-security';
 import { requireAdmin } from '../../../lib/api-admin';
 import { isRateLimited } from '../../../lib/rate-limit';
 import { recordAdminAudit } from '../../../lib/security-audit';
@@ -33,9 +33,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .eq('id', submissionId.trim())
     .maybeSingle();
 
-  const url = safeRedirectPath(formData.get('redirect_to'), '/admin/submissions');
+  const redirect = safeRedirectPath(formData.get('redirect_to'), '/admin/submissions');
 
   if (!submission || submission.reviewed) {
+    const url = withToastParams(redirect, 'Submission already reviewed', 'info');
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
@@ -67,5 +68,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
     targetUserId: submission.user_id as string,
   });
 
+  const url = withToastParams(redirect, action === 'approve' ? 'Submission approved' : 'Submission rejected', 'success');
   return new Response(null, { status: 303, headers: { Location: url } });
 };

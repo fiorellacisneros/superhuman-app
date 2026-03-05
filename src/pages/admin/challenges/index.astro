@@ -22,33 +22,65 @@ const { data: challengeRows } = await supabase
 type ChallengeWithMeta = {
   id: string;
   title: string;
+  description: string | null;
   deadline: string | null;
   points_reward: number;
   is_active: boolean;
   courseTitle: string;
   submissionsCount: number;
+  pendingCount: number;
 };
 
-const challenges: ChallengeWithMeta[] = [];
-for (const c of challengeRows ?? []) {
-  const { count } = await supabase
+const challengeIds = (challengeRows ?? []).map((c) => c.id);
+const submissionsByChallenge = new Map<string, { total: number; pending: number }>();
+if (challengeIds.length > 0) {
+  const { data: submissionRows } = await supabase
     .from('submissions')
-    .select('*', { count: 'exact', head: true })
-    .eq('challenge_id', c.id);
+    .select('challenge_id, reviewed')
+    .in('challenge_id', challengeIds);
+  for (const row of submissionRows ?? []) {
+    const key = row.challenge_id as string;
+    const current = submissionsByChallenge.get(key) ?? { total: 0, pending: 0 };
+    current.total += 1;
+    if (!row.reviewed) current.pending += 1;
+    submissionsByChallenge.set(key, current);
+  }
+}
+
+const challenges: ChallengeWithMeta[] = (challengeRows ?? []).map((c) => {
   const course = c.courses as { title: string | null } | null;
-  challenges.push({
+  const counts = submissionsByChallenge.get(c.id) ?? { total: 0, pending: 0 };
+  return {
     id: c.id,
     title: c.title ?? 'Sin título',
+    description: (c.description as string | null) ?? null,
     deadline: c.deadline ?? null,
     points_reward: c.points_reward ?? 0,
     is_active: c.is_active ?? false,
     courseTitle: course?.title ?? '—',
-    submissionsCount: count ?? 0,
-  });
-}
+    submissionsCount: counts.total,
+    pendingCount: counts.pending,
+  };
+});
 
 const { data: coursesRows } = await supabase.from('courses').select('id, title').order('title');
 const courses = (coursesRows ?? []).map((c) => ({ id: c.id, title: c.title ?? 'Sin título' }));
+const view = Astro.url.searchParams.get('view') ?? 'all';
+const query = (Astro.url.searchParams.get('q') ?? '').trim().toLowerCase();
+
+let filteredChallenges = challenges;
+if (view === 'active') filteredChallenges = filteredChallenges.filter((c) => c.is_active);
+if (view === 'inactive') filteredChallenges = filteredChallenges.filter((c) => !c.is_active);
+if (query) {
+  filteredChallenges = filteredChallenges.filter((c) =>
+    `${c.title} ${c.courseTitle} ${c.description ?? ''}`.toLowerCase().includes(query),
+  );
+}
+
+const totalChallenges = challenges.length;
+const activeChallenges = challenges.filter((c) => c.is_active).length;
+const totalSubmissions = challenges.reduce((acc, c) => acc + c.submissionsCount, 0);
+const pendingSubmissions = challenges.reduce((acc, c) => acc + c.pendingCount, 0);
 
 function formatDeadline(iso: string | null): string {
   if (!iso) return '—';
@@ -57,6 +89,13 @@ function formatDeadline(iso: string | null): string {
   } catch {
     return iso;
   }
+}
+
+function tabUrl(nextView: string): string {
+  const u = new URL(Astro.url);
+  u.searchParams.set('view', nextView);
+  if (query) u.searchParams.set('q', query);
+  return `${u.pathname}${u.search}`;
 }
 ---
 
@@ -128,78 +167,115 @@ function formatDeadline(iso: string | null): string {
       </div>
     </div>
 
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <p class="text-[11px] uppercase tracking-[0.14em] text-muted">Total retos</p>
+        <p class="mt-1 text-2xl font-semibold text-white">{totalChallenges}</p>
+      </div>
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <p class="text-[11px] uppercase tracking-[0.14em] text-muted">Activos</p>
+        <p class="mt-1 text-2xl font-semibold text-lime">{activeChallenges}</p>
+      </div>
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <p class="text-[11px] uppercase tracking-[0.14em] text-muted">Entregas</p>
+        <p class="mt-1 text-2xl font-semibold text-white">{totalSubmissions}</p>
+      </div>
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <p class="text-[11px] uppercase tracking-[0.14em] text-muted">Pendientes</p>
+        <p class="mt-1 text-2xl font-semibold text-amber-300">{pendingSubmissions}</p>
+      </div>
+    </div>
+
     <div class="space-y-4">
-      <h2 class="text-sm font-semibold text-white">Todos los retos</h2>
-      {challenges.length > 0 ? (
-        <div class="overflow-x-auto rounded-xl border border-border bg-surface shadow-[0_8px_30px_rgba(0,0,0,0.18)]">
-          <table class="w-full min-w-[760px] text-left text-sm">
-            <thead>
-              <tr class="border-b border-border bg-surface-2/40 text-muted">
-                <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Título</th>
-                <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Curso</th>
-                <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Límite</th>
-                <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]">Puntos</th>
-                <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]">Estado</th>
-                <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]">Submissions</th>
-                <th class="px-4 pb-3 pt-3 text-right text-[11px] font-semibold uppercase tracking-[0.14em]">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {challenges.map((ch) => (
-                <tr class="border-b border-border/60 transition-colors hover:bg-surface-2/30 last:border-0">
-                  <td class="px-4 py-4">
-                    <p class="font-medium text-white">{ch.title}</p>
-                  </td>
-                  <td class="px-4 py-4 text-muted">{ch.courseTitle}</td>
-                  <td class="px-4 py-4 text-muted">{formatDeadline(ch.deadline)}</td>
-                  <td class="px-4 py-4 text-center">
-                    <span class="inline-flex min-w-10 items-center justify-center rounded-full bg-lime/10 px-2.5 py-1 text-xs font-semibold text-lime">
-                      {ch.points_reward}
-                    </span>
-                  </td>
-                  <td class="px-4 py-4 text-center">
-                    <span class={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${ch.is_active ? 'bg-lime/15 text-lime' : 'bg-surface-2 text-muted'}`}>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface p-1">
+          <a href={tabUrl('all')} class={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${view === 'all' ? 'bg-lime/15 text-lime' : 'text-muted hover:text-white'}`}>Todos</a>
+          <a href={tabUrl('active')} class={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${view === 'active' ? 'bg-lime/15 text-lime' : 'text-muted hover:text-white'}`}>Activos</a>
+          <a href={tabUrl('inactive')} class={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${view === 'inactive' ? 'bg-lime/15 text-lime' : 'text-muted hover:text-white'}`}>Inactivos</a>
+        </div>
+        <form method="get" action="/admin/challenges" class="flex w-full max-w-sm items-center gap-2">
+          <input type="hidden" name="view" value={view} />
+          <input
+            type="search"
+            name="q"
+            value={query}
+            placeholder="Buscar por título o curso..."
+            class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          />
+          <button type="submit" class="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">Buscar</button>
+        </form>
+      </div>
+
+      {filteredChallenges.length > 0 ? (
+        <div class="space-y-3">
+          {filteredChallenges.map((ch) => (
+            <article class="rounded-xl border border-border bg-surface p-4 shadow-[0_8px_24px_rgba(0,0,0,0.16)]">
+              <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div class="min-w-0 space-y-2">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="text-base font-semibold text-white">{ch.title}</h3>
+                    <span class={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${ch.is_active ? 'bg-lime/15 text-lime' : 'bg-surface-2 text-muted'}`}>
                       {ch.is_active ? 'Activo' : 'Inactivo'}
                     </span>
-                  </td>
-                  <td class="px-4 py-4 text-center">
-                    <span class="inline-flex min-w-10 items-center justify-center rounded-full bg-surface-2 px-2.5 py-1 text-xs font-semibold text-white">
-                      {ch.submissionsCount}
+                  </div>
+                  {ch.description && (
+                    <p class="line-clamp-2 max-w-2xl text-sm text-muted">{ch.description}</p>
+                  )}
+                  <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <span class="rounded-md border border-border bg-surface-2 px-2 py-1 text-muted">
+                      Curso: <span class="text-white">{ch.courseTitle}</span>
                     </span>
-                  </td>
-                  <td class="px-4 py-4 text-right">
-                    <div class="flex flex-wrap items-center justify-end gap-2">
-                      <form method="post" action="/api/admin/challenges" class="inline">
-                        <input type="hidden" name="action" value="toggle" />
-                        <input type="hidden" name="challenge_id" value={ch.id} />
-                        <input type="hidden" name="redirect_to" value="/admin/challenges" />
-                        <button type="submit" class="inline-flex h-8 items-center rounded-lg border border-border bg-surface-2 px-3 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">
-                          {ch.is_active ? 'Desactivar' : 'Activar'}
-                        </button>
-                      </form>
-                      <a href={`/admin/submissions?challenge=${ch.id}`} class="inline-flex h-8 items-center rounded-lg border border-border bg-surface-2 px-3 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">
-                        Ver submissions
-                      </a>
-                      <a href={`/admin/challenges/${ch.id}/edit`} class="inline-flex h-8 items-center rounded-lg border border-border bg-surface-2 px-3 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">
-                        Editar
-                      </a>
-                      <form method="post" action="/api/admin/challenges" class="inline" onsubmit="return confirm('¿Eliminar este reto?');">
-                        <input type="hidden" name="action" value="delete" />
-                        <input type="hidden" name="challenge_id" value={ch.id} />
-                        <input type="hidden" name="redirect_to" value="/admin/challenges" />
-                        <button type="submit" class="inline-flex h-8 items-center rounded-lg border border-red-500/50 bg-red-500/10 px-3 text-xs font-medium text-red-400 transition hover:bg-red-500/20">
-                          Eliminar
-                        </button>
-                      </form>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <span class="rounded-md border border-border bg-surface-2 px-2 py-1 text-muted">
+                      Límite: <span class="text-white">{formatDeadline(ch.deadline)}</span>
+                    </span>
+                    <span class="rounded-md border border-lime/40 bg-lime/10 px-2 py-1 font-semibold text-lime">
+                      {ch.points_reward} pts
+                    </span>
+                    <span class="rounded-md border border-border bg-surface-2 px-2 py-1 text-muted">
+                      Entregas: <span class="text-white">{ch.submissionsCount}</span>
+                    </span>
+                    {ch.pendingCount > 0 && (
+                      <span class="rounded-md border border-amber-400/40 bg-amber-500/10 px-2 py-1 font-semibold text-amber-300">
+                        Pendientes: {ch.pendingCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div class="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
+                  <a href={`/admin/submissions?challenge=${ch.id}`} class="inline-flex h-8 items-center rounded-lg border border-lime/40 bg-lime/10 px-3 text-xs font-medium text-lime transition hover:bg-lime/20">
+                    Ver submissions
+                  </a>
+                  <a href={`/admin/challenges/${ch.id}/edit`} class="inline-flex h-8 items-center rounded-lg border border-border bg-surface-2 px-3 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">
+                    Editar
+                  </a>
+                  <form method="post" action="/api/admin/challenges" class="inline">
+                    <input type="hidden" name="action" value="toggle" />
+                    <input type="hidden" name="challenge_id" value={ch.id} />
+                    <input type="hidden" name="redirect_to" value="/admin/challenges" />
+                    <button type="submit" class="inline-flex h-8 items-center rounded-lg border border-border bg-surface-2 px-3 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">
+                      {ch.is_active ? 'Desactivar' : 'Activar'}
+                    </button>
+                  </form>
+                  <form method="post" action="/api/admin/challenges" class="inline" onsubmit="return confirm('¿Eliminar este reto?');">
+                    <input type="hidden" name="action" value="delete" />
+                    <input type="hidden" name="challenge_id" value={ch.id} />
+                    <input type="hidden" name="redirect_to" value="/admin/challenges" />
+                    <button type="submit" class="inline-flex h-8 items-center rounded-lg border border-red-500/50 bg-red-500/10 px-3 text-xs font-medium text-red-400 transition hover:bg-red-500/20">
+                      Eliminar
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
       ) : (
-        <p class="rounded-xl border border-dashed border-border bg-surface-2/60 p-6 text-center text-sm text-muted">Aún no hay retos. Crea el primero con el formulario de arriba.</p>
+        <p class="rounded-xl border border-dashed border-border bg-surface-2/60 p-6 text-center text-sm text-muted">
+          {challenges.length === 0
+            ? 'Aún no hay retos. Crea el primero con el formulario de arriba.'
+            : 'No se encontraron retos con ese filtro.'}
+        </p>
       )}
     </div>
   </section>

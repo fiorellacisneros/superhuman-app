@@ -56,7 +56,7 @@ function isActive(href: string): boolean {
             <img src="/logo.png" alt="Superhuman School" class="h-5 w-auto" />
           </a>
 
-          <div class="min-w-0 flex-1 overflow-x-auto sm:flex-none sm:overflow-visible">
+          <div class="hidden min-w-0 flex-1 overflow-x-auto md:flex md:flex-none md:overflow-visible">
             <nav class="flex w-max items-center gap-1 rounded-xl border border-border/80 bg-surface-2/40 p-1 sm:w-auto" aria-label="Admin">
               {adminNav.map((item) => {
                 const active = isActive(item.href);
@@ -95,7 +95,18 @@ function isActive(href: string): boolean {
             </nav>
           </div>
 
-          <div class="relative shrink-0" id="user-menu">
+          <div class="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              id="mobile-nav-button"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface-2 text-muted transition hover:border-lime/40 hover:text-white md:hidden"
+              aria-expanded="false"
+              aria-controls="mobile-nav-panel"
+              aria-label="Abrir menú de navegación"
+            >
+              <i class="bi bi-list text-lg leading-none" aria-hidden="true"></i>
+            </button>
+            <div class="relative" id="user-menu">
             <button
               type="button"
               id="user-menu-button"
@@ -156,12 +167,38 @@ function isActive(href: string): boolean {
             </div>
           </div>
         </div>
+        <div id="mobile-nav-panel" class="mx-auto mt-3 hidden max-w-5xl md:hidden">
+          <nav class="space-y-1 rounded-xl border border-border bg-surface-2/60 p-2" aria-label="Admin móvil">
+            {adminNav.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <a
+                  href={item.href}
+                  class={`group flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition ${
+                    active ? 'bg-surface text-white' : 'text-muted hover:bg-surface hover:text-white'
+                  }`}
+                >
+                  <span class="inline-flex items-center gap-2">
+                    <i class={`bi ${item.icon} text-[14px] leading-none ${active ? 'text-lime' : 'text-muted group-hover:text-white/90'}`} aria-hidden="true" />
+                    {item.label}
+                  </span>
+                  {item.showActiveCount && activeRetosCount > 0 && (
+                    <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-lime/20 px-1.5 py-0.5 text-[10px] font-semibold text-lime">
+                      {activeRetosCount}
+                    </span>
+                  )}
+                </a>
+              );
+            })}
+          </nav>
+        </div>
       </header>
 
       <main class="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <slot />
       </main>
     </div>
+    <div id="toast-root" class="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(92vw,360px)] flex-col gap-2"></div>
 
     <script>
       document.addEventListener('DOMContentLoaded', () => {
@@ -169,6 +206,8 @@ function isActive(href: string): boolean {
         const button = document.getElementById('user-menu-button');
         const dropdown = document.getElementById('user-menu-dropdown');
         const chevron = document.getElementById('chevron-icon');
+        const mobileNavButton = document.getElementById('mobile-nav-button');
+        const mobileNavPanel = document.getElementById('mobile-nav-panel');
         if (!menu || !button || !dropdown || !chevron) return;
         function open() {
           dropdown.classList.remove('pointer-events-none', 'opacity-0');
@@ -195,7 +234,84 @@ function isActive(href: string): boolean {
         document.addEventListener('click', () => {
           if (isOpen()) close();
         });
+
+        if (mobileNavButton && mobileNavPanel) {
+          function toggleMobileNav(forceOpen) {
+            const expanded = forceOpen ?? mobileNavButton.getAttribute('aria-expanded') !== 'true';
+            mobileNavButton.setAttribute('aria-expanded', String(expanded));
+            mobileNavPanel.classList.toggle('hidden', !expanded);
+          }
+          mobileNavButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleMobileNav();
+          });
+          document.addEventListener('click', (e) => {
+            if (mobileNavPanel.classList.contains('hidden')) return;
+            const target = e.target;
+            if (!(target instanceof Node)) return;
+            if (mobileNavPanel.contains(target) || mobileNavButton.contains(target)) return;
+            toggleMobileNav(false);
+          });
+          window.addEventListener('resize', () => {
+            if (window.innerWidth >= 768) toggleMobileNav(false);
+          });
+        }
       });
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const toastRoot = document.getElementById('toast-root');
+        if (!toastRoot) return;
+        const params = new URLSearchParams(window.location.search);
+        const message = params.get('toast');
+        const type = params.get('toast_type') || 'success';
+        if (!message) return;
+
+        const styles = {
+          success: 'border-lime/40 bg-surface text-white',
+          error: 'border-red-500/40 bg-surface text-white',
+          info: 'border-amber-400/40 bg-surface text-white',
+        };
+        const icons = {
+          success: 'bi-check-circle-fill text-lime',
+          error: 'bi-x-circle-fill text-red-400',
+          info: 'bi-info-circle-fill text-amber-300',
+        };
+        const toastType = type === 'error' || type === 'info' ? type : 'success';
+
+        const item = document.createElement('div');
+        item.className = `pointer-events-auto rounded-xl border px-3 py-2.5 shadow-[0_12px_30px_rgba(0,0,0,0.35)] backdrop-blur transition ${styles[toastType]}`;
+        item.style.opacity = '0';
+        item.style.transform = 'translateY(-6px)';
+        const row = document.createElement('div');
+        row.className = 'flex items-start gap-2.5';
+        const icon = document.createElement('i');
+        icon.className = `bi ${icons[toastType]} mt-0.5 text-sm`;
+        icon.setAttribute('aria-hidden', 'true');
+        const text = document.createElement('p');
+        text.className = 'text-sm leading-5';
+        text.textContent = message;
+        row.appendChild(icon);
+        row.appendChild(text);
+        item.appendChild(row);
+        toastRoot.appendChild(item);
+
+        requestAnimationFrame(() => {
+          item.style.opacity = '1';
+          item.style.transform = 'translateY(0)';
+        });
+
+        setTimeout(() => {
+          item.style.opacity = '0';
+          item.style.transform = 'translateY(-6px)';
+          setTimeout(() => item.remove(), 220);
+        }, 3600);
+
+        params.delete('toast');
+        params.delete('toast_type');
+        const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash || ''}`;
+        window.history.replaceState({}, '', nextUrl);
+      });
+
       document.addEventListener('click', (e) => {
         const target = e.target.closest('[data-clerk-unstyled-id]');
         if (!target) return;

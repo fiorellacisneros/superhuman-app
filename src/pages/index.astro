@@ -17,8 +17,8 @@ if (auth?.isAuthenticated) {
     <meta name="generator" content={Astro.generator} />
     <title>Superhuman School</title>
   </head>
-  <body class="min-h-screen bg-background text-white antialiased">
-    <main class="flex min-h-screen items-center justify-center px-4">
+  <body class="min-h-screen overflow-x-hidden bg-background text-white antialiased">
+    <main class="flex min-h-screen items-center justify-center px-4 py-6 sm:py-8">
       <div class="mx-auto flex w-full max-w-4xl flex-col gap-10 md:flex-row md:items-center">
         <section class="flex-1 space-y-4">
           <p class="text-xs font-semibold uppercase tracking-[0.25em] text-lime">
@@ -33,7 +33,7 @@ if (auth?.isAuthenticated) {
           </p>
         </section>
 
-        <section class="flex-1">
+        <section class="w-full flex-1 md:max-w-[430px]">
           <div id="login-card" class="relative rounded-2xl border border-border bg-surface p-6 shadow-xl shadow-black/40 backdrop-blur min-h-[320px]">
             <div id="login-loading" class="absolute inset-0 z-10 hidden flex-col items-center justify-center gap-3 rounded-2xl bg-surface text-white" aria-live="polite">
               <span class="inline-block h-6 w-6 animate-spin rounded-full border-2 border-lime border-t-transparent" aria-hidden="true" />
@@ -56,5 +56,22 @@ if (auth?.isAuthenticated) {
         window.addEventListener('beforeunload', showLoading);
       })();
     </script>
+    <style>
+      /* Prevent Clerk defaults from forcing horizontal overflow on small screens. */
+      :global(.cl-rootBox),
+      :global(.cl-signIn-root),
+      :global(.cl-card),
+      :global(.cl-main) {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+
+      :global(.cl-card) {
+        background: transparent;
+        box-shadow: none;
+        border: 0;
+      }
+    </style>
   </body>
 </html>

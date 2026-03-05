@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { safeRedirectPath } from '../../../lib/request-security';
+import { safeRedirectPath, withToastParams } from '../../../lib/request-security';
 import { requireAdmin } from '../../../lib/api-admin';
 import { isRateLimited } from '../../../lib/rate-limit';
 import { recordAdminAudit } from '../../../lib/security-audit';
@@ -122,6 +122,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  const url = safeRedirectPath(formData.get('redirect_to'), '/admin/students');
+  const redirect = safeRedirectPath(formData.get('redirect_to'), '/admin/students');
+  const url = withToastParams(
+    redirect,
+    action === 'sync'
+      ? 'Student enrollments updated'
+      : action === 'enroll'
+        ? 'Student enrolled'
+        : 'Student unenrolled',
+    'success',
+  );
   return new Response(null, { status: 303, headers: { Location: url } });
 };
