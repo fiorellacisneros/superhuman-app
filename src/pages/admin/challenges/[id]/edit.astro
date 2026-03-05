@@ -75,15 +75,39 @@ const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string
       </div>
       <div>
         <label for="edit-course" class="block text-xs font-medium text-muted">Curso</label>
-        <select id="edit-course" name="course_id" class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime">
-          <option value="" selected={!challenge.course_id}>— Sin curso —</option>
-          {courses.map((c) => (
-            <option value={c.id} selected={(challenge.course_id as string) === c.id}>{c.title}</option>
-          ))}
-        </select>
+        <div class="relative mt-1">
+          <select
+            id="edit-course"
+            name="course_id"
+            class="w-full appearance-none rounded-lg border border-border bg-surface-2 px-3 py-2 pr-10 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          >
+            <option value="" selected={!challenge.course_id}>— Sin curso —</option>
+            {courses.map((c) => (
+              <option value={c.id} selected={(challenge.course_id as string) === c.id}>{c.title}</option>
+            ))}
+          </select>
+          <svg
+            class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
+          </svg>
+        </div>
       </div>
-      <label class="flex items-center gap-2">
-        <input type="checkbox" name="is_active" value="on" class="rounded border-border bg-surface-2 text-lime focus:ring-lime" checked={challenge.is_active ?? false} />
+      <label class="inline-flex cursor-pointer items-center gap-2">
+        <input
+          type="checkbox"
+          name="is_active"
+          value="on"
+          class="peer sr-only"
+          checked={challenge.is_active ?? false}
+        />
+        <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
+          <i class="bi bi-check-lg text-[11px] leading-none" aria-hidden="true" />
+        </span>
         <span class="text-sm text-white">Activo</span>
       </label>
       <div class="flex gap-3 pt-2">
