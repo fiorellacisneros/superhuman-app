@@ -1,0 +1,171 @@
+---
+import '../../../styles/global.css';
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+import { avatarImagePath } from '../../../lib/avatars';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+if ((userRow?.role as string) !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+const selectedLessonId = Astro.url.searchParams.get('lesson') ?? '';
+
+const { data: lessonRows } = await supabase
+  .from('lessons')
+  .select('id, title, scheduled_at, order, course_id, courses(title)')
+  .order('scheduled_at', { ascending: true, nullsFirst: false });
+
+const lessons = (lessonRows ?? []).map((l) => {
+  const course = l.courses as { title: string | null } | null;
+  return {
+    id: l.id,
+    title: l.title ?? 'Clase',
+    scheduledAt: (l.scheduled_at as string | null) ?? null,
+    order: (l.order as number | null) ?? 0,
+    courseId: l.course_id as string,
+    courseTitle: course?.title ?? 'Curso',
+  };
+});
+
+const selectedLesson = lessons.find((l) => l.id === selectedLessonId) ?? null;
+
+let students: { id: string; name: string; email: string | null; avatarId: string | null; alreadyPresent: boolean }[] = [];
+if (selectedLesson) {
+  const { data: enrollmentRows } = await supabase
+    .from('enrollments')
+    .select('user_id, users(id, display_name, email, avatar_id, role)')
+    .eq('course_id', selectedLesson.courseId);
+
+  const { data: attendanceRows } = await supabase
+    .from('attendance')
+    .select('user_id')
+    .eq('lesson_id', selectedLesson.id);
+  const presentSet = new Set((attendanceRows ?? []).map((r) => r.user_id as string));
+
+  students = (enrollmentRows ?? [])
+    .map((row) => {
+      const u = row.users as { id: string; display_name: string | null; email: string | null; avatar_id: string | null; role: string | null } | null;
+      if (!u?.id || u.role !== 'student') return null;
+      return {
+        id: u.id,
+        name: u.display_name ?? 'Estudiante',
+        email: u.email ?? null,
+        avatarId: u.avatar_id ?? null,
+        alreadyPresent: presentSet.has(u.id),
+      };
+    })
+    .filter((s): s is { id: string; name: string; email: string | null; avatarId: string | null; alreadyPresent: boolean } => Boolean(s));
+}
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return 'Sin fecha';
+  try {
+    return new Date(iso).toLocaleString('es', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+}
+---
+
+<AdminLayout>
+  <section class="space-y-6">
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Asistencia</h1>
+      <p class="mt-1 text-sm text-muted">Marca asistencia por clase y suma puntos automáticamente.</p>
+    </header>
+
+    <div class="rounded-xl border border-border bg-surface p-5">
+      <form method="get" action="/admin/attendance" class="flex flex-wrap items-end gap-3">
+        <div class="min-w-[280px] flex-1">
+          <label for="lesson-select" class="block text-xs font-medium text-muted">Selecciona una clase</label>
+          <select
+            id="lesson-select"
+            name="lesson"
+            class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          >
+            <option value="">-- Elige una clase --</option>
+            {lessons.map((l) => (
+              <option value={l.id} selected={selectedLessonId === l.id}>
+                {l.courseTitle} · {l.title} · {formatDateTime(l.scheduledAt)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button type="submit" class="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">
+          Cargar alumnos
+        </button>
+      </form>
+    </div>
+
+    {selectedLesson ? (
+      <div class="rounded-xl border border-border bg-surface p-5">
+        <div class="mb-4">
+          <p class="text-xs font-semibold uppercase tracking-[0.16em] text-muted">{selectedLesson.courseTitle}</p>
+          <h2 class="mt-1 text-lg font-semibold text-white">{selectedLesson.title}</h2>
+          <p class="text-xs text-muted">{formatDateTime(selectedLesson.scheduledAt)}</p>
+        </div>
+
+        {students.length > 0 ? (
+          <form method="post" action="/api/admin/attendance" class="space-y-3">
+            <input type="hidden" name="lesson_id" value={selectedLesson.id} />
+            <input type="hidden" name="redirect_to" value={`/admin/attendance?lesson=${selectedLesson.id}`} />
+            <ul class="space-y-2">
+              {students.map((s) => (
+                <li class="rounded-lg border border-border bg-surface-2/60 px-3 py-2.5">
+                  <label class="flex cursor-pointer items-center gap-3">
+                    <input
+                      type="checkbox"
+                      name="user_ids"
+                      value={s.id}
+                      checked={s.alreadyPresent}
+                      class="h-4 w-4 rounded border-border bg-surface-2 text-lime focus:ring-lime"
+                    />
+                    <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-border bg-surface">
+                      {avatarImagePath(s.avatarId) ? (
+                        <img src={avatarImagePath(s.avatarId)!} alt="" class="h-full w-full object-cover" width="32" height="32" />
+                      ) : (
+                        <span class="flex h-full w-full items-center justify-center text-xs font-semibold text-muted">{s.name.charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-sm font-medium text-white">{s.name}</p>
+                      <p class="truncate text-xs text-muted">{s.email ?? '—'}</p>
+                    </div>
+                    {s.alreadyPresent && (
+                      <span class="rounded-full bg-lime/15 px-2 py-0.5 text-[10px] font-semibold text-lime">Ya marcada</span>
+                    )}
+                  </label>
+                </li>
+              ))}
+            </ul>
+
+            <div class="pt-2">
+              <button type="submit" class="rounded-lg border border-lime bg-lime px-4 py-2 text-sm font-semibold text-background transition hover:bg-lime/90">
+                Guardar asistencia
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p class="text-sm text-muted">No hay alumnos inscritos en este curso.</p>
+        )}
+      </div>
+    ) : (
+      <div class="rounded-xl border border-dashed border-border bg-surface-2/60 p-6 text-sm text-muted">
+        Selecciona una clase para cargar sus alumnos e iniciar el registro de asistencia.
+      </div>
+    )}
+  </section>
+</AdminLayout>

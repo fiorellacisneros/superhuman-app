@@ -1,0 +1,130 @@
+---
+import '../../styles/global.css';
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+const role = (userRow?.role as string) ?? 'student';
+
+// Si es admin, redirigir al panel de cursos de admin
+if (role === 'admin') {
+  return Astro.redirect('/admin/courses');
+}
+
+const { data: enrollmentRows } = await supabase
+  .from('enrollments')
+  .select('course_id, courses(id, slug, title, cover_image, description)')
+  .eq('user_id', userId);
+
+const enrolledCourses: { id: string; slug: string; title: string; cover_image: string | null; description: string | null; totalLessons: number; completedLessons: number }[] = [];
+
+for (const row of enrollmentRows ?? []) {
+  const course = (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses;
+  if (!course?.id) continue;
+  const { count: totalLessons } = await supabase
+    .from('lessons')
+    .select('*', { count: 'exact', head: true })
+    .eq('course_id', course.id);
+  const { data: lessonRows } = await supabase
+    .from('lessons')
+    .select('id')
+    .eq('course_id', course.id);
+  const lessonIds = (lessonRows ?? []).map((l) => l.id);
+  let completedLessons = 0;
+  if (lessonIds.length > 0) {
+    const { count } = await supabase
+      .from('attendance')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .in('lesson_id', lessonIds);
+    completedLessons = count ?? 0;
+  }
+  enrolledCourses.push({
+    id: course.id,
+    slug: course.slug ?? course.id,
+    title: course.title ?? 'Curso',
+    cover_image: course.cover_image ?? null,
+    description: course.description ?? null,
+    totalLessons: totalLessons ?? 0,
+    completedLessons,
+  });
+}
+---
+
+<DashboardLayout role="student">
+  <section class="space-y-6">
+    <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Panel</a>
+      <span class="mx-1">/</span>
+      <span class="text-white">Cursos</span>
+    </nav>
+
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Mis cursos</h1>
+      <p class="mt-1 text-sm text-muted">Cursos en los que estás inscrito.</p>
+    </header>
+
+    {enrolledCourses.length > 0 ? (
+      <ul class="grid gap-4 sm:grid-cols-2">
+        {enrolledCourses.map((course) => (
+          <li>
+            <a
+              href={`/courses/${course.slug}`}
+              class="group block overflow-hidden rounded-xl border border-border bg-surface transition-shadow hover:shadow-lg"
+            >
+              <div class="relative h-36 overflow-hidden bg-surface-2">
+                {course.cover_image ? (
+                  <img
+                    src={course.cover_image.startsWith('http') ? course.cover_image : `/courses/${course.cover_image}`}
+                    alt=""
+                    class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    width="400"
+                    height="144"
+                  />
+                ) : (
+                  <div class="flex h-full w-full items-center justify-center text-muted">
+                    <svg class="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  </div>
+                )}
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" aria-hidden="true" />
+                <p class="absolute bottom-2 left-2 right-2 text-sm font-semibold text-white drop-shadow">
+                  {course.title}
+                </p>
+              </div>
+              <div class="border-t border-border p-3">
+                <p class="text-xs text-muted">
+                  {course.completedLessons} de {course.totalLessons} clases completadas
+                </p>
+                <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+                  <div
+                    class="h-full rounded-full bg-lime transition-all duration-300"
+                    style={`width: ${course.totalLessons ? (course.completedLessons / course.totalLessons) * 100 : 0}%`}
+                  />
+                </div>
+              </div>
+            </a>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <div class="rounded-xl border border-dashed border-border bg-surface-2/60 p-8 text-center">
+        <p class="text-sm font-medium text-white">Aún no estás inscrito en ningún curso.</p>
+        <p class="mt-1 text-sm text-muted">Cuando te inscribas, tus cursos aparecerán aquí.</p>
+        <a
+          href="/dashboard"
+          class="mt-4 inline-block rounded-lg border border-lime bg-lime/15 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/25"
+        >
+          Volver al panel
+        </a>
+      </div>
+    )}
+  </section>
+</DashboardLayout>

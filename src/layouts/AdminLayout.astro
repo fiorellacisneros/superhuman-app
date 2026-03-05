@@ -1,0 +1,220 @@
+---
+import '../styles/global.css';
+import { getSupabaseServiceRoleClient } from '../lib/supabase';
+import { avatarImagePath } from '../lib/avatars';
+import { SignOutButton } from '@clerk/astro/components';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase
+  .from('users')
+  .select('display_name, avatar_id')
+  .eq('id', userId)
+  .maybeSingle();
+
+const displayName = userRow?.display_name ?? 'Admin';
+const avatarId = userRow?.avatar_id ?? null;
+const avatarSrc = avatarImagePath(avatarId);
+const initialLetter = (displayName || 'A').charAt(0).toUpperCase();
+
+const currentPath = Astro.url.pathname;
+const adminNav = [
+  { label: 'Dashboard', href: '/dashboard', icon: 'bi-grid-1x2-fill' },
+  { label: 'Cursos', href: '/admin/courses', icon: 'bi-journal-richtext' },
+  { label: 'Retos', href: '/admin/challenges', icon: 'bi-lightning-charge-fill', showActiveCount: true },
+  { label: 'Asistencia', href: '/admin/attendance', icon: 'bi-calendar2-check-fill' },
+  { label: 'Alumnos', href: '/admin/students', icon: 'bi-people-fill' },
+  { label: 'Submissions', href: '/admin/submissions', icon: 'bi-inbox-fill' },
+] as const;
+const { count: activeChallengesCount } = await supabase
+  .from('challenges')
+  .select('*', { count: 'exact', head: true })
+  .eq('is_active', true);
+const activeRetosCount = activeChallengesCount ?? 0;
+
+function isActive(href: string): boolean {
+  if (href === '/dashboard') return currentPath === '/dashboard';
+  return currentPath === href || currentPath.startsWith(href + '/');
+}
+---
+
+<html lang="es" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <slot name="head" />
+    <title>Superhuman School — Admin</title>
+  </head>
+  <body class="min-h-screen bg-background text-white antialiased">
+    <div class="min-h-screen">
+      <header class="border-b border-border bg-surface px-4 py-4 sm:px-6">
+        <div class="mx-auto flex max-w-5xl items-center justify-between gap-3">
+          <a href="/dashboard" class="shrink-0">
+            <img src="/logo.png" alt="Superhuman School" class="h-5 w-auto" />
+          </a>
+
+          <div class="min-w-0 flex-1 overflow-x-auto sm:flex-none sm:overflow-visible">
+            <nav class="flex w-max items-center gap-1 rounded-xl border border-border/80 bg-surface-2/40 p-1 sm:w-auto" aria-label="Admin">
+              {adminNav.map((item) => {
+                const active = isActive(item.href);
+                return (
+                  <a
+                    href={item.href}
+                    class={`group relative inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium transition-all sm:gap-2 sm:px-3.5 sm:text-sm ${
+                      active
+                        ? 'bg-surface text-white shadow-[inset_0_0_0_1px_rgba(163,230,53,0.25)]'
+                        : 'text-muted hover:bg-surface-2/80 hover:text-white'
+                    }`}
+                  >
+                    <i
+                      class={`bi ${item.icon} text-[13px] leading-none transition-colors ${
+                        active ? 'text-lime' : 'text-muted group-hover:text-white/90'
+                      }`}
+                      aria-hidden="true"
+                    />
+                    {item.label}
+                    {item.showActiveCount && activeRetosCount > 0 && (
+                      <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-lime/20 px-1.5 py-0.5 text-[10px] font-semibold text-lime">
+                        {activeRetosCount}
+                      </span>
+                    )}
+                    <span
+                      class={`absolute bottom-0 left-2 right-2 h-0.5 origin-center rounded-full transition-all duration-200 ${
+                        active
+                          ? 'bg-lime opacity-100 scale-x-100'
+                          : 'bg-white/35 opacity-0 scale-x-75 group-hover:opacity-100 group-hover:scale-x-100'
+                      }`}
+                      aria-hidden="true"
+                    />
+                  </a>
+                );
+              })}
+            </nav>
+          </div>
+
+          <div class="relative shrink-0" id="user-menu">
+            <button
+              type="button"
+              id="user-menu-button"
+              aria-expanded="false"
+              aria-haspopup="true"
+              class="flex cursor-pointer items-center gap-2 rounded-lg border border-transparent py-1.5 pl-1 pr-2 transition hover:border-border hover:bg-surface-2"
+            >
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt=""
+                  class="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-border"
+                  width="32"
+                  height="32"
+                />
+              ) : (
+                <div
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-lime text-sm font-semibold text-background ring-1 ring-border"
+                  aria-hidden="true"
+                >
+                  {initialLetter}
+                </div>
+              )}
+              <span class="hidden max-w-[120px] truncate text-sm text-white sm:inline">{displayName}</span>
+              <svg id="chevron-icon" class="h-4 w-4 shrink-0 text-muted transition-transform duration-200 ease-out" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M7 10l5 5 5-5z" />
+              </svg>
+            </button>
+            <div
+              id="user-menu-dropdown"
+              class="pointer-events-none absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border bg-surface-2 py-1 shadow-lg opacity-0 transition-[opacity,transform] duration-200 ease-out"
+              style="transform: translateY(-8px);"
+              role="menu"
+              aria-hidden="true"
+            >
+              <div class="flex items-center gap-2 border-b border-border px-4 py-2 text-xs font-medium text-lime/90" role="none">
+                <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 16L3 5l5.5 2.5L12 4l3.5 3.5L21 5l-2 11H5z" />
+                </svg>
+                Admin
+              </div>
+              <a
+                href="/profile"
+                class="mx-1 block rounded-lg px-3 py-2.5 text-sm text-white transition hover:bg-surface hover:text-lime"
+                role="menuitem"
+              >
+                Ver perfil
+              </a>
+              <div class="mt-1 border-t border-border pt-1">
+                <SignOutButton
+                  redirectUrl="/"
+                  class="mx-1 w-[calc(100%-0.5rem)] rounded-lg px-3 py-2.5 text-left text-sm text-muted transition hover:bg-surface hover:text-lime"
+                  role="menuitem"
+                >
+                  Cerrar sesión
+                </SignOutButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+        <slot />
+      </main>
+    </div>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const menu = document.getElementById('user-menu');
+        const button = document.getElementById('user-menu-button');
+        const dropdown = document.getElementById('user-menu-dropdown');
+        const chevron = document.getElementById('chevron-icon');
+        if (!menu || !button || !dropdown || !chevron) return;
+        function open() {
+          dropdown.classList.remove('pointer-events-none', 'opacity-0');
+          dropdown.style.transform = 'translateY(0)';
+          dropdown.setAttribute('aria-hidden', 'false');
+          chevron.classList.add('rotate-180');
+          button.setAttribute('aria-expanded', 'true');
+        }
+        function close() {
+          dropdown.classList.add('pointer-events-none', 'opacity-0');
+          dropdown.style.transform = 'translateY(-8px)';
+          dropdown.setAttribute('aria-hidden', 'true');
+          chevron.classList.remove('rotate-180');
+          button.setAttribute('aria-expanded', 'false');
+        }
+        function isOpen() {
+          return button.getAttribute('aria-expanded') === 'true';
+        }
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (isOpen()) close();
+          else open();
+        });
+        document.addEventListener('click', () => {
+          if (isOpen()) close();
+        });
+      });
+      document.addEventListener('click', (e) => {
+        const target = e.target.closest('[data-clerk-unstyled-id]');
+        if (!target) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const doSignOut = () => {
+          if (window.Clerk && typeof window.Clerk.signOut === 'function') {
+            window.Clerk.signOut({ redirectUrl: '/' });
+            return true;
+          }
+          return false;
+        };
+        if (!doSignOut()) {
+          const interval = setInterval(() => {
+            if (doSignOut()) clearInterval(interval);
+          }, 100);
+          setTimeout(() => clearInterval(interval), 5000);
+        }
+      }, true);
+    </script>
+  </body>
+</html>

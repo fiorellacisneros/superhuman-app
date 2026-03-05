@@ -1,0 +1,192 @@
+---
+import '../../styles/global.css';
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+if ((userRow?.role as string) === 'admin') {
+  return Astro.redirect('/admin/challenges');
+}
+
+const { data: enrollmentRows } = await supabase.from('enrollments').select('course_id').eq('user_id', userId);
+const enrolledCourseIds = (enrollmentRows ?? []).map((r) => r.course_id);
+
+const { data: challengeRows } = await supabase
+  .from('challenges')
+  .select('id, title, description, deadline, points_reward, course_id, courses(title)')
+  .eq('is_active', true)
+  .order('deadline', { ascending: true });
+
+const activeChallenges = (challengeRows ?? [])
+  .filter((c) => !c.course_id || enrolledCourseIds.includes(c.course_id))
+  .map((c) => ({
+    id: c.id,
+    title: c.title ?? 'Reto',
+    description: (c.description as string) ?? null,
+    deadline: c.deadline as string | null,
+    points_reward: c.points_reward ?? 0,
+    courseTitle: (c.courses as { title: string | null } | null)?.title ?? null,
+  }));
+
+const { data: mySubmissions } = await supabase
+  .from('submissions')
+  .select('id, challenge_id, link, reviewed, approved')
+  .eq('user_id', userId);
+const submissionByChallengeId = new Map(
+  (mySubmissions ?? []).map((s) => [
+    s.challenge_id as string,
+    {
+      id: s.id as string,
+      link: (s.link as string | null) ?? '',
+      reviewed: Boolean(s.reviewed),
+      approved: Boolean(s.approved),
+    },
+  ]),
+);
+
+function daysLeft(deadline: string | null): string {
+  if (!deadline) return '';
+  const d = new Date(deadline);
+  const now = new Date();
+  const diff = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (diff < 0) return 'Vencido';
+  if (diff === 0) return 'Hoy';
+  if (diff === 1) return '1 día restante';
+  return `${diff} días restantes`;
+}
+---
+
+<DashboardLayout role="student">
+  <section class="space-y-6">
+    <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Panel</a>
+      <span class="mx-1">/</span>
+      <span class="text-white">Retos</span>
+    </nav>
+
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Retos</h1>
+      <p class="mt-1 text-sm text-muted">Aquí ves tus retos y el estado de cada entrega.</p>
+    </header>
+
+    {activeChallenges.length > 0 ? (
+      <ul class="space-y-4">
+        {activeChallenges.map((ch) => {
+          const submission = submissionByChallengeId.get(ch.id) ?? null;
+          const submitted = Boolean(submission);
+          const isPending = Boolean(submission && !submission.reviewed);
+          const isApproved = Boolean(submission && submission.reviewed && submission.approved);
+          const isRejected = Boolean(submission && submission.reviewed && !submission.approved);
+          const deadlineMs = ch.deadline ? new Date(ch.deadline).getTime() : null;
+          const nowMs = Date.now();
+          const canEdit = !deadlineMs || deadlineMs > nowMs;
+          const canUpdateSubmission = submitted && canEdit && !isApproved;
+          const canCreateSubmission = !submitted && canEdit;
+          const statusLabel = isApproved
+            ? 'Completado'
+            : isPending
+              ? 'En revisión'
+              : isRejected
+                ? 'Rechazado'
+                : canEdit
+                  ? 'Por vencerse'
+                  : 'Vencido';
+          const statusClasses = isApproved
+            ? 'border-lime/40 bg-lime/10 text-lime'
+            : isPending
+              ? 'border-amber-400/40 bg-amber-500/10 text-amber-300'
+              : isRejected
+                ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                : canEdit
+                  ? 'border-sky-400/40 bg-sky-500/10 text-sky-300'
+                  : 'border-zinc-400/40 bg-zinc-500/10 text-zinc-300';
+          const statusIcon = isApproved
+            ? 'bi-check-circle-fill'
+            : isPending
+              ? 'bi-hourglass-split'
+              : isRejected
+                ? 'bi-x-circle-fill'
+                : canEdit
+                  ? 'bi-clock-fill'
+                  : 'bi-calendar2-x-fill';
+          return (
+            <li class="rounded-xl border border-border bg-surface p-4 sm:p-5">
+              <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div class="min-w-0 flex-1">
+                  {ch.courseTitle && (
+                    <span class="mb-2 inline-block rounded bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-muted">{ch.courseTitle}</span>
+                  )}
+                  <h2 class="text-lg font-semibold text-white">{ch.title}</h2>
+                  {ch.description && <p class="mt-2 text-sm text-muted">{ch.description}</p>}
+                  <div class="mt-3 flex flex-wrap items-center gap-3">
+                    <span class="rounded bg-lime/15 px-2 py-0.5 text-xs font-semibold text-lime">{ch.points_reward} pts</span>
+                    {ch.deadline && <span class="text-xs text-muted">{daysLeft(ch.deadline)}</span>}
+                  </div>
+                </div>
+                <div class="w-full lg:w-[220px]">
+                  <div class="flex items-center justify-start gap-2 lg:justify-end">
+                    <span class={`inline-flex rounded-lg border px-3 py-1.5 text-xs font-semibold ${statusClasses}`}>
+                      <i class={`bi ${statusIcon} mr-1.5 text-[11px]`} aria-hidden="true" />
+                      {statusLabel}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {isPending && submission?.link && !canUpdateSubmission && (
+                <div class="mt-4 border-t border-border pt-4 text-sm text-muted">
+                  <p class="font-medium text-muted">Entrega:</p>
+                  <p class="mt-1 break-all text-sm font-medium text-white/85">{submission.link}</p>
+                </div>
+              )}
+
+              {(canUpdateSubmission || canCreateSubmission) && (
+                <form method="post" action="/api/challenges" class="mt-4 border-t border-border pt-4">
+                  <input type="hidden" name="challenge_id" value={ch.id} />
+                  <input type="hidden" name="mode" value={submitted ? 'update' : 'create'} />
+                  <input type="hidden" name="redirect_to" value="/challenges" />
+                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <input
+                      type="url"
+                      name="link"
+                      required
+                      value={submitted ? submission?.link ?? '' : ''}
+                      placeholder="https://..."
+                      class="h-10 w-full rounded-lg border border-border bg-surface-2 px-3 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                    />
+                    <button
+                      type="submit"
+                      class="inline-flex h-10 w-full shrink-0 items-center justify-center rounded-lg border border-lime bg-lime px-4 text-sm font-medium text-background transition hover:bg-lime/90 sm:w-auto"
+                    >
+                      {isRejected ? 'Reenviar entrega' : submitted ? 'Editar entrega' : 'Enviar entrega'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {submitted && !canEdit && !isApproved && (
+                <p class="mt-4 border-t border-border pt-4 text-sm text-muted">
+                  El tiempo para editar tu entrega ya venció.
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    ) : (
+      <div class="rounded-xl border border-dashed border-border bg-surface-2/60 p-8 text-center">
+        <p class="text-sm font-medium text-white">No hay retos activos por ahora.</p>
+        <p class="mt-1 text-sm text-muted">Cuando haya retos para tus cursos, aparecerán aquí.</p>
+        <a href="/dashboard" class="mt-4 inline-block rounded-lg border border-lime bg-lime/15 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/25">
+          Volver al panel
+        </a>
+      </div>
+    )}
+  </section>
+</DashboardLayout>

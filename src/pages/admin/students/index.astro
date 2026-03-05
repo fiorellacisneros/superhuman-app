@@ -1,0 +1,299 @@
+---
+import '../../../styles/global.css';
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+import { avatarImagePath } from '../../../lib/avatars';
+import { createClerkClient } from '@clerk/backend';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+if ((userRow?.role as string) !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+const { data: studentRows } = await supabase
+  .from('users')
+  .select('id, email, display_name, avatar_id, points')
+  .eq('role', 'student')
+  .order('created_at', { ascending: false });
+
+const clerkEmailByUserId = new Map<string, string>();
+const secretKey = import.meta.env.CLERK_SECRET_KEY ?? process.env.CLERK_SECRET_KEY;
+if (secretKey) {
+  try {
+    const clerk = createClerkClient({ secretKey });
+    for (const u of studentRows ?? []) {
+      if (u.email) continue;
+      try {
+        const cu = await clerk.users.getUser(u.id);
+        const primary = cu.emailAddresses.find((e) => e.id === cu.primaryEmailAddressId)?.emailAddress;
+        const fallback = cu.emailAddresses[0]?.emailAddress;
+        const email = primary ?? fallback ?? null;
+        if (email) {
+          clerkEmailByUserId.set(u.id, email);
+          await supabase.from('users').update({ email }).eq('id', u.id);
+        }
+      } catch {
+        // ignore per-user Clerk fetch errors
+      }
+    }
+  } catch {
+    // ignore Clerk client init issues
+  }
+}
+
+type StudentWithMeta = {
+  id: string;
+  display_name: string;
+  email: string | null;
+  avatar_id: string | null;
+  points: number;
+  badgesCount: number;
+  courseNames: string;
+  enrolledCourseIds: string[];
+};
+
+const students: StudentWithMeta[] = [];
+const allCourses: { id: string; title: string }[] = [];
+
+const { data: coursesRows } = await supabase.from('courses').select('id, title').order('title');
+allCourses.push(...((coursesRows ?? []).map((c) => ({ id: c.id, title: c.title ?? 'Sin título' }))));
+
+for (const u of studentRows ?? []) {
+  const { count: badgesCount } = await supabase
+    .from('user_badges')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', u.id);
+  const { data: enrolls } = await supabase
+    .from('enrollments')
+    .select('course_id, courses(title)')
+    .eq('user_id', u.id);
+  const names = (enrolls ?? [])
+    .map((e) => (e.courses as { title: string | null } | null)?.title ?? '')
+    .filter(Boolean);
+  const enrolledCourseIds = (enrolls ?? [])
+    .map((e) => e.course_id as string)
+    .filter(Boolean);
+  students.push({
+    id: u.id,
+    display_name: u.display_name ?? 'Estudiante',
+    email: u.email ?? clerkEmailByUserId.get(u.id) ?? null,
+    avatar_id: u.avatar_id ?? null,
+    points: u.points ?? 0,
+    badgesCount: badgesCount ?? 0,
+    courseNames: names.join(', ') || '—',
+    enrolledCourseIds,
+  });
+}
+---
+
+<AdminLayout>
+  <section class="space-y-8">
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Alumnos</h1>
+      <p class="mt-1 text-sm text-muted">Inscribir estudiantes en cursos y ver progreso.</p>
+    </header>
+
+    {students.length > 0 ? (
+      <div class="relative overflow-visible rounded-xl border border-border bg-surface shadow-[0_8px_30px_rgba(0,0,0,0.18)]">
+        <div class="overflow-x-auto overflow-y-visible">
+        <table class="w-full min-w-[760px] text-left text-sm">
+          <thead>
+            <tr class="border-b border-border bg-surface-2/40 text-muted">
+              <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Estudiante</th>
+              <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]">Puntos</th>
+              <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]">Insignias</th>
+              <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Cursos</th>
+              <th class="px-4 pb-3 pt-3 text-right text-[11px] font-semibold uppercase tracking-[0.14em]">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {students.map((s) => (
+              <tr class="border-b border-border/60 transition-colors hover:bg-surface-2/30 last:border-0">
+                <td class="px-4 py-4">
+                  <div class="flex items-center gap-3">
+                    <div class="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-surface-2">
+                      {avatarImagePath(s.avatar_id) ? (
+                        <img
+                          src={avatarImagePath(s.avatar_id)!}
+                          alt=""
+                          class="h-full w-full object-cover"
+                          width="36"
+                          height="36"
+                        />
+                      ) : (
+                        <span class="flex h-full w-full items-center justify-center text-xs font-semibold text-muted">
+                          {(s.display_name || 'E').charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <p class="font-medium text-white">{s.display_name}</p>
+                      <p class="text-xs text-muted">{s.email ?? '—'}</p>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-4 py-4 text-center">
+                  <span class="inline-flex min-w-10 items-center justify-center rounded-full bg-lime/10 px-2.5 py-1 text-xs font-semibold text-lime">
+                    {s.points}
+                  </span>
+                </td>
+                <td class="px-4 py-4 text-center">
+                  <span class="inline-flex min-w-10 items-center justify-center rounded-full bg-surface-2 px-2.5 py-1 text-xs font-semibold text-white">
+                    {s.badgesCount}
+                  </span>
+                </td>
+                <td class="max-w-[260px] px-4 py-4 text-muted" title={s.courseNames}>
+                  <p class="line-clamp-2 text-sm">{s.courseNames}</p>
+                </td>
+                <td class="relative z-20 px-4 py-4 text-right">
+                  <div class="flex flex-wrap items-center justify-end gap-2">
+                    <div class="relative z-30">
+                      <button
+                        type="button"
+                        class="course-picker-trigger inline-flex h-8 cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 text-xs font-medium text-white transition hover:border-lime/50"
+                        data-user-id={s.id}
+                        aria-expanded="false"
+                      >
+                        Asignar cursos
+                        <span class="rounded-full bg-lime/15 px-1.5 py-0.5 text-[10px] font-semibold text-lime">{s.enrolledCourseIds.length}</span>
+                        <svg class="h-3.5 w-3.5 text-muted transition" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                      <form
+                        method="post"
+                        action="/api/admin/enrollments"
+                        class="course-picker-panel fixed z-[999] hidden w-[240px] rounded-xl border border-border bg-surface p-3 shadow-2xl"
+                        data-user-id={s.id}
+                      >
+                        <input type="hidden" name="action" value="sync" />
+                        <input type="hidden" name="user_id" value={s.id} />
+                        <input type="hidden" name="redirect_to" value="/admin/students" />
+                        <p class="mb-2 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Cursos</p>
+                        <div class="max-h-44 space-y-1 overflow-y-auto pr-1">
+                          {allCourses.map((c) => (
+                            <label class="group/option flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-white transition hover:bg-surface-2">
+                              <input
+                                type="checkbox"
+                                name="course_ids"
+                                value={c.id}
+                                checked={s.enrolledCourseIds.includes(c.id)}
+                                class="peer sr-only"
+                              />
+                              <span class="flex h-4 w-4 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-white peer-checked:shadow-[0_0_0_1px_var(--color-lime)] group-hover/option:border-lime/60">
+                                <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
+                              </span>
+                              <span class="min-w-0 flex-1 truncate">{c.title}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <button
+                          type="submit"
+                          class="mt-3 w-full rounded-lg border border-lime bg-lime/15 px-3 py-1.5 text-xs font-semibold text-lime transition hover:bg-lime/25"
+                        >
+                          Guardar cursos
+                        </button>
+                      </form>
+                    </div>
+                    <a
+                      href={`/admin/students/${s.id}`}
+                      class="inline-flex h-8 items-center rounded-lg border border-border bg-surface-2 px-3 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80"
+                    >
+                      Ver progreso
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+      </div>
+    ) : (
+      <div class="rounded-xl border border-dashed border-border bg-surface-2/60 p-8 text-center">
+        <p class="text-sm font-medium text-white">Aún no hay estudiantes inscritos.</p>
+        <p class="mt-1 text-sm text-muted">Los usuarios con rol estudiante aparecerán aquí.</p>
+      </div>
+    )}
+  </section>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const triggers = Array.from(document.querySelectorAll('.course-picker-trigger'));
+      const panels = Array.from(document.querySelectorAll('.course-picker-panel'));
+      if (!triggers.length || !panels.length) return;
+
+      let currentPanel = null;
+      let currentTrigger = null;
+
+      function closeCurrent() {
+        if (currentPanel) currentPanel.classList.add('hidden');
+        if (currentTrigger) {
+          currentTrigger.setAttribute('aria-expanded', 'false');
+          const icon = currentTrigger.querySelector('svg');
+          icon?.classList.remove('rotate-180');
+        }
+        currentPanel = null;
+        currentTrigger = null;
+      }
+
+      function openPanel(trigger, panel) {
+        closeCurrent();
+        panel.classList.remove('hidden');
+
+        const rect = trigger.getBoundingClientRect();
+        const panelRect = panel.getBoundingClientRect();
+        const margin = 10;
+
+        let left = rect.right - panelRect.width;
+        left = Math.max(margin, Math.min(left, window.innerWidth - panelRect.width - margin));
+
+        let top = rect.bottom + 8;
+        top = Math.max(margin, Math.min(top, window.innerHeight - panelRect.height - margin));
+
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+
+        trigger.setAttribute('aria-expanded', 'true');
+        const icon = trigger.querySelector('svg');
+        icon?.classList.add('rotate-180');
+
+        currentPanel = panel;
+        currentTrigger = trigger;
+      }
+
+      for (const trigger of triggers) {
+        const userId = trigger.dataset.userId;
+        const panel = panels.find((p) => p.dataset.userId === userId);
+        if (!panel) continue;
+
+        trigger.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const isOpen = currentPanel === panel && !panel.classList.contains('hidden');
+          if (isOpen) closeCurrent();
+          else openPanel(trigger, panel);
+        });
+      }
+
+      document.addEventListener('click', (e) => {
+        if (!currentPanel || !currentTrigger) return;
+        const target = e.target;
+        if (!(target instanceof Node)) return;
+        if (currentPanel.contains(target) || currentTrigger.contains(target)) return;
+        closeCurrent();
+      });
+
+      window.addEventListener('resize', closeCurrent);
+      window.addEventListener('scroll', closeCurrent, true);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeCurrent();
+      });
+    });
+  </script>
+</AdminLayout>

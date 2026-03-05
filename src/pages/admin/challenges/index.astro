@@ -1,0 +1,231 @@
+---
+import '../../../styles/global.css';
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+if ((userRow?.role as string) !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+const { data: challengeRows } = await supabase
+  .from('challenges')
+  .select('id, title, description, deadline, points_reward, is_active, course_id, courses(title)')
+  .order('created_at', { ascending: false });
+
+type ChallengeWithMeta = {
+  id: string;
+  title: string;
+  deadline: string | null;
+  points_reward: number;
+  is_active: boolean;
+  courseTitle: string;
+  submissionsCount: number;
+};
+
+const challenges: ChallengeWithMeta[] = [];
+for (const c of challengeRows ?? []) {
+  const { count } = await supabase
+    .from('submissions')
+    .select('*', { count: 'exact', head: true })
+    .eq('challenge_id', c.id);
+  const course = c.courses as { title: string | null } | null;
+  challenges.push({
+    id: c.id,
+    title: c.title ?? 'Sin título',
+    deadline: c.deadline ?? null,
+    points_reward: c.points_reward ?? 0,
+    is_active: c.is_active ?? false,
+    courseTitle: course?.title ?? '—',
+    submissionsCount: count ?? 0,
+  });
+}
+
+const { data: coursesRows } = await supabase.from('courses').select('id, title').order('title');
+const courses = (coursesRows ?? []).map((c) => ({ id: c.id, title: c.title ?? 'Sin título' }));
+
+function formatDeadline(iso: string | null): string {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return iso;
+  }
+}
+---
+
+<AdminLayout>
+  <section class="space-y-8">
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Retos</h1>
+      <p class="mt-1 text-sm text-muted">Crear y activar desafíos para el cohort.</p>
+    </header>
+
+    <div class="rounded-xl border border-border bg-surface">
+      <button
+        type="button"
+        id="toggle-create-challenge"
+        aria-expanded="false"
+        aria-controls="create-challenge-form"
+        class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-white transition hover:bg-surface-2/60"
+      >
+        <span>Crear nuevo reto</span>
+        <svg id="toggle-create-challenge-icon" class="h-5 w-5 shrink-0 text-muted transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div id="create-challenge-form" class="hidden border-t border-border px-5 pb-5 pt-4" role="region">
+        <form method="post" action="/api/admin/challenges" class="space-y-4">
+          <input type="hidden" name="action" value="create" />
+          <input type="hidden" name="redirect_to" value="/admin/challenges" />
+          <div>
+            <label for="challenge-title" class="block text-xs font-medium text-muted">Título</label>
+            <input id="challenge-title" type="text" name="title" required class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Ej: Landing en Webflow" />
+          </div>
+          <div>
+            <label for="challenge-description" class="block text-xs font-medium text-muted">Descripción</label>
+            <textarea id="challenge-description" name="description" rows={3} class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Instrucciones del reto"></textarea>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label for="challenge-points" class="block text-xs font-medium text-muted">Puntos</label>
+              <input id="challenge-points" type="number" name="points_reward" value="30" min="0" class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
+            </div>
+            <div>
+              <label for="challenge-deadline" class="block text-xs font-medium text-muted">Fecha límite</label>
+              <input id="challenge-deadline" type="datetime-local" name="deadline" class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
+            </div>
+          </div>
+          <div>
+            <label for="challenge-course" class="block text-xs font-medium text-muted">Curso</label>
+            <select id="challenge-course" name="course_id" class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime">
+              <option value="">— Sin curso —</option>
+              {courses.map((c) => (
+                <option value={c.id}>{c.title}</option>
+              ))}
+            </select>
+          </div>
+          <div class="flex flex-wrap items-center gap-4">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" name="activate_now" value="on" class="rounded border-border bg-surface-2 text-lime focus:ring-lime" />
+              <span class="text-sm text-white">Activar ahora</span>
+            </label>
+            <div id="scheduled-at-wrap" class="hidden">
+              <label for="challenge-scheduled" class="block text-xs font-medium text-muted">Programar para</label>
+              <input id="challenge-scheduled" type="datetime-local" name="scheduled_at" class="mt-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
+            </div>
+          </div>
+          <button type="submit" class="rounded-lg border border-lime bg-lime px-4 py-2 text-sm font-medium text-background transition hover:bg-lime/90">
+            Crear reto
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <h2 class="text-sm font-semibold text-white">Todos los retos</h2>
+      {challenges.length > 0 ? (
+        <div class="overflow-x-auto rounded-xl border border-border bg-surface shadow-[0_8px_30px_rgba(0,0,0,0.18)]">
+          <table class="w-full min-w-[760px] text-left text-sm">
+            <thead>
+              <tr class="border-b border-border bg-surface-2/40 text-muted">
+                <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Título</th>
+                <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Curso</th>
+                <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Límite</th>
+                <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]">Puntos</th>
+                <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]">Estado</th>
+                <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]">Submissions</th>
+                <th class="px-4 pb-3 pt-3 text-right text-[11px] font-semibold uppercase tracking-[0.14em]">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {challenges.map((ch) => (
+                <tr class="border-b border-border/60 transition-colors hover:bg-surface-2/30 last:border-0">
+                  <td class="px-4 py-4">
+                    <p class="font-medium text-white">{ch.title}</p>
+                  </td>
+                  <td class="px-4 py-4 text-muted">{ch.courseTitle}</td>
+                  <td class="px-4 py-4 text-muted">{formatDeadline(ch.deadline)}</td>
+                  <td class="px-4 py-4 text-center">
+                    <span class="inline-flex min-w-10 items-center justify-center rounded-full bg-lime/10 px-2.5 py-1 text-xs font-semibold text-lime">
+                      {ch.points_reward}
+                    </span>
+                  </td>
+                  <td class="px-4 py-4 text-center">
+                    <span class={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${ch.is_active ? 'bg-lime/15 text-lime' : 'bg-surface-2 text-muted'}`}>
+                      {ch.is_active ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  <td class="px-4 py-4 text-center">
+                    <span class="inline-flex min-w-10 items-center justify-center rounded-full bg-surface-2 px-2.5 py-1 text-xs font-semibold text-white">
+                      {ch.submissionsCount}
+                    </span>
+                  </td>
+                  <td class="px-4 py-4 text-right">
+                    <div class="flex flex-wrap items-center justify-end gap-2">
+                      <form method="post" action="/api/admin/challenges" class="inline">
+                        <input type="hidden" name="action" value="toggle" />
+                        <input type="hidden" name="challenge_id" value={ch.id} />
+                        <input type="hidden" name="redirect_to" value="/admin/challenges" />
+                        <button type="submit" class="inline-flex h-8 items-center rounded-lg border border-border bg-surface-2 px-3 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">
+                          {ch.is_active ? 'Desactivar' : 'Activar'}
+                        </button>
+                      </form>
+                      <a href={`/admin/submissions?challenge=${ch.id}`} class="inline-flex h-8 items-center rounded-lg border border-border bg-surface-2 px-3 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">
+                        Ver submissions
+                      </a>
+                      <a href={`/admin/challenges/${ch.id}/edit`} class="inline-flex h-8 items-center rounded-lg border border-border bg-surface-2 px-3 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">
+                        Editar
+                      </a>
+                      <form method="post" action="/api/admin/challenges" class="inline" onsubmit="return confirm('¿Eliminar este reto?');">
+                        <input type="hidden" name="action" value="delete" />
+                        <input type="hidden" name="challenge_id" value={ch.id} />
+                        <input type="hidden" name="redirect_to" value="/admin/challenges" />
+                        <button type="submit" class="inline-flex h-8 items-center rounded-lg border border-red-500/50 bg-red-500/10 px-3 text-xs font-medium text-red-400 transition hover:bg-red-500/20">
+                          Eliminar
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p class="rounded-xl border border-dashed border-border bg-surface-2/60 p-6 text-center text-sm text-muted">Aún no hay retos. Crea el primero con el formulario de arriba.</p>
+      )}
+    </div>
+  </section>
+</AdminLayout>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toggle = document.getElementById('toggle-create-challenge');
+    const form = document.getElementById('create-challenge-form');
+    const icon = document.getElementById('toggle-create-challenge-icon');
+    const activateNow = document.querySelector('input[name="activate_now"]');
+    const scheduledWrap = document.getElementById('scheduled-at-wrap');
+    if (toggle && form && icon) {
+      toggle.addEventListener('click', () => {
+        const open = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', String(!open));
+        form.classList.toggle('hidden', open);
+        icon.classList.toggle('rotate-180', !open);
+      });
+    }
+    if (activateNow && scheduledWrap) {
+      const update = () => {
+        scheduledWrap.classList.toggle('hidden', activateNow.checked);
+      };
+      activateNow.addEventListener('change', update);
+      update();
+    }
+  });
+</script>

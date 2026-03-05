@@ -1,0 +1,430 @@
+---
+import '../styles/global.css';
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import { SignOutButton } from '@clerk/astro/components';
+import { getSupabaseServiceRoleClient } from '../lib/supabase';
+import { avatarImagePath } from '../lib/avatars';
+
+const { isAuthenticated, userId, redirectToSignIn, sessionClaims } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+// Datos de inscripción (Clerk + Supabase): email y nombre con el que se registraron
+let email = '';
+let signupFirstName = '';
+let signupLastName = '';
+let signupFullName = '';
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase
+  .from('users')
+  .select('display_name, avatar_id, points, created_at, role, email')
+  .eq('id', userId)
+  .maybeSingle();
+
+// Nombre/email de inscripción desde Clerk (currentUser o sessionClaims)
+try {
+  const currentUser = await (Astro.locals as any).currentUser?.();
+  if (currentUser) {
+    if (currentUser.emailAddresses?.[0]?.emailAddress) email = String(currentUser.emailAddresses[0].emailAddress);
+    signupFirstName = String(currentUser.firstName ?? '');
+    signupLastName = String(currentUser.lastName ?? '');
+    signupFullName = String(currentUser.fullName ?? ([currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ') || ''));
+  }
+} catch {
+  // ignore
+}
+if (!email || (!signupFullName && !signupFirstName)) {
+  const claims = sessionClaims as Record<string, unknown> | undefined;
+  if (!email) {
+    email = (claims?.primary_email ?? claims?.email ?? claims?.email_address ?? '') as string;
+    if (!email && Array.isArray((claims as any)?.email_addresses)?.[0]) {
+      email = String((claims as any).email_addresses[0].email_address ?? '');
+    }
+  }
+  if (!signupFirstName && (claims as any)?.first_name) signupFirstName = String((claims as any).first_name);
+  if (!signupLastName && (claims as any)?.last_name) signupLastName = String((claims as any).last_name);
+  if (!signupFullName && (claims as any)?.name) signupFullName = String((claims as any).name);
+  if (!signupFullName && (signupFirstName || signupLastName)) {
+    signupFullName = [signupFirstName, signupLastName].filter(Boolean).join(' ').trim();
+  }
+}
+
+// Optional profile fields (run docs/supabase-profile-fields.sql if missing)
+let description = '';
+let selfDeclaredRole = '';
+let showInDirectory = false;
+const { data: profileRow, error: _profileErr } = await supabase
+  .from('users')
+  .select('description, self_declared_role, show_in_directory')
+  .eq('id', userId)
+  .maybeSingle();
+if (!_profileErr && profileRow) {
+  description = (profileRow as any)?.description ?? '';
+  selfDeclaredRole = (profileRow as any)?.self_declared_role ?? '';
+  showInDirectory = Boolean((profileRow as any)?.show_in_directory);
+}
+
+if (userRow?.email) email = String(userRow.email);
+
+const displayName = userRow?.display_name ?? 'Estudiante';
+const avatarId = userRow?.avatar_id ?? 'avatar-01';
+const avatarSrc = avatarImagePath(avatarId) ?? '/avatars/avatar-01.png';
+const points = userRow?.points ?? 0;
+const createdAt = userRow?.created_at ?? null;
+const role = userRow?.role ?? 'student';
+
+const memberSinceFormatted = createdAt
+  ? (() => {
+      const d = new Date(createdAt);
+      const month = d.toLocaleDateString('es-ES', { month: 'long' });
+      const year = d.getFullYear();
+      return `${month.charAt(0).toUpperCase() + month.slice(1)} ${year}`;
+    })()
+  : '—';
+
+const roleLabel = role === 'admin' ? 'Admin' : 'Estudiante';
+
+// Enrolled courses (enrollments + courses) — safe if table/relation missing
+let courseTitles: string[] = [];
+try {
+  const { data: enrollments } = await supabase
+    .from('enrollments')
+    .select('course_id, courses(title)')
+    .eq('user_id', userId);
+  courseTitles = (enrollments ?? [])
+    .map((e: { courses?: { title?: string } | null }) => e?.courses?.title)
+    .filter(Boolean) as string[];
+} catch {
+  // enrollments or courses relation may not exist yet
+}
+
+// Earned badges (user_badges + badges) — safe if table/relation missing
+let earnedBadges: { name: string; image_url: string | null }[] = [];
+try {
+  const { data: userBadges } = await supabase
+    .from('user_badges')
+    .select('badge_id, badges(name, image_url)')
+    .eq('user_id', userId);
+  earnedBadges = (userBadges ?? [])
+    .map((ub: { badges?: { name?: string; image_url?: string | null } | null }) => ub?.badges)
+    .filter((b): b is { name: string; image_url: string | null } => Boolean(b?.name)) as { name: string; image_url: string | null }[];
+} catch {
+  // user_badges or badges relation may not exist yet
+}
+
+// Birthday not in schema yet — show placeholder
+const birthdayLabel = '—';
+
+const avatarCount = 25;
+const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
+  const num = String(i + 1).padStart(2, '0');
+  return { id: `avatar-${num}`, src: `/avatars/avatar-${num}.png` };
+});
+---
+
+<DashboardLayout>
+  <section class="mx-auto max-w-2xl space-y-4">
+    <nav aria-label="Navegación" class="mb-4">
+      <ol class="flex items-center gap-1.5 text-sm text-muted">
+        <li>
+          <a href="/dashboard" class="transition hover:text-lime">Panel</a>
+        </li>
+        <li aria-hidden="true" class="text-muted/60">/</li>
+        <li class="font-medium text-white" aria-current="page">Perfil</li>
+      </ol>
+    </nav>
+    <header class="mb-6">
+      <p class="mb-0.5 text-xs font-semibold uppercase tracking-[0.2em] text-lime">Perfil</p>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Tu perfil</h1>
+    </header>
+
+    <!-- Top card: two columns -->
+    <div class="rounded-xl border border-border bg-surface p-4">
+      <div class="flex gap-4">
+        <div class="shrink-0">
+          <div class="h-20 w-20 overflow-hidden rounded-full border border-border bg-surface-2 ring-1 ring-lime/30">
+            <img src={avatarSrc} alt="" class="h-full w-full object-cover" width="80" height="80" />
+          </div>
+          <button
+            type="button"
+            id="toggle-avatar-modal"
+            aria-haspopup="dialog"
+            aria-controls="avatar-modal"
+            class="mt-2 w-full rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-sm font-medium text-muted transition hover:border-lime/50 hover:text-lime"
+          >
+            Cambiar avatar
+          </button>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <p id="display-name-text" class="text-xl font-semibold text-white">{displayName}</p>
+            <button
+              type="button"
+              id="display-name-edit-btn"
+              class="rounded-lg border border-border bg-surface-2 px-2.5 py-1 text-xs font-medium text-muted transition hover:border-lime/50 hover:text-lime"
+            >
+              Editar
+            </button>
+            <span class="rounded-full bg-lime/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-lime">
+              {roleLabel}
+            </span>
+          </div>
+          <div id="display-name-form-wrap" class="mt-2 hidden">
+            <form method="post" action="/api/onboarding" class="flex flex-wrap items-center gap-2">
+              <input type="hidden" name="intent" value="display_name" />
+              <input type="hidden" name="redirect_to" value="/profile" />
+              <input
+                type="text"
+                id="profile-display-name"
+                name="display_name"
+                value={displayName}
+                required
+                class="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-base text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime min-w-[140px]"
+                placeholder="Nombre para mostrar"
+              />
+              <button type="submit" class="rounded-lg bg-lime px-3 py-1.5 text-sm font-semibold text-background transition hover:opacity-90">
+                Guardar
+              </button>
+              <button type="button" id="display-name-cancel-btn" class="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm font-medium text-muted transition hover:text-white">
+                Cancelar
+              </button>
+            </form>
+          </div>
+          <p class="mt-0.5 truncate text-sm text-muted">{email || '—'}</p>
+          <div class="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted">
+            <span><span class="font-semibold uppercase tracking-wider text-muted/80">Puntos</span> <span class="font-medium text-lime">{points}</span></span>
+            <span><span class="font-semibold uppercase tracking-wider text-muted/80">Miembro desde</span> <span class="font-medium text-white">{memberSinceFormatted}</span></span>
+            <span><span class="font-semibold uppercase tracking-wider text-muted/80">Rol</span> <span class="font-medium text-white">{roleLabel}</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Datos de inscripción + Información en dos columnas -->
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <h2 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted">Datos de inscripción</h2>
+        <dl class="space-y-3 text-sm">
+          <div class="flex flex-col gap-0.5">
+            <dt class="font-semibold uppercase tracking-wider text-muted/80">Correo</dt>
+            <dd class="truncate text-white">{email || '—'}</dd>
+          </div>
+          <div class="flex flex-col gap-0.5">
+            <dt class="font-semibold uppercase tracking-wider text-muted/80">Nombre completo</dt>
+            <dd class="text-white">{signupFullName || [signupFirstName, signupLastName].filter(Boolean).join(' ').trim() || '—'}</dd>
+          </div>
+          <div class="flex flex-col gap-0.5">
+            <dt class="font-semibold uppercase tracking-wider text-muted/80">Fecha de registro</dt>
+            <dd class="text-white">{memberSinceFormatted}</dd>
+          </div>
+        </dl>
+      </div>
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <h2 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted">Información</h2>
+        <dl class="space-y-3 text-sm">
+          <div class="flex flex-col gap-0.5">
+            <dt class="font-semibold uppercase tracking-wider text-muted/80">Cumpleaños</dt>
+            <dd class="text-white">{birthdayLabel}</dd>
+          </div>
+          <div class="flex flex-col gap-0.5">
+            <dt class="font-semibold uppercase tracking-wider text-muted/80">Cursos inscritos</dt>
+            <dd class="text-white">
+              {courseTitles.length > 0 ? courseTitles.join(', ') : 'Ninguno aún'}
+            </dd>
+          </div>
+          <div class="flex flex-col gap-0.5">
+            <dt class="font-semibold uppercase tracking-wider text-muted/80">Insignias</dt>
+            <dd class="flex flex-wrap items-center gap-2">
+              {earnedBadges.length > 0 ? (
+                <>
+                  <span class="text-white">{earnedBadges.length} ganada{earnedBadges.length !== 1 ? 's' : ''}</span>
+                  <span class="flex flex-wrap gap-1.5">
+                    {earnedBadges.map((b) => (
+                      <span class="rounded-full bg-lime/10 px-2.5 py-1 text-xs font-medium text-lime" key={b.name}>{b.name}</span>
+                    ))}
+                  </span>
+                </>
+              ) : (
+                <span class="text-muted">Aún no has ganado insignias</span>
+              )}
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+
+    <!-- Perfil público: rol, descripción, aparecer en directorio -->
+    <div class="rounded-xl border border-border bg-surface p-4">
+      <h2 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted">Perfil público</h2>
+      <p class="mb-3 text-sm text-muted">Estos datos pueden mostrarse en el directorio de estudiantes si lo activas.</p>
+      <form method="post" action="/api/onboarding" class="space-y-3">
+        <input type="hidden" name="intent" value="profile" />
+        <input type="hidden" name="redirect_to" value="/profile" />
+        <div class="flex flex-col gap-1">
+          <label for="profile-role" class="text-sm font-medium text-muted">Tu rol</label>
+          <input
+            type="text"
+            id="profile-role"
+            name="self_declared_role"
+            value={selfDeclaredRole}
+            class="rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-base text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            placeholder="Ej. Diseñador UX, Frontend Developer"
+          />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label for="profile-description" class="text-sm font-medium text-muted">Descripción</label>
+          <textarea
+            id="profile-description"
+            name="description"
+            rows={3}
+            class="rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-base text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime resize-y min-h-[72px]"
+            placeholder="Una frase sobre ti o qué te trae al curso."
+          >{description}</textarea>
+        </div>
+        <div class="flex items-center justify-between gap-4 rounded-lg border border-border bg-surface-2/50 px-3 py-2.5">
+          <div>
+            <p class="text-sm font-medium text-white">Aparecer en el directorio</p>
+            <p class="text-sm text-muted">Tu perfil será visible para otros estudiantes en el directorio.</p>
+          </div>
+          <label class="relative inline-flex cursor-pointer items-center shrink-0">
+            <input
+              type="checkbox"
+              name="show_in_directory"
+              value="on"
+              class="peer sr-only"
+              checked={showInDirectory}
+            />
+            <span class="relative h-6 w-11 rounded-full border border-border bg-surface-2 transition-colors peer-checked:border-lime peer-checked:bg-lime after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-border after:bg-white after:transition-transform after:content-[''] peer-checked:after:translate-x-5 peer-checked:after:border-lime" />
+          </label>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="rounded-lg bg-lime px-4 py-2.5 text-sm font-semibold text-background transition hover:opacity-90">
+            Guardar perfil público
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Cerrar sesión -->
+    <div class="pt-2">
+      <SignOutButton
+        redirectUrl="/"
+        class="rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-muted transition hover:border-muted hover:bg-surface-2 hover:text-white"
+      >
+        Cerrar sesión
+      </SignOutButton>
+    </div>
+
+    <!-- Modal: elegir avatar -->
+    <div
+      id="avatar-modal"
+      class="fixed inset-0 z-50 flex hidden items-center justify-center p-4 bg-black/60"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="avatar-modal-title"
+    >
+      <div
+        id="avatar-modal-backdrop"
+        class="absolute inset-0"
+        tabindex="-1"
+      />
+      <div
+        class="relative w-full max-w-lg max-h-[85vh] flex flex-col rounded-xl border border-border bg-surface shadow-xl"
+        id="avatar-modal-panel"
+      >
+        <div class="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+          <h2 id="avatar-modal-title" class="text-sm font-semibold text-white">Elegir avatar</h2>
+          <button
+            type="button"
+            id="avatar-modal-close"
+            class="rounded-lg p-1.5 text-muted transition hover:bg-surface-2 hover:text-white"
+            aria-label="Cerrar"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <form method="post" action="/api/onboarding" class="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <input type="hidden" name="intent" value="avatar" />
+          <input type="hidden" name="redirect_to" value="/profile" />
+          <div class="overflow-y-auto p-4">
+            <div class="grid grid-cols-5 gap-2 sm:grid-cols-6">
+              {avatarOptions.map((avatar) => {
+                const isSelected = avatar.id === avatarId;
+                return (
+                  <button
+                    type="submit"
+                    name="avatar_id"
+                    value={avatar.id}
+                    class={[
+                      'flex aspect-square flex-col items-center justify-center rounded-lg border transition',
+                      isSelected
+                        ? 'border-lime bg-lime/10 shadow-[0_0_0_1px_var(--color-lime)]'
+                        : 'border-border bg-surface-2 hover:border-lime/50',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                  >
+                    <div class="flex h-10 w-10 shrink-0 overflow-hidden rounded-full bg-surface ring-1 ring-border">
+                      <img src={avatar.src} alt="Avatar" class="h-full w-full object-cover" width="40" height="40" />
+                    </div>
+                    {isSelected && <span class="mt-1 text-xs font-semibold text-lime">Actual</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const avatarBtn = document.getElementById('toggle-avatar-modal');
+      const avatarModal = document.getElementById('avatar-modal');
+      const avatarBackdrop = document.getElementById('avatar-modal-backdrop');
+      const avatarClose = document.getElementById('avatar-modal-close');
+      function openAvatarModal() {
+        if (avatarModal) {
+          avatarModal.classList.remove('hidden');
+          document.body.style.overflow = 'hidden';
+        }
+      }
+      function closeAvatarModal() {
+        if (avatarModal) {
+          avatarModal.classList.add('hidden');
+          document.body.style.overflow = '';
+        }
+      }
+      if (avatarBtn) avatarBtn.addEventListener('click', openAvatarModal);
+      if (avatarBackdrop) avatarBackdrop.addEventListener('click', closeAvatarModal);
+      if (avatarClose) avatarClose.addEventListener('click', closeAvatarModal);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && avatarModal && !avatarModal.classList.contains('hidden')) {
+          closeAvatarModal();
+        }
+      });
+
+      const editBtn = document.getElementById('display-name-edit-btn');
+      const formWrap = document.getElementById('display-name-form-wrap');
+      const nameText = document.getElementById('display-name-text');
+      const cancelBtn = document.getElementById('display-name-cancel-btn');
+      if (editBtn && formWrap && nameText && cancelBtn) {
+        editBtn.addEventListener('click', () => {
+          nameText.classList.add('hidden');
+          editBtn.classList.add('hidden');
+          formWrap.classList.remove('hidden');
+          formWrap.querySelector('input')?.focus();
+        });
+        cancelBtn.addEventListener('click', () => {
+          formWrap.classList.add('hidden');
+          nameText.classList.remove('hidden');
+          editBtn.classList.remove('hidden');
+        });
+      }
+    });
+  </script>
+</DashboardLayout>

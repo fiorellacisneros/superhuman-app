@@ -1,0 +1,101 @@
+---
+import '../../styles/global.css';
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+import { avatarImagePath } from '../../lib/avatars';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+const role = (userRow?.role as string) ?? 'student';
+if (role === 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+const { data: studentRows } = await supabase
+  .from('users')
+  .select('id, display_name, avatar_id, points')
+  .eq('role', 'student')
+  .order('points', { ascending: false });
+
+type LeaderboardRow = { id: string; display_name: string; avatar_id: string | null; points: number; badgesCount: number };
+const rows: LeaderboardRow[] = [];
+
+for (const u of studentRows ?? []) {
+  const { count: badgesCount } = await supabase
+    .from('user_badges')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', u.id);
+  rows.push({
+    id: u.id,
+    display_name: u.display_name ?? 'Estudiante',
+    avatar_id: u.avatar_id ?? null,
+    points: u.points ?? 0,
+    badgesCount: badgesCount ?? 0,
+  });
+}
+
+const topScore = Math.max(1, ...rows.map((r) => r.points));
+---
+
+<DashboardLayout role="student">
+  <section class="space-y-6">
+    <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Panel</a>
+      <span class="mx-1">/</span>
+      <span class="text-white">Ranking</span>
+    </nav>
+
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Ranking</h1>
+      <p class="mt-1 text-sm text-muted">Puntos del cohort ordenados de mayor a menor.</p>
+    </header>
+
+    {rows.length > 0 ? (
+      <div class="rounded-xl border border-border bg-surface overflow-hidden">
+        <ul class="divide-y divide-border">
+          {rows.map((r, i) => {
+            const pct = topScore ? (r.points / topScore) * 100 : 0;
+            const isCurrentUser = r.id === userId;
+            return (
+              <li class={`flex items-center gap-4 px-4 py-3 ${isCurrentUser ? 'border-l-4 border-l-lime bg-lime/5' : ''}`}>
+                <span class="w-8 shrink-0 text-sm font-semibold text-muted">{i + 1}</span>
+                <div class="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-border bg-surface-2">
+                  {avatarImagePath(r.avatar_id) ? (
+                    <img src={avatarImagePath(r.avatar_id)!} alt="" class="h-full w-full object-cover" width="40" height="40" />
+                  ) : (
+                    <span class="flex h-full w-full items-center justify-center text-sm font-semibold text-muted">{(r.display_name || 'E').charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="font-medium text-white">{r.display_name}</p>
+                  <p class="text-xs text-muted">{r.badgesCount} insignias</p>
+                </div>
+                <div class="w-24 shrink-0 text-right">
+                  <span class="font-semibold text-lime">{r.points} pts</span>
+                </div>
+                <div class="hidden w-32 shrink-0 sm:block">
+                  <div class="h-2 w-full overflow-hidden rounded-full bg-surface-2">
+                    <div class="h-full rounded-full bg-lime transition-all" style={`width: ${pct}%`} />
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    ) : (
+      <div class="rounded-xl border border-dashed border-border bg-surface-2/60 p-8 text-center">
+        <p class="text-sm font-medium text-white">Aún no hay estudiantes en el ranking.</p>
+        <p class="mt-1 text-sm text-muted">Los puntos aparecerán cuando alguien complete retos o asista a clases.</p>
+        <a href="/dashboard" class="mt-4 inline-block rounded-lg border border-lime bg-lime/15 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/25">
+          Volver al panel
+        </a>
+      </div>
+    )}
+  </section>
+</DashboardLayout>

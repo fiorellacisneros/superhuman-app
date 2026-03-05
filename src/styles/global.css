@@ -1,0 +1,47 @@
+@import "tailwindcss";
+@import "bootstrap-icons/font/bootstrap-icons.css";
+
+/* Google Fonts */
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&display=swap");
+
+@theme {
+  --font-manrope: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-work-sans: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Dark base (negro y grises neutros, sin azul) */
+  --color-background: #0D0D0D;
+  --color-surface: #141414;
+  --color-surface-2: #1A1A1A;
+  --color-border: #262626;
+
+  /* Acentos (lime para CTAs y números clave) */
+  --color-lime: #C6F135;
+  --color-white: #FFFFFF;
+  --color-muted: #737373;
+}
+
+/* Global typography + dark-first base */
+body {
+  font-family: var(--font-work-sans);
+  background-color: var(--color-background);
+  color: var(--color-white);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-manrope);
+}
+
+/* Ensure interactive controls always show pointer affordance */
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+[role="button"] {
+  cursor: pointer;
+}
+
+button:disabled,
+input:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}

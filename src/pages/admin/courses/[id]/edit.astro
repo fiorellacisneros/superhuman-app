@@ -1,0 +1,100 @@
+---
+import '../../../../styles/global.css';
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../../../lib/supabase';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+if ((userRow?.role as string) !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+const { id: courseId } = Astro.params as { id: string };
+if (!courseId) {
+  return Astro.redirect('/admin/courses');
+}
+
+const { data: course } = await supabase
+  .from('courses')
+  .select('id, title, description, cover_image')
+  .eq('id', courseId)
+  .maybeSingle();
+
+if (!course) {
+  return Astro.redirect('/admin/courses');
+}
+---
+
+<AdminLayout>
+  <section class="space-y-6">
+    <nav class="text-sm text-muted">
+      <a href="/admin/courses" class="hover:text-white">Cursos</a>
+      <span class="mx-1">/</span>
+      <span class="text-white">{course.title}</span>
+      <span class="mx-1">/</span>
+      <span class="text-white">Editar</span>
+    </nav>
+
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Editar curso</h1>
+      <p class="mt-1 text-sm text-muted">{course.title}</p>
+    </header>
+
+    <form method="post" action="/api/admin/courses" class="max-w-xl space-y-4 rounded-xl border border-border bg-surface p-5">
+      <input type="hidden" name="action" value="update" />
+      <input type="hidden" name="course_id" value={courseId} />
+      <input type="hidden" name="redirect_to" value="/admin/courses" />
+
+      <div>
+        <label for="edit-title" class="block text-xs font-medium text-muted">Título</label>
+        <input
+          id="edit-title"
+          type="text"
+          name="title"
+          required
+          value={course.title ?? ''}
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+        />
+      </div>
+      <div>
+        <label for="edit-description" class="block text-xs font-medium text-muted">Descripción</label>
+        <textarea
+          id="edit-description"
+          name="description"
+          rows={3}
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+        >{course.description ?? ''}</textarea>
+      </div>
+      <div>
+        <label for="edit-cover" class="block text-xs font-medium text-muted">Archivo de portada</label>
+        <input
+          id="edit-cover"
+          type="text"
+          name="cover_image"
+          value={course.cover_image ?? ''}
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="Ej: webflow-01.jpg"
+        />
+      </div>
+      <div class="flex gap-3">
+        <button
+          type="submit"
+          class="rounded-lg border border-lime bg-lime px-4 py-2 text-sm font-medium text-background transition hover:bg-lime/90"
+        >
+          Guardar cambios
+        </button>
+        <a
+          href="/admin/courses"
+          class="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:bg-surface-2/80"
+        >
+          Cancelar
+        </a>
+      </div>
+    </form>
+  </section>
+</AdminLayout>

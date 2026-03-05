@@ -1,0 +1,174 @@
+---
+import '../../../../../styles/global.css';
+import AdminLayout from '../../../../../layouts/AdminLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../../../../lib/supabase';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+if ((userRow?.role as string) !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+const { id: courseId } = Astro.params as { id: string };
+if (!courseId) {
+  return Astro.redirect('/admin/courses');
+}
+
+const { data: course } = await supabase
+  .from('courses')
+  .select('id, slug, title')
+  .eq('id', courseId)
+  .maybeSingle();
+
+if (!course) {
+  return Astro.redirect('/admin/courses');
+}
+---
+
+<AdminLayout>
+  <section class="space-y-6">
+    <nav class="text-sm text-muted">
+      <a href="/admin/courses" class="hover:text-white">Cursos</a>
+      <span class="mx-1">/</span>
+      <a href={`/admin/courses/${courseId}/edit`} class="hover:text-white">{course.title}</a>
+      <span class="mx-1">/</span>
+      <span class="text-muted">/{course.slug ?? course.id}</span>
+      <span class="mx-1">/</span>
+      <span class="text-white">Nueva clase</span>
+    </nav>
+
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Agregar clase</h1>
+      <p class="mt-1 text-sm text-muted">Curso: {course.title}</p>
+    </header>
+
+    <form method="post" action="/api/admin/lessons" class="space-y-5 rounded-xl border border-border bg-surface p-5">
+      <input type="hidden" name="action" value="create" />
+      <input type="hidden" name="course_id" value={courseId} />
+      <input type="hidden" name="redirect_to" value="/admin/courses" />
+
+      <div>
+        <label for="lesson-title" class="block text-xs font-medium text-muted">Título</label>
+        <input
+          id="lesson-title"
+          type="text"
+          name="title"
+          required
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="Ej: Sesión 1 — Introducción"
+        />
+      </div>
+
+      <div>
+        <label for="lesson-notes" class="block text-xs font-medium text-muted">Notas / descripción</label>
+        <textarea
+          id="lesson-notes"
+          name="notes"
+          rows={4}
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="Descripción o notas para la clase"
+        />
+      </div>
+
+      <div>
+        <label for="lesson-zoom-link" class="block text-xs font-medium text-muted">Enlace Zoom (clase en vivo)</label>
+        <input
+          id="lesson-zoom-link"
+          type="url"
+          name="zoom_link"
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="https://zoom.us/j/..."
+        />
+        <p class="mt-1 text-[11px] text-muted">Link para unirse a la clase en vivo. Se muestra antes de la clase.</p>
+      </div>
+
+      <div>
+        <label for="lesson-recording" class="block text-xs font-medium text-muted">Grabación (después de la clase)</label>
+        <input
+          id="lesson-recording"
+          type="url"
+          name="recording_url"
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="https://..."
+        />
+        <p class="mt-1 text-[11px] text-muted">Link de la grabación. Puedes agregarlo después de que termine la clase.</p>
+      </div>
+
+      <div>
+        <label for="lesson-ppt" class="block text-xs font-medium text-muted">Presentación (Google Slides / Drive)</label>
+        <input
+          id="lesson-ppt"
+          type="url"
+          name="ppt_url"
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="https://..."
+        />
+      </div>
+
+      <div>
+        <p class="mb-2 text-xs font-medium text-muted">Recursos (hasta 3)</p>
+        <div class="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <div class="flex gap-2">
+              <input
+                type="text"
+                name={`resource_label_${i}`}
+                placeholder="Etiqueta"
+                class="w-32 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              />
+              <input
+                type="url"
+                name={`resource_url_${i}`}
+                placeholder="URL"
+                class="min-w-0 flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label for="lesson-scheduled" class="block text-xs font-medium text-muted">Programada (fecha y hora)</label>
+          <input
+            id="lesson-scheduled"
+            type="datetime-local"
+            name="scheduled_at"
+            class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          />
+        </div>
+        <div>
+          <label for="lesson-order" class="block text-xs font-medium text-muted">Orden</label>
+          <input
+            id="lesson-order"
+            type="number"
+            name="order"
+            value="0"
+            min="0"
+            class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          />
+        </div>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button
+          type="submit"
+          class="rounded-lg border border-lime bg-lime px-4 py-2 text-sm font-medium text-background transition hover:bg-lime/90"
+        >
+          Crear clase
+        </button>
+        <a
+          href="/admin/courses"
+          class="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:bg-surface-2/80"
+        >
+          Cancelar
+        </a>
+      </div>
+    </form>
+  </section>
+</AdminLayout>

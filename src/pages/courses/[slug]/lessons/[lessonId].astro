@@ -1,0 +1,159 @@
+---
+import '../../../../styles/global.css';
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../../../lib/supabase';
+
+const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const { slug: courseSlug, lessonId } = Astro.params as { slug: string; lessonId: string };
+if (!courseSlug || !lessonId) {
+  return Astro.redirect('/dashboard');
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+const roleFromClaims = (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role;
+const isAdmin = roleFromClaims === 'admin' || (userRow?.role as string) === 'admin';
+
+const { data: course } = await supabase
+  .from('courses')
+  .select('id, slug, title')
+  .or(`slug.eq.${courseSlug},id.eq.${courseSlug}`)
+  .maybeSingle();
+if (!course) {
+  return Astro.redirect('/dashboard');
+}
+const resolvedCourseSlug = course.slug ?? course.id;
+
+if (!isAdmin) {
+  const { data: enrollment } = await supabase
+    .from('enrollments')
+    .select('course_id')
+    .eq('user_id', userId)
+    .eq('course_id', course.id)
+    .maybeSingle();
+  if (!enrollment) {
+    return Astro.redirect('/dashboard');
+  }
+}
+
+const { data: lesson, error: lessonError } = await supabase
+  .from('lessons')
+  .select('id, title, notes, ppt_url, recording_url, resources')
+  .eq('id', lessonId)
+  .eq('course_id', course.id)
+  .maybeSingle();
+if (lessonError || !lesson) {
+  return Astro.redirect(`/courses/${resolvedCourseSlug}`);
+}
+
+const hasRecording = Boolean(lesson.recording_url && String(lesson.recording_url).trim());
+const hasPpt = Boolean(lesson.ppt_url && String(lesson.ppt_url).trim());
+const resourcesList = Array.isArray(lesson.resources)
+  ? (lesson.resources as { label?: string; url?: string }[]).filter((r) => r && typeof r.url === 'string' && r.url.trim())
+  : [];
+---
+
+<DashboardLayout>
+  <section class="space-y-6">
+    <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Panel</a>
+      <span class="mx-1">/</span>
+      <a href={`/courses/${resolvedCourseSlug}`} class="hover:text-white">{course.title}</a>
+      <span class="mx-1">/</span>
+      <span class="text-white">{lesson.title}</span>
+    </nav>
+
+    <div class="rounded-xl border border-border bg-surface p-4 sm:p-5">
+      <h1 class="text-xl font-semibold text-white">{lesson.title}</h1>
+      {lesson.notes && (
+        <div class="mt-3 text-sm text-muted whitespace-pre-wrap">{lesson.notes}</div>
+      )}
+
+      <div class="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
+        {hasRecording && (
+          <a
+            href={lesson.recording_url as string}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center justify-center gap-2 rounded-lg border border-lime bg-lime/10 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/20 sm:justify-start"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.752 11.168l-3.197-2.132A1.5 1.5 0 0010 9.87v4.263a1.5 1.5 0 002.555 1.066l3.197-2.132a1.5 1.5 0 000-2.332z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Ver grabación
+          </a>
+        )}
+        {hasPpt && (
+          <a
+            href={lesson.ppt_url as string}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:border-border hover:bg-surface-2/80 sm:justify-start"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Ver presentación
+          </a>
+        )}
+        {resourcesList.length > 0 && (
+          <div class="flex flex-col gap-2">
+            <button
+              type="button"
+              id="resources-toggle"
+              aria-expanded="false"
+              aria-controls="resources-list"
+              class="inline-flex w-fit items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:border-border hover:bg-surface-2/80"
+            >
+              <svg id="resources-arrow" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
+              </svg>
+              Recursos
+            </button>
+            <ul id="resources-list" class="hidden list-inside list-disc space-y-1 pl-4 text-sm text-muted" role="region" aria-label="Recursos">
+              {resourcesList.map((r) => (
+                <li>
+                  <a href={r.url!} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
+                    {r.label && r.label.trim() ? r.label : r.url}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <div class="mt-4 border-t border-border pt-3">
+        <p class="text-xs text-muted">
+          Aquí puedes consultar todos los materiales de la clase. La asistencia la gestiona el equipo docente.
+        </p>
+      </div>
+    </div>
+
+    <p>
+      <a href={`/courses/${resolvedCourseSlug}`} class="text-sm text-muted hover:text-white">
+        ← Volver al curso
+      </a>
+    </p>
+  </section>
+</DashboardLayout>
+
+<script>
+  (function () {
+    const toggle = document.getElementById('resources-toggle');
+    const list = document.getElementById('resources-list');
+    if (!toggle || !list) return;
+    toggle.addEventListener('click', () => {
+      const expanded = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', String(!expanded));
+      list.classList.toggle('hidden', expanded);
+      const arrow = document.getElementById('resources-arrow');
+      if (arrow) arrow.classList.toggle('rotate-90', !expanded);
+    });
+  })();
+</script>

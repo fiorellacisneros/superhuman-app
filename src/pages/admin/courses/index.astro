@@ -1,0 +1,189 @@
+---
+import '../../../styles/global.css';
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+if ((userRow?.role as string) !== 'admin') {
+  return new Response(null, { status: 302, headers: { Location: '/dashboard' } });
+}
+
+const { data: coursesRows } = await supabase
+  .from('courses')
+  .select('id, slug, title, description, cover_image')
+  .order('created_at', { ascending: false });
+
+const courses: { id: string; slug: string; title: string; description: string | null; cover_image: string | null; lessonsCount: number; enrolledCount: number }[] = [];
+
+for (const c of coursesRows ?? []) {
+  const { count: lessonsCount } = await supabase
+    .from('lessons')
+    .select('*', { count: 'exact', head: true })
+    .eq('course_id', c.id);
+  const { count: enrolledCount } = await supabase
+    .from('enrollments')
+    .select('*', { count: 'exact', head: true })
+    .eq('course_id', c.id);
+  courses.push({
+    id: c.id,
+    slug: c.slug ?? c.id,
+    title: c.title ?? 'Sin título',
+    description: c.description ?? null,
+    cover_image: c.cover_image ?? null,
+    lessonsCount: lessonsCount ?? 0,
+    enrolledCount: enrolledCount ?? 0,
+  });
+}
+---
+
+<AdminLayout>
+  <section class="space-y-8">
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Cursos</h1>
+      <p class="mt-1 text-sm text-muted">Crear y editar cursos y sus clases.</p>
+    </header>
+
+    <div class="rounded-xl border border-border bg-surface">
+      <button
+        type="button"
+        id="toggle-create-course"
+        aria-expanded="false"
+        aria-controls="create-course-form"
+        class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-white transition hover:bg-surface-2/60"
+      >
+        <span>Crear nuevo curso</span>
+        <svg id="toggle-create-icon" class="h-5 w-5 shrink-0 text-muted transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div id="create-course-form" class="hidden border-t border-border px-5 pb-5 pt-4" role="region">
+        <form method="post" action="/api/admin/courses" class="space-y-4">
+          <input type="hidden" name="action" value="create" />
+          <input type="hidden" name="redirect_to" value="/admin/courses" />
+          <div>
+            <label for="course-title" class="block text-xs font-medium text-muted">Título</label>
+            <input
+              id="course-title"
+              type="text"
+              name="title"
+              required
+              class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              placeholder="Ej: Introducción a Webflow"
+            />
+          </div>
+          <div>
+            <label for="course-description" class="block text-xs font-medium text-muted">Descripción</label>
+            <textarea
+              id="course-description"
+              name="description"
+              rows={3}
+              class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              placeholder="Breve descripción del curso"
+            />
+          </div>
+          <div>
+            <label for="course-cover" class="block text-xs font-medium text-muted">Archivo de portada</label>
+            <input
+              id="course-cover"
+              type="text"
+              name="cover_image"
+              class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              placeholder="Ej: webflow-01.jpg (sube el archivo en public/courses/)"
+            />
+          </div>
+          <button
+            type="submit"
+            class="rounded-lg border border-lime bg-lime px-4 py-2 text-sm font-medium text-background transition hover:bg-lime/90"
+          >
+            Crear curso
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <h2 class="text-sm font-semibold text-white">Todos los cursos</h2>
+      {courses.length > 0 ? (
+        <ul class="space-y-4">
+          {courses.map((course) => (
+            <li class="rounded-xl border border-border bg-surface p-4">
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+                <div class="h-20 w-32 shrink-0 overflow-hidden rounded-lg border border-border bg-surface-2">
+                  {course.cover_image ? (
+                    <img
+                      src={course.cover_image.startsWith('http') ? course.cover_image : `/courses/${course.cover_image}`}
+                      alt=""
+                      class="h-full w-full object-cover"
+                      width="128"
+                      height="80"
+                    />
+                  ) : (
+                    <div class="flex h-full w-full items-center justify-center text-muted">
+                      <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+                <div class="min-w-0 flex-1">
+                  <h3 class="font-medium text-white">{course.title}</h3>
+                  {course.description && (
+                    <p class="mt-0.5 line-clamp-2 text-sm text-muted">{course.description}</p>
+                  )}
+                  <p class="mt-2 text-xs text-muted">
+                    {course.lessonsCount} clases · {course.enrolledCount} inscritos
+                  </p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <a
+                    href={`/admin/courses/${course.id}/edit`}
+                    class="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80"
+                  >
+                    Editar
+                  </a>
+                  <a
+                    href={`/courses/${course.slug}`}
+                    class="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80"
+                  >
+                    Ver curso
+                  </a>
+                  <a
+                    href={`/admin/courses/${course.id}/lessons/new`}
+                    class="rounded-lg border border-lime bg-lime/15 px-3 py-2 text-xs font-medium text-lime transition hover:bg-lime/25"
+                  >
+                    Agregar clase
+                  </a>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="rounded-xl border border-dashed border-border bg-surface-2/60 p-6 text-center text-sm text-muted">
+          Aún no hay cursos. Usa el formulario de arriba para crear el primero.
+        </p>
+      )}
+    </div>
+  </section>
+</AdminLayout>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toggle = document.getElementById('toggle-create-course');
+    const form = document.getElementById('create-course-form');
+    const icon = document.getElementById('toggle-create-icon');
+    if (!toggle || !form || !icon) return;
+    toggle.addEventListener('click', () => {
+      const open = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', String(!open));
+      form.classList.toggle('hidden', open);
+      icon.classList.toggle('rotate-180', !open);
+    });
+  });
+</script>

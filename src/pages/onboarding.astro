@@ -1,0 +1,143 @@
+---
+import '../styles/global.css';
+import { getSupabaseServiceRoleClient } from '../lib/supabase';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+// Use service role so we can read/upsert the user row (Clerk auth, not Supabase JWT)
+const supabase = getSupabaseServiceRoleClient();
+
+// Ensure user row exists
+await supabase.from('users').upsert({ id: userId }, { onConflict: 'id' });
+
+const { data: userRow } = await supabase
+  .from('users')
+  .select('display_name, avatar_id')
+  .eq('id', userId)
+  .maybeSingle();
+
+const displayName = userRow?.display_name ?? null;
+const avatarId = userRow?.avatar_id ?? null;
+
+// Onboarding complete → go to dashboard
+if (displayName != null && displayName !== '' && avatarId != null && avatarId !== '') {
+  return Astro.redirect('/dashboard');
+}
+
+// Show step 2 if display_name is set in DB, or if URL has ?step=2 (after POST redirect)
+const stepParam = Astro.url.searchParams.get('step');
+const showStep2 = (displayName != null && displayName !== '') || stepParam === '2';
+const showStep1 = !showStep2;
+
+// All avatars in public/avatars (avatar-01.png through avatar-25.png)
+const avatarCount = 25;
+const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
+  const num = String(i + 1).padStart(2, '0');
+  return { id: `avatar-${num}`, src: `/avatars/avatar-${num}.png` };
+});
+---
+
+<html lang="es" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Bienvenido — Superhuman School</title>
+  </head>
+  <body class="min-h-screen bg-background text-white antialiased">
+    <div class="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-12">
+      <header class="mb-10 text-center">
+        <p class="text-xs font-semibold uppercase tracking-[0.25em] text-lime">
+          Superhuman School
+        </p>
+        <h1 class="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+          Bienvenido al cohort
+        </h1>
+        <p class="mt-2 text-sm text-muted">
+          {showStep1 ? 'Paso 1 de 2' : 'Paso 2 de 2'}
+        </p>
+      </header>
+
+      {showStep1 && (
+        <section class="rounded-2xl border border-border bg-surface p-6">
+          <form method="post" action="/api/onboarding" class="space-y-4">
+            <input type="hidden" name="intent" value="display_name" />
+            <label for="display_name" class="block text-sm font-medium text-white">
+              ¿Cómo quieres que te llamemos?
+            </label>
+            <input
+              type="text"
+              id="display_name"
+              name="display_name"
+              required
+              autocomplete="name"
+              placeholder="Tu nombre o apodo"
+              class="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            />
+            <button
+              type="submit"
+              class="w-full rounded-xl bg-lime px-4 py-3 text-sm font-semibold text-background transition hover:opacity-90"
+            >
+              Continuar
+            </button>
+          </form>
+        </section>
+      )}
+
+      {showStep2 && (
+        <section class="rounded-2xl border border-border bg-surface p-6">
+          <p class="mb-4 text-sm text-muted">
+            Elige tu avatar para el leaderboard. Podrás cambiarlo después.
+          </p>
+          <form method="post" action="/api/onboarding">
+            <input type="hidden" name="intent" value="avatar" />
+            <div class="max-h-[min(60vh,400px)] overflow-y-auto rounded-xl border border-border bg-surface-2/50 p-2">
+              <div class="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6">
+              {avatarOptions.map((avatar, idx) => {
+                const isSelected = avatar.id === avatarId || (!avatarId && idx === 0);
+                return (
+                  <label class="group cursor-pointer">
+                    <input
+                      type="radio"
+                      name="avatar_id"
+                      value={avatar.id}
+                      checked={isSelected}
+                      class="peer sr-only"
+                    />
+                    <div class="flex aspect-square items-center justify-center rounded-xl border border-border bg-surface-2 transition hover:border-lime/60 peer-checked:border-lime peer-checked:bg-lime/10 peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
+                      <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-2 ring-1 ring-border">
+                      <img
+                        src={avatar.src}
+                        alt="Avatar"
+                        class="h-full w-full object-cover"
+                        width="48"
+                        height="48"
+                      />
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+              </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+              <button
+                type="submit"
+                class="rounded-xl bg-lime px-5 py-2.5 text-sm font-semibold text-background transition hover:opacity-90"
+              >
+                Ir al dashboard
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <p class="mt-8 text-center text-xs text-muted">
+        Solo te llevará un momento.
+      </p>
+    </div>
+  </body>
+</html>

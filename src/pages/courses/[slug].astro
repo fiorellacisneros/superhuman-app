@@ -1,0 +1,158 @@
+---
+import '../../styles/global.css';
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+
+const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const { slug: courseSlug } = Astro.params as { slug: string };
+if (!courseSlug) {
+  return Astro.redirect('/dashboard');
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+const roleFromClaims = (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role;
+const isAdmin = roleFromClaims === 'admin' || (userRow?.role as string) === 'admin';
+
+const { data: course, error: courseError } = await supabase
+  .from('courses')
+  .select('id, slug, title, description, cover_image')
+  .or(`slug.eq.${courseSlug},id.eq.${courseSlug}`)
+  .maybeSingle();
+if (courseError || !course) {
+  return Astro.redirect('/dashboard');
+}
+const resolvedCourseSlug = course.slug ?? course.id;
+
+// Students must be enrolled; admins can preview the course.
+if (!isAdmin) {
+  const { data: enrollment } = await supabase
+    .from('enrollments')
+    .select('course_id')
+    .eq('user_id', userId)
+    .eq('course_id', course.id)
+    .maybeSingle();
+  if (!enrollment) {
+    return Astro.redirect('/dashboard');
+  }
+}
+
+const { data: lessons } = await supabase
+  .from('lessons')
+  .select('id, title, order, scheduled_at')
+  .eq('course_id', course.id)
+  .order('order', { ascending: true });
+
+const totalLessons = (lessons ?? []).length;
+const now = Date.now();
+const completedLessons = (lessons ?? []).filter((l) => {
+  if (!l.scheduled_at) return false;
+  const t = new Date(l.scheduled_at).getTime();
+  return Number.isFinite(t) && t < now;
+}).length;
+const lessonItems = (lessons ?? []).map((lesson) => ({
+  ...lesson,
+  completed: lesson.scheduled_at ? new Date(lesson.scheduled_at).getTime() < now : false,
+}));
+---
+
+<DashboardLayout>
+  <section class="space-y-6">
+    <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Panel</a>
+      <span class="mx-1">/</span>
+      <span class="text-white">{course.title}</span>
+    </nav>
+
+    <div class="overflow-hidden rounded-xl border border-border">
+      <div class="relative h-[180px] w-full overflow-hidden bg-surface-2 sm:h-[200px]">
+        {course.cover_image ? (
+          <img
+            src={course.cover_image.startsWith('http') ? course.cover_image : `/courses/${course.cover_image}`}
+            alt=""
+            class="h-full w-full object-cover"
+            width="1200"
+            height="200"
+          />
+        ) : (
+          <div class="flex h-full w-full items-center justify-center text-muted">
+            <svg class="h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+          </div>
+        )}
+        <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" aria-hidden="true" />
+        <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-5">
+          <h1 class="text-xl font-semibold tracking-tight text-white drop-shadow sm:text-2xl">{course.title}</h1>
+          {course.description && (
+            <p class="mt-1 max-w-2xl text-sm text-white/90 drop-shadow">{course.description}</p>
+          )}
+        </div>
+      </div>
+      <div class="border-t border-border bg-surface px-4 py-3 sm:px-5">
+        <p class="text-xs text-muted">{completedLessons} de {totalLessons} clases completadas</p>
+        <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
+          <div
+            class="h-full rounded-full bg-lime transition-all duration-300"
+            style={`width: ${totalLessons ? (completedLessons / totalLessons) * 100 : 0}%`}
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-border bg-surface p-4 sm:p-5">
+      <h2 class="text-sm font-semibold text-white">Clases</h2>
+      {lessons && lessons.length > 0 ? (
+        <ul class="mt-4 space-y-2">
+          {lessonItems.map((lesson) => {
+            const completed = lesson.completed;
+            const isUpcoming = lesson.scheduled_at ? new Date(lesson.scheduled_at).getTime() >= now : false;
+            return (
+              <li>
+                <a
+                  href={isAdmin ? `/admin/courses/${course.id}/lessons/${lesson.id}/edit` : `/courses/${resolvedCourseSlug}/lessons/${lesson.id}`}
+                  class={`flex items-center gap-3 rounded-lg border px-4 py-3 transition ${
+                    completed
+                      ? 'border-lime/40 bg-lime/10 hover:bg-lime/15'
+                      : 'border-border bg-surface-2/60 hover:border-lime/40 hover:bg-surface-2'
+                  }`}
+                >
+                  <span class={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${completed ? 'border-lime/40 bg-lime/15 text-lime' : 'border-border bg-surface text-muted'}`} aria-hidden="true">
+                    {completed ? (
+                      <svg class="h-4 w-4 text-lime" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : isUpcoming ? (
+                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 7v5l3 2" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    ) : (
+                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 6v12l9-6-9-6z" />
+                      </svg>
+                    )}
+                  </span>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-medium text-white">{lesson.title}</p>
+                    {completed ? (
+                      <p class="text-[11px] font-medium text-lime">Completada</p>
+                    ) : (
+                      <p class="text-[11px] text-muted">{isUpcoming ? 'Próxima' : 'Por completar'}</p>
+                    )}
+                  </div>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p class="mt-4 text-sm text-muted">Aún no hay clases en este curso.</p>
+      )}
+    </div>
+  </section>
+</DashboardLayout>
