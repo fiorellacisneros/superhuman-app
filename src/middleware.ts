@@ -18,8 +18,19 @@ function normalizeHostname(hostname: string): string {
   return hostname.toLowerCase().replace(/^www\./, '');
 }
 
+function isLocalHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
 function isSameSiteUrl(a: URL, b: URL): boolean {
-  return normalizeHostname(a.hostname) === normalizeHostname(b.hostname);
+  const aHost = normalizeHostname(a.hostname);
+  const bHost = normalizeHostname(b.hostname);
+  if (aHost !== bHost) return false;
+  // In local development, include port to avoid accepting cross-port submissions.
+  if (isLocalHost(aHost) || isLocalHost(bHost)) {
+    return a.port === b.port;
+  }
+  return true;
 }
 
 function withSecurityHeaders(response: Response, url: URL): Response {
@@ -57,7 +68,7 @@ export const onRequest = clerkMiddleware(async (auth, context, next) => {
     if (origin) {
       try {
         const originUrl = new URL(origin);
-        if (!isSameSiteUrl(originUrl, url) || originUrl.protocol !== url.protocol) {
+        if (origin === 'null' || !isSameSiteUrl(originUrl, url)) {
           return withSecurityHeaders(new Response('Forbidden', { status: 403 }), url);
         }
       } catch {
@@ -67,14 +78,14 @@ export const onRequest = clerkMiddleware(async (auth, context, next) => {
       // Some same-site form posts may omit Origin; fallback to Referer.
       try {
         const refererUrl = new URL(referer);
-        if (!isSameSiteUrl(refererUrl, url) || refererUrl.protocol !== url.protocol) {
+        if (!isSameSiteUrl(refererUrl, url)) {
           return withSecurityHeaders(new Response('Forbidden', { status: 403 }), url);
         }
       } catch {
         return withSecurityHeaders(new Response('Forbidden', { status: 403 }), url);
       }
-    } else if (secFetchSite !== 'same-origin' && secFetchSite !== 'same-site') {
-      // Last fallback: if no origin/referer and no same-site signal, block.
+    } else if (secFetchSite && secFetchSite !== 'same-origin' && secFetchSite !== 'same-site' && secFetchSite !== 'none') {
+      // If the browser sends the fetch-site hint and it's not same-site, block.
       return withSecurityHeaders(new Response('Forbidden', { status: 403 }), url);
     }
   }
