@@ -52,7 +52,7 @@ function isActive(href: string): boolean {
   <body class="min-h-screen bg-background text-white antialiased">
     <div class="min-h-screen">
       <header class="border-b border-border bg-surface px-4 py-4 sm:px-6">
-        <div class="mx-auto flex max-w-5xl items-center justify-between gap-3">
+        <div class="relative mx-auto flex max-w-5xl items-center justify-between gap-3">
           <a href="/dashboard" class="shrink-0">
             <img src="/logo.png" alt="Superhuman School" class="h-5 w-auto" />
           </a>
@@ -168,7 +168,7 @@ function isActive(href: string): boolean {
             </div>
           </div>
         </div>
-        <div id="mobile-nav-panel" class="mx-auto mt-3 hidden max-w-5xl md:hidden">
+        <div id="mobile-nav-panel" class="absolute right-0 top-full z-[90] mt-2 hidden w-[min(92vw,280px)] -translate-y-1 opacity-0 pointer-events-none transition-[opacity,transform] duration-200 ease-out md:hidden">
           <nav class="space-y-1 rounded-xl border border-border bg-surface-2/60 p-2" aria-label="Admin móvil">
             {adminNav.map((item) => {
               const active = isActive(item.href);
@@ -237,10 +237,29 @@ function isActive(href: string): boolean {
         });
 
         if (mobileNavButton && mobileNavPanel) {
+          let mobileNavHideTimer = null;
+          function clearMobileNavTimer() {
+            if (mobileNavHideTimer) {
+              clearTimeout(mobileNavHideTimer);
+              mobileNavHideTimer = null;
+            }
+          }
           function toggleMobileNav(forceOpen) {
             const expanded = forceOpen ?? mobileNavButton.getAttribute('aria-expanded') !== 'true';
             mobileNavButton.setAttribute('aria-expanded', String(expanded));
-            mobileNavPanel.classList.toggle('hidden', !expanded);
+            clearMobileNavTimer();
+            if (expanded) {
+              mobileNavPanel.classList.remove('hidden');
+              requestAnimationFrame(() => {
+                mobileNavPanel.classList.remove('opacity-0', '-translate-y-1', 'pointer-events-none');
+              });
+            } else {
+              mobileNavPanel.classList.add('opacity-0', '-translate-y-1', 'pointer-events-none');
+              mobileNavHideTimer = setTimeout(() => {
+                mobileNavPanel.classList.add('hidden');
+                mobileNavHideTimer = null;
+              }, 200);
+            }
           }
           mobileNavButton.addEventListener('click', (e) => {
             e.stopPropagation();
