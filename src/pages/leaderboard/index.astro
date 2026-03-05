@@ -24,18 +24,26 @@ const { data: studentRows } = await supabase
 
 type LeaderboardRow = { id: string; display_name: string; avatar_id: string | null; points: number; badgesCount: number };
 const rows: LeaderboardRow[] = [];
+const studentIds = (studentRows ?? []).map((u) => u.id);
+const badgeCountByUser = new Map<string, number>();
+if (studentIds.length > 0) {
+  const { data: badgeRows } = await supabase
+    .from('user_badges')
+    .select('user_id')
+    .in('user_id', studentIds);
+  for (const row of badgeRows ?? []) {
+    const id = row.user_id as string;
+    badgeCountByUser.set(id, (badgeCountByUser.get(id) ?? 0) + 1);
+  }
+}
 
 for (const u of studentRows ?? []) {
-  const { count: badgesCount } = await supabase
-    .from('user_badges')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', u.id);
   rows.push({
     id: u.id,
     display_name: u.display_name ?? 'Estudiante',
     avatar_id: u.avatar_id ?? null,
     points: u.points ?? 0,
-    badgesCount: badgesCount ?? 0,
+    badgesCount: badgeCountByUser.get(u.id) ?? 0,
   });
 }
 

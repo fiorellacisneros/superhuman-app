@@ -14,28 +14,45 @@ const isProtectedRoute = createRouteMatcher([
 
 const isAdminRoute = createRouteMatcher(['/admin(.*)']);
 
+function withSecurityHeaders(response: Response, url: URL): Response {
+  const headers = new Headers(response.headers);
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (url.protocol === 'https:') {
+    headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export const onRequest = clerkMiddleware(async (auth, context, next) => {
   const url = new URL(context.request.url);
-  // Let POST form submits reach their handlers (page or API)
-  if (
-    context.request.method === 'POST' &&
-    (url.pathname === '/onboarding' ||
-      url.pathname === '/api/onboarding' ||
-      url.pathname === '/api/admin/courses')
-  ) {
-    return next();
+
+  // Basic CSRF mitigation for API mutations: block cross-origin requests.
+  const method = context.request.method.toUpperCase();
+  const isMutation = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
+  if (isMutation && url.pathname.startsWith('/api/')) {
+    const origin = context.request.headers.get('origin');
+    if (origin && origin !== url.origin) {
+      return withSecurityHeaders(new Response('Forbidden', { status: 403 }), url);
+    }
   }
 
   const { isAuthenticated, sessionClaims, redirectToSignIn, userId } = auth();
 
   if (isProtectedRoute(context.request) && !isAuthenticated) {
-    return redirectToSignIn();
+    return withSecurityHeaders(redirectToSignIn(), url);
   }
 
   if (isAdminRoute(context.request)) {
     const roleFromClaims = (sessionClaims as { metadata?: { role?: string } })?.metadata?.role;
     if (roleFromClaims === 'admin') {
-      return next();
+      return withSecurityHeaders(await next(), url);
     }
     // Fallback: si no está en Clerk (session token sin metadata), comprobar Supabase
     if (userId) {
@@ -43,15 +60,15 @@ export const onRequest = clerkMiddleware(async (auth, context, next) => {
         const supabase = getSupabaseServiceRoleClient();
         const { data } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
         if ((data?.role as string) === 'admin') {
-          return next();
+          return withSecurityHeaders(await next(), url);
         }
       } catch (_) {
         // env o Supabase no disponible
       }
     }
-    return new Response('Forbidden', { status: 403 });
+    return withSecurityHeaders(new Response('Forbidden', { status: 403 }), url);
   }
 
-  return next();
+  return withSecurityHeaders(await next(), url);
 });
 

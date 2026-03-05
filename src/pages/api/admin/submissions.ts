@@ -1,22 +1,15 @@
 import type { APIRoute } from 'astro';
-import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 import { addPointsForEvent } from '../../../lib/points';
 import { checkBadgesAfterApproval } from '../../../lib/badges';
+import { safeRedirectPath } from '../../../lib/request-security';
+import { requireAdmin } from '../../../lib/api-admin';
+import { isRateLimited } from '../../../lib/rate-limit';
+import { recordAdminAudit } from '../../../lib/security-audit';
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
-  if (!isAuthenticated || !userId) {
-    return redirectToSignIn();
-  }
-
-  const db = getSupabaseServiceRoleClient();
-  const { data: userRow } = await db.from('users').select('role').eq('id', userId).maybeSingle();
-  if ((userRow?.role as string) !== 'admin') {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  const admin = await requireAdmin(locals as any);
+  if (admin instanceof Response) return admin;
+  const { db, userId } = admin;
 
   const formData = await request.formData();
   const submissionId = formData.get('submission_id');
@@ -27,6 +20,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+  if (isRateLimited(`admin-submission-review:${userId}`, 30, 60_000)) {
+    return new Response(JSON.stringify({ error: 'Too many review requests, try again shortly' }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
+    });
+  }
 
   const { data: submission } = await db
     .from('submissions')
@@ -34,8 +33,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .eq('id', submissionId.trim())
     .maybeSingle();
 
-  const redirectTo = formData.get('redirect_to');
-  const url = typeof redirectTo === 'string' && redirectTo.trim() ? redirectTo.trim() : '/admin/submissions';
+  const url = safeRedirectPath(formData.get('redirect_to'), '/admin/submissions');
 
   if (!submission || submission.reviewed) {
     return new Response(null, { status: 303, headers: { Location: url } });
@@ -63,6 +61,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     await addPointsForEvent({ userId: submission.user_id as string, type, supabase: db });
     await checkBadgesAfterApproval(db, submission.user_id as string, submission.challenge_id as string);
   }
+  await recordAdminAudit(db, userId, 'submission.review', {
+    submissionId: submissionId.trim(),
+    decision: action,
+    targetUserId: submission.user_id as string,
+  });
 
   return new Response(null, { status: 303, headers: { Location: url } });
 };

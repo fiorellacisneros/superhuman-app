@@ -2,6 +2,7 @@
 import '../../styles/global.css';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+import BadgeIcon from '../../components/BadgeIcon.astro';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -13,16 +14,16 @@ const { data: userRow } = await supabase.from('users').select('role').eq('id', u
 const role = (userRow?.role as string) ?? 'student';
 
 const iconMap: Record<string, string> = {
-  first_submission: 'bi-box-arrow-in-down',
-  on_time: 'bi-clock-fill',
-  early_bird: 'bi-lightning-fill',
-  streak_3: 'bi-fire',
-  attendance_streak_3: 'bi-calendar-check-fill',
-  first_attendance: 'bi-geo-alt-fill',
-  module_complete: 'bi-hammer',
-  night_owl: 'bi-moon-fill',
-  course_complete: 'bi-trophy-fill',
-  manual: 'bi-star-fill',
+  first_submission: 'first_submission',
+  on_time: 'on_time',
+  early_bird: 'early_bird',
+  streak_3: 'streak_3',
+  attendance_streak_3: 'attendance_streak_3',
+  first_attendance: 'first_attendance',
+  module_complete: 'module_complete',
+  night_owl: 'night_owl',
+  course_complete: 'course_complete',
+  manual: 'manual',
 };
 
 const { data: badgeRows } = await supabase.from('badges').select('id, name, description, image_url, condition_type').order('name');
@@ -73,7 +74,10 @@ function formatDate(iso: string) {
             <div class="flex items-start gap-4">
               <div class={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full p-1.5 ${b.earned ? 'bg-lime' : 'bg-surface-2'}`}>
                 <div class={`flex h-full w-full items-center justify-center rounded-full ring-1 ring-inset ${b.earned ? 'ring-black' : 'ring-border'}`}>
-                  <i class={`bi ${iconMap[b.condition_type ?? ''] ?? 'bi-star-fill'} text-2xl transition-transform duration-200 group-hover:scale-110 ${b.earned ? 'text-background/75' : 'text-muted'}`} aria-hidden="true" />
+                  <BadgeIcon
+                    icon={iconMap[b.condition_type ?? ''] ?? 'manual'}
+                    class={`h-6 w-6 transition-transform duration-200 group-hover:scale-110 ${b.earned ? 'text-background/75' : 'text-muted'}`}
+                  />
                 </div>
               </div>
               <div class="min-w-0 flex-1">

@@ -23,36 +23,41 @@ const { data: enrollmentRows } = await supabase
   .eq('user_id', userId);
 
 const enrolledCourses: { id: string; slug: string; title: string; cover_image: string | null; description: string | null; totalLessons: number; completedLessons: number }[] = [];
+const enrolledCourseRows = (enrollmentRows ?? [])
+  .map((row) => (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses)
+  .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
 
-for (const row of enrollmentRows ?? []) {
-  const course = (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses;
-  if (!course?.id) continue;
-  const { count: totalLessons } = await supabase
-    .from('lessons')
-    .select('*', { count: 'exact', head: true })
-    .eq('course_id', course.id);
+const enrolledIds = enrolledCourseRows.map((course) => course.id);
+const lessonsByCourse = new Map<string, { total: number; completed: number }>();
+if (enrolledIds.length > 0) {
   const { data: lessonRows } = await supabase
     .from('lessons')
-    .select('id')
-    .eq('course_id', course.id);
-  const lessonIds = (lessonRows ?? []).map((l) => l.id);
-  let completedLessons = 0;
-  if (lessonIds.length > 0) {
-    const { count } = await supabase
-      .from('attendance')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .in('lesson_id', lessonIds);
-    completedLessons = count ?? 0;
+    .select('course_id, scheduled_at')
+    .in('course_id', enrolledIds);
+
+  const nowMs = Date.now();
+  for (const lesson of lessonRows ?? []) {
+    const courseId = lesson.course_id as string;
+    const current = lessonsByCourse.get(courseId) ?? { total: 0, completed: 0 };
+    current.total += 1;
+    if (lesson.scheduled_at) {
+      const t = new Date(lesson.scheduled_at as string).getTime();
+      if (Number.isFinite(t) && t < nowMs) current.completed += 1;
+    }
+    lessonsByCourse.set(courseId, current);
   }
+}
+
+for (const course of enrolledCourseRows) {
+  const stats = lessonsByCourse.get(course.id) ?? { total: 0, completed: 0 };
   enrolledCourses.push({
     id: course.id,
     slug: course.slug ?? course.id,
     title: course.title ?? 'Curso',
     cover_image: course.cover_image ?? null,
     description: course.description ?? null,
-    totalLessons: totalLessons ?? 0,
-    completedLessons,
+    totalLessons: stats.total,
+    completedLessons: stats.completed,
   });
 }
 ---

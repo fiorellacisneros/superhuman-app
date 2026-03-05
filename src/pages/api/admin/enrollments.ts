@@ -1,20 +1,13 @@
 import type { APIRoute } from 'astro';
-import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+import { safeRedirectPath } from '../../../lib/request-security';
+import { requireAdmin } from '../../../lib/api-admin';
+import { isRateLimited } from '../../../lib/rate-limit';
+import { recordAdminAudit } from '../../../lib/security-audit';
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
-  if (!isAuthenticated || !userId) {
-    return redirectToSignIn();
-  }
-
-  const db = getSupabaseServiceRoleClient();
-  const { data: userRow } = await db.from('users').select('role').eq('id', userId).maybeSingle();
-  if ((userRow?.role as string) !== 'admin') {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  const admin = await requireAdmin(locals as any);
+  if (admin instanceof Response) return admin;
+  const { db, userId: adminUserId } = admin;
 
   const formData = await request.formData();
   const action = formData.get('action');
@@ -22,6 +15,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ error: 'action=enroll|unenroll|sync required' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (isRateLimited(`admin-enrollments:${adminUserId}`, 60, 60_000)) {
+    return new Response(JSON.stringify({ error: 'Too many enrollment requests, try again shortly' }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
     });
   }
 
@@ -86,6 +85,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
         });
       }
     }
+    await recordAdminAudit(db, adminUserId, 'enrollment.sync', {
+      targetUserId: user_id.trim(),
+      added: toInsert.length,
+      removed: toDelete.length,
+    });
   } else {
     const course_id = formData.get('course_id');
     if (typeof course_id !== 'string' || !course_id.trim()) {
@@ -112,9 +116,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     } else {
       await db.from('enrollments').delete().eq('user_id', user_id.trim()).eq('course_id', course_id.trim());
     }
+    await recordAdminAudit(db, adminUserId, action === 'enroll' ? 'enrollment.add' : 'enrollment.remove', {
+      targetUserId: user_id.trim(),
+      courseId: course_id.trim(),
+    });
   }
 
-  const redirectTo = formData.get('redirect_to');
-  const url = typeof redirectTo === 'string' && redirectTo.trim() ? redirectTo.trim() : '/admin/students';
+  const url = safeRedirectPath(formData.get('redirect_to'), '/admin/students');
   return new Response(null, { status: 303, headers: { Location: url } });
 };

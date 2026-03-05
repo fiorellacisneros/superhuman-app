@@ -4,6 +4,7 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import { avatarImagePath } from '../../lib/avatars';
+import BadgeIcon from '../../components/BadgeIcon.astro';
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
 
@@ -13,13 +14,20 @@ if (!isAuthenticated || !userId) {
 
 const supabase = getSupabaseServiceRoleClient();
 
-await supabase.from('users').upsert({ id: userId }, { onConflict: 'id' });
-
-const { data: userRow } = await supabase
+let { data: userRow } = await supabase
   .from('users')
   .select('id, email, display_name, avatar_id, points, role')
   .eq('id', userId)
   .maybeSingle();
+if (!userRow) {
+  await supabase.from('users').upsert({ id: userId }, { onConflict: 'id' });
+  const refetch = await supabase
+    .from('users')
+    .select('id, email, display_name, avatar_id, points, role')
+    .eq('id', userId)
+    .maybeSingle();
+  userRow = refetch.data ?? null;
+}
 
 if (userRow && (userRow.display_name == null || userRow.display_name === '')) {
   return Astro.redirect('/onboarding');
@@ -35,54 +43,45 @@ let cohortAvgPoints: number | null = null;
 let activeChallengesCount = 0;
 let cohortProgress: { id: string; name: string; avatarId: string | null; points: number }[] = [];
 let recentSubmissions: { id: string; studentName: string; challengeTitle: string; submitted_at: string }[] = [];
+let cohortMaxPoints = 1;
 
 if (role === 'admin' && !preview) {
-  const { count: studentsCount } = await supabase
-    .from('users')
-    .select('*', { count: 'exact', head: true })
-    .eq('role', 'student');
-  totalStudents = studentsCount ?? 0;
+  const [studentsCountRes, pendingCountRes, studentPointsRes, activeCountRes, cohortRowsRes, subRowsRes] = await Promise.all([
+    supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
+    supabase.from('submissions').select('*', { count: 'exact', head: true }).eq('reviewed', false),
+    supabase.from('users').select('points').eq('role', 'student'),
+    supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
+    supabase
+      .from('users')
+      .select('id, display_name, avatar_id, points')
+      .eq('role', 'student')
+      .order('points', { ascending: false }),
+    supabase
+      .from('submissions')
+      .select('id, submitted_at, users(display_name), challenges(title)')
+      .eq('reviewed', false)
+      .order('submitted_at', { ascending: false })
+      .limit(5),
+  ]);
+  totalStudents = studentsCountRes.count ?? 0;
+  pendingSubmissionsCount = pendingCountRes.count ?? 0;
 
-  const { count: pendingCount } = await supabase
-    .from('submissions')
-    .select('*', { count: 'exact', head: true })
-    .eq('reviewed', false);
-  pendingSubmissionsCount = pendingCount ?? 0;
-
-  const { data: studentPoints } = await supabase
-    .from('users')
-    .select('points')
-    .eq('role', 'student');
+  const studentPoints = studentPointsRes.data;
   if (studentPoints?.length) {
     const sum = (studentPoints as { points: number | null }[]).reduce((a, r) => a + (r.points ?? 0), 0);
     cohortAvgPoints = Math.round((sum / studentPoints.length) * 10) / 10;
   }
+  activeChallengesCount = activeCountRes.count ?? 0;
 
-  const { count: activeCount } = await supabase
-    .from('challenges')
-    .select('*', { count: 'exact', head: true })
-    .eq('is_active', true);
-  activeChallengesCount = activeCount ?? 0;
-
-  const { data: cohortRows } = await supabase
-    .from('users')
-    .select('id, display_name, avatar_id, points')
-    .eq('role', 'student')
-    .order('points', { ascending: false });
-  const maxPoints = Math.max(1, ...(cohortRows ?? []).map((r) => r.points ?? 0));
+  const cohortRows = cohortRowsRes.data;
   cohortProgress = (cohortRows ?? []).map((u) => ({
     id: u.id,
     name: u.display_name ?? 'Estudiante',
     avatarId: u.avatar_id ?? null,
     points: u.points ?? 0,
   }));
-
-  const { data: subRows } = await supabase
-    .from('submissions')
-    .select('id, submitted_at, users(display_name), challenges(title)')
-    .eq('reviewed', false)
-    .order('submitted_at', { ascending: false })
-    .limit(5);
+  cohortMaxPoints = Math.max(1, ...cohortProgress.map((u) => u.points));
+  const subRows = subRowsRes.data;
   recentSubmissions = (subRows ?? []).map((s) => {
     const u = s.users as { display_name: string | null } | null;
     const c = s.challenges as { title: string | null } | null;
@@ -97,16 +96,16 @@ if (role === 'admin' && !preview) {
 
 // ---------- Student view data (when student OR admin in preview) ----------
 const iconMap: Record<string, string> = {
-  first_submission: 'bi-box-arrow-in-down',
-  on_time: 'bi-clock-fill',
-  early_bird: 'bi-lightning-fill',
-  streak_3: 'bi-fire',
-  attendance_streak_3: 'bi-calendar-check-fill',
-  first_attendance: 'bi-geo-alt-fill',
-  module_complete: 'bi-hammer',
-  night_owl: 'bi-moon-fill',
-  course_complete: 'bi-trophy-fill',
-  manual: 'bi-star-fill',
+  first_submission: 'first_submission',
+  on_time: 'on_time',
+  early_bird: 'early_bird',
+  streak_3: 'streak_3',
+  attendance_streak_3: 'attendance_streak_3',
+  first_attendance: 'first_attendance',
+  module_complete: 'module_complete',
+  night_owl: 'night_owl',
+  course_complete: 'course_complete',
+  manual: 'manual',
 };
 
 let points = 0;
@@ -121,8 +120,18 @@ let upcomingByMonth: { monthLabel: string; lessons: UpcomingLesson[] }[] = [];
 
 if (role !== 'admin' || preview) {
   points = userRow?.points ?? 0;
-  const { data: badgeRows } = await supabase.from('badges').select('id, name, description, condition_type').order('name');
-  const { data: earnedRows } = await supabase.from('user_badges').select('badge_id, earned_at').eq('user_id', userId);
+  const [badgeRowsRes, earnedRowsRes, sacRes, enrollmentRowsRes, leaderboardRowsRes] = await Promise.all([
+    supabase.from('badges').select('id, name, description, condition_type').order('name'),
+    supabase.from('user_badges').select('badge_id, earned_at').eq('user_id', userId),
+    supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
+    supabase
+      .from('enrollments')
+      .select('course_id, courses(id, slug, title, cover_image, description)')
+      .eq('user_id', userId),
+    supabase.from('users').select('id, display_name, avatar_id, points').order('points', { ascending: false }).limit(10),
+  ]);
+  const badgeRows = badgeRowsRes.data;
+  const earnedRows = earnedRowsRes.data;
   const earnedSet = new Set((earnedRows ?? []).map((e) => e.badge_id));
   const earnedAtMap = new Map((earnedRows ?? []).map((e) => [e.badge_id, e.earned_at as string]));
   dashboardBadges = (badgeRows ?? []).map((b) => ({
@@ -134,42 +143,47 @@ if (role !== 'admin' || preview) {
     earned_at: earnedAtMap.get(b.id) ?? null,
   }));
 
-  const { count: sac } = await supabase
-    .from('challenges')
-    .select('*', { count: 'exact', head: true })
-    .eq('is_active', true);
-  studentActiveChallengesCount = sac ?? 0;
+  studentActiveChallengesCount = sacRes.count ?? 0;
 
-  const { data: enrollmentRows } = await supabase
-    .from('enrollments')
-    .select('course_id, courses(id, slug, title, cover_image, description)')
-    .eq('user_id', userId);
-  for (const row of enrollmentRows ?? []) {
-    const course = (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses;
-    if (!course?.id) continue;
+  const enrollmentRows = enrollmentRowsRes.data;
+  const enrolledCourseRows = (enrollmentRows ?? [])
+    .map((row) => (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses)
+    .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
+
+  const enrolledIds = enrolledCourseRows.map((course) => course.id);
+  let lessonsByCourse = new Map<string, { total: number; completed: number }>();
+  if (enrolledIds.length > 0) {
     const { data: lessonRows } = await supabase
       .from('lessons')
-      .select('id, scheduled_at')
-      .eq('course_id', course.id);
-    const totalLessons = (lessonRows ?? []).length;
+      .select('course_id, scheduled_at')
+      .in('course_id', enrolledIds);
+
     const nowMs = Date.now();
-    const completedLessons = (lessonRows ?? []).filter((l) => {
-      if (!l.scheduled_at) return false;
-      const t = new Date(l.scheduled_at as string).getTime();
-      return Number.isFinite(t) && t < nowMs;
-    }).length;
+    for (const lesson of lessonRows ?? []) {
+      const courseId = lesson.course_id as string;
+      const current = lessonsByCourse.get(courseId) ?? { total: 0, completed: 0 };
+      current.total += 1;
+      if (lesson.scheduled_at) {
+        const t = new Date(lesson.scheduled_at as string).getTime();
+        if (Number.isFinite(t) && t < nowMs) current.completed += 1;
+      }
+      lessonsByCourse.set(courseId, current);
+    }
+  }
+
+  for (const course of enrolledCourseRows) {
+    const stats = lessonsByCourse.get(course.id) ?? { total: 0, completed: 0 };
     enrolledCourses.push({
       id: course.id,
       slug: course.slug ?? course.id,
       title: course.title ?? 'Curso',
       cover_image: course.cover_image ?? null,
       description: course.description ?? null,
-      totalLessons,
-      completedLessons,
+      totalLessons: stats.total,
+      completedLessons: stats.completed,
     });
   }
 
-  const enrolledIds = enrolledCourses.map((c) => c.id);
   if (enrolledIds.length > 0) {
     const now = new Date().toISOString();
     const { data: lessonRows } = await supabase
@@ -201,11 +215,7 @@ if (role !== 'admin' || preview) {
     upcomingByMonth = Array.from(monthMap.entries()).map(([monthLabel, lessons]) => ({ monthLabel, lessons }));
   }
 
-  const { data: leaderboardRows } = await supabase
-    .from('users')
-    .select('id, display_name, avatar_id, points')
-    .order('points', { ascending: false })
-    .limit(10);
+  const leaderboardRows = leaderboardRowsRes.data;
   leaderboard = (leaderboardRows ?? [])
     .map((u) => ({
       id: u.id,
@@ -296,8 +306,7 @@ function formatTime(iso: string): string {
         {cohortProgress.length > 0 ? (
           <ul class="mt-4 space-y-3">
             {cohortProgress.map((s) => {
-              const maxPointsVal = Math.max(1, ...cohortProgress.map((x) => x.points));
-              const pct = maxPointsVal ? (s.points / maxPointsVal) * 100 : 0;
+              const pct = cohortMaxPoints ? (s.points / cohortMaxPoints) * 100 : 0;
               return (
                 <li class="flex items-center gap-3">
                   <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-border bg-surface-2">
@@ -501,7 +510,10 @@ function formatTime(iso: string): string {
                   <div class="flex items-start gap-4">
                     <div class={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full p-1.5 ${b.earned ? 'bg-lime' : 'bg-surface-2'}`}>
                       <div class={`flex h-full w-full items-center justify-center rounded-full ring-1 ring-inset ${b.earned ? 'ring-black' : 'ring-border'}`}>
-                        <i class={`bi ${iconMap[b.condition_type ?? ''] ?? 'bi-star-fill'} text-2xl transition-transform duration-200 group-hover:scale-110 ${b.earned ? 'text-background/75' : 'text-muted'}`} aria-hidden="true" />
+                        <BadgeIcon
+                          icon={iconMap[b.condition_type ?? ''] ?? 'manual'}
+                          class={`h-6 w-6 transition-transform duration-200 group-hover:scale-110 ${b.earned ? 'text-background/75' : 'text-muted'}`}
+                        />
                       </div>
                     </div>
                     <div class="min-w-0 flex-1">

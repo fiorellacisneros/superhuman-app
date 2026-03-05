@@ -1,20 +1,19 @@
 import type { APIRoute } from 'astro';
-import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 import { addPointsForEvent } from '../../../lib/points';
 import { checkBadgesAfterAttendance } from '../../../lib/badges';
+import { safeRedirectPath } from '../../../lib/request-security';
+import { requireAdmin } from '../../../lib/api-admin';
+import { isRateLimited } from '../../../lib/rate-limit';
+import { recordAdminAudit } from '../../../lib/security-audit';
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
-  if (!isAuthenticated || !userId) {
-    return redirectToSignIn();
-  }
-
-  const db = getSupabaseServiceRoleClient();
-  const { data: userRow } = await db.from('users').select('role').eq('id', userId).maybeSingle();
-  if ((userRow?.role as string) !== 'admin') {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
+  const admin = await requireAdmin(locals as any);
+  if (admin instanceof Response) return admin;
+  const { db, userId } = admin;
+  if (isRateLimited(`admin-attendance:${userId}`, 30, 60_000)) {
+    return new Response(JSON.stringify({ error: 'Too many attendance updates, try again shortly' }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
     });
   }
 
@@ -25,6 +24,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .filter((v): v is string => typeof v === 'string')
     .map((v) => v.trim())
     .filter(Boolean);
+  const uniqueSelectedUserIds = Array.from(new Set(selectedUserIds));
 
   if (typeof lessonId !== 'string' || !lessonId.trim()) {
     return new Response(JSON.stringify({ error: 'lesson_id required' }), {
@@ -46,29 +46,40 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .select('user_id')
     .eq('course_id', lesson.course_id as string);
   const enrolledSet = new Set((enrolledRows ?? []).map((r) => r.user_id as string));
-  const validUserIds = selectedUserIds.filter((id) => enrolledSet.has(id));
+  const validUserIds = uniqueSelectedUserIds.filter((id) => enrolledSet.has(id));
+  if (validUserIds.length === 0) {
+    const url = safeRedirectPath(formData.get('redirect_to'), '/admin/attendance');
+    return new Response(null, { status: 303, headers: { Location: url } });
+  }
 
-  for (const uid of validUserIds) {
-    const { data: existing } = await db
-      .from('attendance')
-      .select('user_id')
-      .eq('user_id', uid)
-      .eq('lesson_id', lessonId.trim())
-      .maybeSingle();
+  const { data: existingRows } = await db
+    .from('attendance')
+    .select('user_id')
+    .eq('lesson_id', lessonId.trim())
+    .in('user_id', validUserIds);
+  const existingSet = new Set((existingRows ?? []).map((r) => r.user_id as string));
+  const toInsert = validUserIds.filter((id) => !existingSet.has(id));
 
-    if (existing) continue;
+  if (toInsert.length > 0) {
+    const confirmedAt = new Date().toISOString();
+    await db.from('attendance').insert(
+      toInsert.map((uid) => ({
+        user_id: uid,
+        lesson_id: lessonId.trim(),
+        confirmed_at: confirmedAt,
+      })),
+    );
+  }
 
-    await db.from('attendance').insert({
-      user_id: uid,
-      lesson_id: lessonId.trim(),
-      confirmed_at: new Date().toISOString(),
-    });
-
+  for (const uid of toInsert) {
     await addPointsForEvent({ userId: uid, type: 'lesson_attended', supabase: db });
     await checkBadgesAfterAttendance(db, uid);
   }
+  await recordAdminAudit(db, userId, 'attendance.batch_mark', {
+    lessonId: lessonId.trim(),
+    addedCount: toInsert.length,
+  });
 
-  const redirectTo = formData.get('redirect_to');
-  const url = typeof redirectTo === 'string' && redirectTo.trim() ? redirectTo.trim() : '/admin/attendance';
+  const url = safeRedirectPath(formData.get('redirect_to'), '/admin/attendance');
   return new Response(null, { status: 303, headers: { Location: url } });
 };

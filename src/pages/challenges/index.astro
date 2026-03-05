@@ -36,19 +36,20 @@ const activeChallenges = (challengeRows ?? [])
 
 const { data: mySubmissions } = await supabase
   .from('submissions')
-  .select('id, challenge_id, link, reviewed, approved')
-  .eq('user_id', userId);
-const submissionByChallengeId = new Map(
-  (mySubmissions ?? []).map((s) => [
-    s.challenge_id as string,
-    {
-      id: s.id as string,
-      link: (s.link as string | null) ?? '',
-      reviewed: Boolean(s.reviewed),
-      approved: Boolean(s.approved),
-    },
-  ]),
-);
+  .select('id, challenge_id, link, reviewed, approved, submitted_at')
+  .eq('user_id', userId)
+  .order('submitted_at', { ascending: false });
+const submissionByChallengeId = new Map<string, { id: string; link: string; reviewed: boolean; approved: boolean }>();
+for (const s of mySubmissions ?? []) {
+  const key = s.challenge_id as string;
+  if (submissionByChallengeId.has(key)) continue; // first row is latest due to order desc
+  submissionByChallengeId.set(key, {
+    id: s.id as string,
+    link: (s.link as string | null) ?? '',
+    reviewed: Boolean(s.reviewed),
+    approved: Boolean(s.approved),
+  });
+}
 
 function daysLeft(deadline: string | null): string {
   if (!deadline) return '';

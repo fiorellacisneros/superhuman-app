@@ -1,29 +1,26 @@
 import type { APIRoute } from 'astro';
-import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+import { safeRedirectPath, sanitizeHttpUrl } from '../../../lib/request-security';
+import { requireAdmin } from '../../../lib/api-admin';
+import { isRateLimited } from '../../../lib/rate-limit';
+import { recordAdminAudit } from '../../../lib/security-audit';
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  console.log('[lessons API] reached');
-  const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
-  if (!isAuthenticated || !userId) {
-    return redirectToSignIn();
-  }
-
-  const db = getSupabaseServiceRoleClient();
-  const { data: userRow } = await db.from('users').select('role').eq('id', userId).maybeSingle();
-  if ((userRow?.role as string) !== 'admin') {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  const admin = await requireAdmin(locals as any);
+  if (admin instanceof Response) return admin;
+  const { db, userId } = admin;
 
   const formData = await request.formData();
-  console.log('[lessons API] formData:', Object.fromEntries(formData.entries()));
   const action = formData.get('action');
   if (action !== 'create' && action !== 'update') {
     return new Response(JSON.stringify({ error: 'action=create|update required' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (isRateLimited(`admin-lessons:${userId}`, 50, 60_000)) {
+    return new Response(JSON.stringify({ error: 'Too many lesson requests, try again shortly' }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
     });
   }
 
@@ -35,7 +32,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  const title = typeof formData.get('title') === 'string' ? String(formData.get('title')).trim() : '';
+  const title = typeof formData.get('title') === 'string' ? String(formData.get('title')).trim().slice(0, 160) : '';
   if (!title) {
     return new Response(JSON.stringify({ error: 'title required' }), {
       status: 400,
@@ -43,23 +40,30 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  const notes = typeof formData.get('notes') === 'string' ? String(formData.get('notes')).trim() || null : null;
-  const zoom_link = typeof formData.get('zoom_link') === 'string' ? String(formData.get('zoom_link')).trim() || null : null;
-  const recording_url = typeof formData.get('recording_url') === 'string' ? String(formData.get('recording_url')).trim() || null : null;
-  const ppt_url = typeof formData.get('ppt_url') === 'string' ? String(formData.get('ppt_url')).trim() || null : null;
+  const notes = typeof formData.get('notes') === 'string' ? String(formData.get('notes')).trim().slice(0, 12000) || null : null;
+  const zoom_link = sanitizeHttpUrl(formData.get('zoom_link'));
+  const recording_url = sanitizeHttpUrl(formData.get('recording_url'));
+  const ppt_url = sanitizeHttpUrl(formData.get('ppt_url'));
   const orderRaw = formData.get('order');
   const order = orderRaw !== null && orderRaw !== '' ? Number(orderRaw) : 0;
   const scheduled_atRaw = formData.get('scheduled_at');
   const scheduled_at = typeof scheduled_atRaw === 'string' && scheduled_atRaw.trim() ? scheduled_atRaw.trim() : null;
+  if (scheduled_at && Number.isNaN(Date.parse(scheduled_at))) {
+    return new Response(JSON.stringify({ error: 'scheduled_at must be a valid date' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   const resources: { label: string; url: string }[] = [];
   for (let i = 0; i < 3; i++) {
     const label = formData.get(`resource_label_${i}`);
     const url = formData.get(`resource_url_${i}`);
-    if (typeof url === 'string' && url.trim()) {
+    const safeUrl = sanitizeHttpUrl(url);
+    if (safeUrl) {
       resources.push({
         label: typeof label === 'string' ? label.trim() : '',
-        url: url.trim(),
+        url: safeUrl,
       });
     }
   }
@@ -87,7 +91,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const insertResult = await db.from('lessons').insert(insertPayload).select();
     data = insertResult.data;
     error = insertResult.error;
-    console.log('[lessons API] insert result:', { data, error });
 
     // Retry insert if Supabase schema cache reports missing columns.
     // Example: "Could not find the 'notes' column of 'lessons' in the schema cache"
@@ -100,7 +103,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
       const retry = await db.from('lessons').insert(insertPayload).select();
       data = retry.data;
       error = retry.error;
-      console.log('[lessons API] insert result:', { data, error });
+    }
+    if (!error) {
+      await recordAdminAudit(db, userId, 'lesson.create', { courseId: course_id.trim(), title });
     }
   } else {
     const lesson_id = formData.get('lesson_id');
@@ -122,7 +127,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
       .select();
     data = updateResult.data;
     error = updateResult.error;
-    console.log('[lessons API] insert result:', { data, error });
 
     for (let retries = 0; error && retries < 5; retries++) {
       const message = error.message ?? '';
@@ -138,7 +142,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
         .select();
       data = updateResult.data;
       error = updateResult.error;
-      console.log('[lessons API] insert result:', { data, error });
+    }
+    if (!error) {
+      const lesson_id = formData.get('lesson_id');
+      await recordAdminAudit(db, userId, 'lesson.update', {
+        courseId: course_id.trim(),
+        lessonId: typeof lesson_id === 'string' ? lesson_id.trim() : '',
+      });
     }
   }
 
@@ -149,7 +159,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  const redirectTo = formData.get('redirect_to');
-  const url = typeof redirectTo === 'string' && redirectTo.trim() ? redirectTo.trim() : '/admin/courses';
+  const url = safeRedirectPath(formData.get('redirect_to'), '/admin/courses');
   return new Response(null, { status: 303, headers: { Location: url } });
 };

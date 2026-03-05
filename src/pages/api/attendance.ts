@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
-import { addPointsForEvent } from '../../lib/points';
+import { safeRedirectPath } from '../../lib/request-security';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
@@ -8,47 +8,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return redirectToSignIn();
   }
 
-  const formData = await request.formData();
-  const lessonId = formData.get('lesson_id');
-  if (typeof lessonId !== 'string' || !lessonId.trim()) {
-    return new Response(JSON.stringify({ error: 'lesson_id required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
   const db = getSupabaseServiceRoleClient();
-
-  // Check if already attended (idempotent: don't double-insert or double-award points)
-  const { data: existing } = await db
-    .from('attendance')
-    .select('user_id')
-    .eq('user_id', userId)
-    .eq('lesson_id', lessonId.trim())
-    .maybeSingle();
-
-  if (existing) {
-    const rawRedirect = formData.get('redirect_to');
-    const redirectTo = typeof rawRedirect === 'string' && rawRedirect.trim() ? rawRedirect.trim() : null;
-    if (redirectTo) {
-      return new Response(null, { status: 303, headers: { Location: redirectTo } });
-    }
-    return new Response(JSON.stringify({ ok: true, already_recorded: true }), {
-      status: 200,
+  const { data: userRow } = await db.from('users').select('role').eq('id', userId).maybeSingle();
+  if ((userRow?.role as string) !== 'admin') {
+    return new Response(JSON.stringify({ error: 'Attendance is managed by admin only' }), {
+      status: 403,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  await db.from('attendance').insert({ user_id: userId, lesson_id: lessonId.trim() });
-  await addPointsForEvent({ userId, type: 'lesson_attended', supabase: db });
-
-  const rawRedirect = formData.get('redirect_to');
-  const redirectTo = typeof rawRedirect === 'string' && rawRedirect.trim() ? rawRedirect.trim() : null;
-  if (redirectTo) {
-    return new Response(null, { status: 303, headers: { Location: redirectTo } });
-  }
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
+  const formData = await request.formData();
+  const redirectTo = safeRedirectPath(formData.get('redirect_to'), '');
+  if (redirectTo) return new Response(null, { status: 303, headers: { Location: redirectTo } });
+  return new Response(JSON.stringify({ error: 'Use /api/admin/attendance for attendance updates' }), {
+    status: 400,
     headers: { 'Content-Type': 'application/json' },
   });
 };

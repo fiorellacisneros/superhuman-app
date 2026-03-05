@@ -1,5 +1,8 @@
 import type { APIRoute } from 'astro';
-import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+import { safeRedirectPath } from '../../../lib/request-security';
+import { requireAdmin } from '../../../lib/api-admin';
+import { isRateLimited } from '../../../lib/rate-limit';
+import { recordAdminAudit } from '../../../lib/security-audit';
 
 function slugify(input: string): string {
   const base = input
@@ -9,35 +12,38 @@ function slugify(input: string): string {
   return base || 'curso';
 }
 
-export const POST: APIRoute = async ({ request, locals }) => {
-  console.log('[courses API] reached');
-  const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
-  if (!isAuthenticated || !userId) {
-    return redirectToSignIn();
-  }
+function sanitizeCoverImage(input: FormDataEntryValue | null): string | null {
+  if (typeof input !== 'string') return null;
+  const value = input.trim();
+  if (!value) return null;
+  if (value.startsWith('http://') || value.startsWith('https://')) return value;
+  // allow relative asset names/paths only
+  return value.replace(/[^a-zA-Z0-9/_\-.]/g, '').slice(0, 200) || null;
+}
 
-  const db = getSupabaseServiceRoleClient();
-  const { data: userRow } = await db.from('users').select('role').eq('id', userId).maybeSingle();
-  if ((userRow?.role as string) !== 'admin') {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+export const POST: APIRoute = async ({ request, locals }) => {
+  const admin = await requireAdmin(locals as any);
+  if (admin instanceof Response) return admin;
+  const { db, userId } = admin;
 
   const formData = await request.formData();
   const action = formData.get('action');
-  console.log('[courses API] action:', action);
   if (action !== 'create' && action !== 'update') {
     return new Response(JSON.stringify({ error: 'action=create|update required' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
   }
+  if (isRateLimited(`admin-courses:${userId}`, 30, 60_000)) {
+    return new Response(JSON.stringify({ error: 'Too many course requests, try again shortly' }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
+    });
+  }
 
-  const title = typeof formData.get('title') === 'string' ? String(formData.get('title')).trim() : '';
-  const description = typeof formData.get('description') === 'string' ? String(formData.get('description')).trim() || null : null;
-  const cover_image = typeof formData.get('cover_image') === 'string' ? String(formData.get('cover_image')).trim() || null : null;
+  const title = typeof formData.get('title') === 'string' ? String(formData.get('title')).trim().slice(0, 140) : '';
+  const description = typeof formData.get('description') === 'string' ? String(formData.get('description')).trim().slice(0, 4000) || null : null;
+  const cover_image = sanitizeCoverImage(formData.get('cover_image'));
 
   if (action === 'create') {
     if (!title) {
@@ -67,7 +73,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       suffix += 1;
     }
 
-    const { data, error } = await db
+    const { error } = await db
       .from('courses')
       .insert({
         title,
@@ -76,13 +82,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
         cover_image,
         created_by: userId,
       });
-    console.log('[courses API] insert result:', { data, error });
     if (error) {
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
     }
+    await recordAdminAudit(db, userId, 'course.create', { title, slug });
   } else {
     const course_id = formData.get('course_id');
     if (typeof course_id !== 'string' || !course_id.trim()) {
@@ -97,9 +103,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     };
     if (title) update.title = title;
     await db.from('courses').update(update).eq('id', course_id.trim());
+    await recordAdminAudit(db, userId, 'course.update', { courseId: course_id.trim() });
   }
 
-  const redirectTo = formData.get('redirect_to');
-  const url = typeof redirectTo === 'string' && redirectTo.trim() ? redirectTo.trim() : '/admin/courses';
+  const url = safeRedirectPath(formData.get('redirect_to'), '/admin/courses');
   return new Response(null, { status: 303, headers: { Location: url } });
 };

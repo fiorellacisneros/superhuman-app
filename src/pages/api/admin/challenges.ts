@@ -1,20 +1,13 @@
 import type { APIRoute } from 'astro';
-import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+import { safeRedirectPath } from '../../../lib/request-security';
+import { requireAdmin } from '../../../lib/api-admin';
+import { isRateLimited } from '../../../lib/rate-limit';
+import { recordAdminAudit } from '../../../lib/security-audit';
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
-  if (!isAuthenticated || !userId) {
-    return redirectToSignIn();
-  }
-
-  const db = getSupabaseServiceRoleClient();
-  const { data: userRow } = await db.from('users').select('role').eq('id', userId).maybeSingle();
-  if ((userRow?.role as string) !== 'admin') {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  const admin = await requireAdmin(locals as any);
+  if (admin instanceof Response) return admin;
+  const { db, userId } = admin;
 
   const formData = await request.formData();
   const action = formData.get('action');
@@ -24,13 +17,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+  if (isRateLimited(`admin-challenges:${userId}`, 40, 60_000)) {
+    return new Response(JSON.stringify({ error: 'Too many challenge requests, try again shortly' }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
+    });
+  }
 
-  const redirectTo = formData.get('redirect_to');
-  const url = typeof redirectTo === 'string' && redirectTo.trim() ? redirectTo.trim() : '/admin/challenges';
+  const url = safeRedirectPath(formData.get('redirect_to'), '/admin/challenges');
 
   if (action === 'create') {
-    const title = typeof formData.get('title') === 'string' ? String(formData.get('title')).trim() : '';
-    const description = typeof formData.get('description') === 'string' ? String(formData.get('description')).trim() || null : null;
+    const title = typeof formData.get('title') === 'string' ? String(formData.get('title')).trim().slice(0, 140) : '';
+    const description = typeof formData.get('description') === 'string' ? String(formData.get('description')).trim().slice(0, 2000) || null : null;
     const pointsRaw = formData.get('points_reward');
     const points_reward = pointsRaw != null && pointsRaw !== '' ? Number(pointsRaw) : 30;
     const deadlineRaw = formData.get('deadline');
@@ -47,6 +45,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         headers: { 'Content-Type': 'application/json' },
       });
     }
+    if (!Number.isFinite(points_reward) || points_reward < 0 || points_reward > 1000) {
+      return new Response(JSON.stringify({ error: 'points_reward must be between 0 and 1000' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     await db.from('challenges').insert({
       title,
@@ -57,6 +61,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       is_active: activateNow,
       scheduled_at: activateNow ? null : scheduled_at,
     });
+    await recordAdminAudit(db, userId, 'challenge.create', { title, courseId, activateNow });
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
@@ -71,6 +76,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const { data: row } = await db.from('challenges').select('is_active').eq('id', challenge_id.trim()).maybeSingle();
     if (row) {
       await db.from('challenges').update({ is_active: !row.is_active }).eq('id', challenge_id.trim());
+      await recordAdminAudit(db, userId, 'challenge.toggle', {
+        challengeId: challenge_id.trim(),
+        toActive: !row.is_active,
+      });
     }
     return new Response(null, { status: 303, headers: { Location: url } });
   }
@@ -84,6 +93,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
     await db.from('challenges').delete().eq('id', challenge_id.trim());
+    await recordAdminAudit(db, userId, 'challenge.delete', { challengeId: challenge_id.trim() });
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
@@ -102,14 +112,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const course_id = formData.get('course_id');
     const is_active = formData.get('is_active') === 'on' || formData.get('is_active') === 'true';
     const update: Record<string, unknown> = {};
-    if (typeof title === 'string') update.title = title.trim();
-    if (typeof description === 'string') update.description = description.trim() || null;
+    if (typeof title === 'string') update.title = title.trim().slice(0, 140);
+    if (typeof description === 'string') update.description = description.trim().slice(0, 2000) || null;
     if (typeof deadline === 'string') update.deadline = deadline.trim() || null;
-    if (typeof points_reward === 'string' && points_reward !== '') update.points_reward = Number(points_reward);
+    if (typeof points_reward === 'string' && points_reward !== '') {
+      const parsedPoints = Number(points_reward);
+      if (!Number.isFinite(parsedPoints) || parsedPoints < 0 || parsedPoints > 1000) {
+        return new Response(JSON.stringify({ error: 'points_reward must be between 0 and 1000' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      update.points_reward = parsedPoints;
+    }
     if (typeof course_id === 'string') update.course_id = course_id.trim() || null;
     update.is_active = is_active;
     if (Object.keys(update).length > 0) {
       await db.from('challenges').update(update).eq('id', challenge_id.trim());
+      await recordAdminAudit(db, userId, 'challenge.update', { challengeId: challenge_id.trim() });
     }
     return new Response(null, { status: 303, headers: { Location: url } });
   }

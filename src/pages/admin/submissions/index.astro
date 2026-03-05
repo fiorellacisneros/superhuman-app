@@ -36,6 +36,27 @@ let list = (rows ?? []).map((r) => ({
   challenge_title: (r.challenges as { title: string | null } | null)?.title ?? 'Reto',
 }));
 
+// Keep only the latest submission per student+challenge.
+const latestByStudentChallenge = new Map<string, (typeof list)[number]>();
+for (const row of list) {
+  const key = `${row.user_id}::${row.challenge_id}`;
+  const current = latestByStudentChallenge.get(key);
+  if (!current) {
+    latestByStudentChallenge.set(key, row);
+    continue;
+  }
+  const currentTs = new Date(current.submitted_at).getTime();
+  const nextTs = new Date(row.submitted_at).getTime();
+  if ((Number.isFinite(nextTs) ? nextTs : 0) > (Number.isFinite(currentTs) ? currentTs : 0)) {
+    latestByStudentChallenge.set(key, row);
+  }
+}
+list = Array.from(latestByStudentChallenge.values()).sort((a, b) => {
+  const aTs = new Date(a.submitted_at).getTime();
+  const bTs = new Date(b.submitted_at).getTime();
+  return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+});
+
 if (challengeFilter) {
   list = list.filter((s) => s.challenge_id === challengeFilter);
 }

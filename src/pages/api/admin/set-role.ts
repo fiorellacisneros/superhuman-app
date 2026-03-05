@@ -1,19 +1,17 @@
 import type { APIRoute } from 'astro';
 import { createClerkClient } from '@clerk/backend';
-import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+import { requireAdmin } from '../../../lib/api-admin';
+import { isRateLimited } from '../../../lib/rate-limit';
+import { recordAdminAudit } from '../../../lib/security-audit';
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const { isAuthenticated, userId: requesterId, redirectToSignIn } = locals.auth();
-  if (!isAuthenticated || !requesterId) {
-    return redirectToSignIn();
-  }
-
-  const db = getSupabaseServiceRoleClient();
-  const { data: requesterRow } = await db.from('users').select('role').eq('id', requesterId).maybeSingle();
-  if ((requesterRow?.role as string) !== 'admin') {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
+  const admin = await requireAdmin(locals as any);
+  if (admin instanceof Response) return admin;
+  const { db, userId: requesterId } = admin;
+  if (isRateLimited(`admin-set-role:${requesterId}`, 20, 60_000)) {
+    return new Response(JSON.stringify({ error: 'Too many role updates, try again shortly' }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
     });
   }
 
@@ -55,6 +53,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   });
 
   await db.from('users').update({ role }).eq('id', userId.trim());
+  await recordAdminAudit(db, requesterId, 'user.set_role', {
+    targetUserId: userId.trim(),
+    role,
+  });
 
   return new Response(JSON.stringify({ ok: true, userId: userId.trim(), role }), {
     status: 200,

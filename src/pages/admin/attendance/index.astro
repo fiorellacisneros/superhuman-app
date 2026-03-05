@@ -91,18 +91,29 @@ function formatDateTime(iso: string | null): string {
       <form method="get" action="/admin/attendance" class="flex flex-wrap items-end gap-3">
         <div class="min-w-[280px] flex-1">
           <label for="lesson-select" class="block text-xs font-medium text-muted">Selecciona una clase</label>
-          <select
-            id="lesson-select"
-            name="lesson"
-            class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
-          >
-            <option value="">-- Elige una clase --</option>
-            {lessons.map((l) => (
-              <option value={l.id} selected={selectedLessonId === l.id}>
-                {l.courseTitle} · {l.title} · {formatDateTime(l.scheduledAt)}
-              </option>
-            ))}
-          </select>
+          <div class="relative mt-1">
+            <select
+              id="lesson-select"
+              name="lesson"
+              class="w-full appearance-none rounded-lg border border-border bg-surface-2 px-3 pr-10 py-2 text-sm text-white transition focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            >
+              <option value="">-- Elige una clase --</option>
+              {lessons.map((l) => (
+                <option value={l.id} selected={selectedLessonId === l.id}>
+                  {l.courseTitle} · {l.title} · {formatDateTime(l.scheduledAt)}
+                </option>
+              ))}
+            </select>
+            <svg
+              class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
+            </svg>
+          </div>
         </div>
         <button type="submit" class="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">
           Cargar alumnos
@@ -131,8 +142,11 @@ function formatDateTime(iso: string | null): string {
                       name="user_ids"
                       value={s.id}
                       checked={s.alreadyPresent}
-                      class="h-4 w-4 rounded border-border bg-surface-2 text-lime focus:ring-lime"
+                      class="peer sr-only"
                     />
+                    <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-border bg-surface text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
+                      <i class="bi bi-check-lg text-[11px] leading-none" aria-hidden="true" />
+                    </span>
                     <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-border bg-surface">
                       {avatarImagePath(s.avatarId) ? (
                         <img src={avatarImagePath(s.avatarId)!} alt="" class="h-full w-full object-cover" width="32" height="32" />

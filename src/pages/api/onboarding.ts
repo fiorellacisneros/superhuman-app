@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import { normalizeAvatarId } from '../../lib/avatars';
+import { safeRedirectPath } from '../../lib/request-security';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
@@ -19,7 +20,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const db = getSupabaseServiceRoleClient();
 
   if (intent === 'display_name') {
-    const name = typeof displayNameRaw === 'string' ? displayNameRaw.trim() : '';
+    const name = typeof displayNameRaw === 'string' ? displayNameRaw.trim().slice(0, 80) : '';
     if (name) {
       await db
         .from('users')
@@ -28,8 +29,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         .select('display_name')
         .single();
     }
-    const rawRedirect = formData.get('redirect_to');
-    const redirectTo = (typeof rawRedirect === 'string' && rawRedirect.trim()) ? rawRedirect.trim() : '/onboarding?step=2';
+    const redirectTo = safeRedirectPath(formData.get('redirect_to'), '/onboarding?step=2');
     return new Response(null, {
       status: 303,
       headers: { Location: redirectTo },
@@ -46,8 +46,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         .select('avatar_id')
         .single();
     }
-    const raw = formData.get('redirect_to');
-    const redirectTo = (typeof raw === 'string' && raw.trim()) ? raw.trim() : '/dashboard';
+    const redirectTo = safeRedirectPath(formData.get('redirect_to'), '/dashboard');
     return new Response(null, {
       status: 303,
       headers: { Location: redirectTo },
@@ -55,8 +54,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   if (intent === 'profile') {
-    const description = typeof descriptionRaw === 'string' ? descriptionRaw.trim() : null;
-    const selfDeclaredRole = typeof selfDeclaredRoleRaw === 'string' ? selfDeclaredRoleRaw.trim() : null;
+    const description = typeof descriptionRaw === 'string' ? descriptionRaw.trim().slice(0, 500) : null;
+    const selfDeclaredRole = typeof selfDeclaredRoleRaw === 'string' ? selfDeclaredRoleRaw.trim().slice(0, 80) : null;
     try {
       await db
         .from('users')
@@ -69,8 +68,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     } catch (e) {
       // Columns may not exist yet — run docs/supabase-profile-fields.sql in Supabase
     }
-    const rawRedirect = formData.get('redirect_to');
-    const redirectTo = (typeof rawRedirect === 'string' && rawRedirect.trim()) ? rawRedirect.trim() : '/profile';
+    const redirectTo = safeRedirectPath(formData.get('redirect_to'), '/profile');
     return new Response(null, {
       status: 303,
       headers: { Location: redirectTo },
