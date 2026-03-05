@@ -6,27 +6,6 @@ const auth = Astro.locals.auth?.();
 if (auth?.isAuthenticated) {
   return Astro.redirect('/dashboard');
 }
-
-const signInAppearance = {
-  variables: {
-    colorPrimary: '#C6F135',
-    colorBackground: '#141414',
-    colorInputBackground: '#1A1A1A',
-    colorInputText: '#FFFFFF',
-    colorText: '#FFFFFF',
-    colorTextSecondary: '#A3A3A3',
-    colorNeutral: '#262626',
-    borderRadius: '0.75rem',
-  },
-  elements: {
-    rootBox: 'w-full',
-    card: 'w-full max-w-full border border-border bg-surface shadow-none',
-    formButtonPrimary: 'bg-lime text-background hover:bg-lime/90',
-    footerActionLink: 'text-lime hover:text-lime/90',
-    socialButtonsBlockButton: 'border-border bg-surface-2 text-white hover:bg-surface',
-    formFieldInput: 'border-border bg-surface-2 text-white',
-  },
-} as const;
 ---
 
 <html lang="es" class="h-full">
@@ -40,7 +19,7 @@ const signInAppearance = {
   </head>
   <body class="min-h-screen overflow-x-hidden bg-background text-white antialiased">
     <main class="flex min-h-screen items-center justify-center px-4 py-6 sm:py-8">
-      <div class="mx-auto flex w-full max-w-4xl flex-col gap-10 md:flex-row md:items-center">
+      <div class="mx-auto flex w-full max-w-4xl flex-col gap-8 md:flex-row md:items-center md:gap-10">
         <section class="flex-1 space-y-4">
           <p class="text-xs font-semibold uppercase tracking-[0.25em] text-lime">
             Superhuman School
@@ -55,12 +34,12 @@ const signInAppearance = {
         </section>
 
         <section class="w-full flex-1 md:max-w-[430px]">
-          <div id="login-card" class="relative rounded-2xl border border-border bg-surface p-6 shadow-xl shadow-black/40 backdrop-blur min-h-[320px]">
+          <div id="login-card" class="relative mx-auto w-full max-w-[380px] rounded-2xl border border-border bg-surface p-4 shadow-xl shadow-black/40 backdrop-blur sm:p-6 md:max-w-none min-h-[320px]">
             <div id="login-loading" class="absolute inset-0 z-10 hidden flex-col items-center justify-center gap-3 rounded-2xl bg-surface text-white" aria-live="polite">
               <span class="inline-block h-6 w-6 animate-spin rounded-full border-2 border-lime border-t-transparent" aria-hidden="true" />
               <p class="text-sm font-medium text-muted">Cargando…</p>
             </div>
-            <SignIn redirectUrl="/dashboard" appearance={signInAppearance} />
+            <SignIn redirectUrl="/dashboard" />
           </div>
         </section>
       </div>
@@ -81,15 +60,10 @@ const signInAppearance = {
       /* Keep Clerk container responsive on small screens. */
       :global(.cl-rootBox),
       :global(.cl-signIn-root),
-      :global(.cl-card),
       :global(.cl-main) {
         width: 100%;
         max-width: 100%;
         box-sizing: border-box;
-      }
-
-      :global(.cl-card) {
-        width: 100%;
       }
     </style>
   </body>
