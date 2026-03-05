@@ -165,13 +165,13 @@ function isActive(href: string): boolean {
       </main>
     </div>
     <nav
-      class="fixed inset-x-0 bottom-0 z-[100] border-t border-border bg-surface/95 backdrop-blur md:hidden"
-      style="padding-bottom: env(safe-area-inset-bottom);"
+      class="pointer-events-none fixed inset-x-0 z-[100] md:hidden"
+      style="bottom: calc(env(safe-area-inset-bottom) + 0.65rem);"
       aria-label="Navegación inferior admin"
     >
-      <div class="mx-auto max-w-5xl px-3 py-2">
-        <div class="rounded-[1.6rem] border border-border bg-surface-2/95 px-1.5 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
-          <div class="grid grid-cols-6 items-end">
+      <div class="mx-auto w-[min(94vw,430px)]">
+        <div class="pointer-events-auto rounded-[1.9rem] border border-border/80 bg-surface/95 px-1.5 py-3 shadow-[0_14px_34px_rgba(0,0,0,0.5)] backdrop-blur">
+          <div class="grid grid-cols-6 items-center">
         {adminNav.map((item) => {
           const active = isActive(item.href);
           return (
@@ -179,23 +179,26 @@ function isActive(href: string): boolean {
               href={item.href}
               aria-label={item.label}
               title={item.label}
-              class={`group relative flex min-w-0 items-center justify-center py-1 transition ${
-                active ? 'text-background' : 'text-muted hover:text-white'
+              class={`group relative flex min-w-0 flex-col items-center justify-center gap-1 py-1 transition ${
+                active ? 'text-lime' : 'text-muted hover:text-white'
               }`}
             >
               {active && (
                 <span
-                  class="pointer-events-none absolute -top-2.5 z-0 h-7 w-[4rem] rounded-b-[999px] bg-background shadow-[inset_0_-7px_12px_rgba(0,0,0,0.34)]"
+                  class="pointer-events-none absolute -top-3 z-0 h-8 w-[4.2rem] rounded-b-[999px] bg-background shadow-[inset_0_-7px_12px_rgba(0,0,0,0.34)]"
                   aria-hidden="true"
                 />
               )}
               {active ? (
-                <span class="relative z-10 -mt-5 inline-flex h-12 w-12 items-center justify-center rounded-full border border-lime/70 bg-lime shadow-[0_9px_18px_rgba(198,241,53,0.30),inset_0_1px_0_rgba(255,255,255,0.26)]">
-                  <i class={`bi ${item.icon} text-[16px] leading-none text-background`} aria-hidden="true" />
+                <span class="relative z-10 -mt-6 inline-flex h-12 w-12 items-center justify-center rounded-full border border-lime/70 bg-lime shadow-[0_9px_18px_rgba(198,241,53,0.30),inset_0_1px_0_rgba(255,255,255,0.26)]">
+                  <i class={`bi ${item.icon} text-[17px] leading-none text-background`} aria-hidden="true" />
                 </span>
               ) : (
-                <i class={`bi ${item.icon} text-[18px] leading-none text-muted group-hover:text-white/90`} aria-hidden="true" />
+                <i class={`bi ${item.icon} text-[17px] leading-none text-muted group-hover:text-white/90`} aria-hidden="true" />
               )}
+              <span class={`max-w-full truncate px-1 text-[10px] font-medium leading-tight ${active ? 'text-lime' : 'text-muted group-hover:text-white/90'}`}>
+                {item.label}
+              </span>
               {item.showActiveCount && activeRetosCount > 0 && (
                 <span class="absolute right-1 top-0 inline-flex min-w-4 items-center justify-center rounded-full bg-lime/20 px-1 py-0.5 text-[9px] font-semibold text-lime">
                   {activeRetosCount}
