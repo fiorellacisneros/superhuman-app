@@ -43,6 +43,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const notes = typeof formData.get('notes') === 'string' ? String(formData.get('notes')).trim().slice(0, 12000) || null : null;
   const zoom_link = sanitizeHttpUrl(formData.get('zoom_link'));
   const recording_url = sanitizeHttpUrl(formData.get('recording_url'));
+  const recording_passcodeRaw = formData.get('recording_passcode');
+  const recording_passcode = typeof recording_passcodeRaw === 'string' ? recording_passcodeRaw.trim().slice(0, 32) || null : null;
   const ppt_url = sanitizeHttpUrl(formData.get('ppt_url'));
   const resources_url = sanitizeHttpUrl(formData.get('resources_url'));
   const orderRaw = formData.get('order');
@@ -78,6 +80,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     notes,
     zoom_link,
     recording_url,
+    recording_passcode,
     ppt_url,
     resources_url: resources_url || null,
     resources: resources.length ? resources : [],

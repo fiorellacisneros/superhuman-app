@@ -46,6 +46,7 @@ const lesson =
         notes: typeof raw.notes === 'string' ? raw.notes : null,
         zoom_link: typeof raw.zoom_link === 'string' ? raw.zoom_link : null,
         recording_url: typeof raw.recording_url === 'string' ? raw.recording_url : null,
+        recording_passcode: typeof raw.recording_passcode === 'string' ? raw.recording_passcode : null,
         ppt_url: typeof raw.ppt_url === 'string' ? raw.ppt_url : null,
         resources_url: typeof raw.resources_url === 'string' ? raw.resources_url : null,
         resources: raw.resources,
@@ -151,6 +152,20 @@ function toDateTimeLocal(value: string | null): string {
           placeholder="https://..."
         />
         <p class="mt-1 text-[11px] text-muted">Link de la grabación. Puedes agregarlo después de que termine la clase.</p>
+      </div>
+
+      <div>
+        <label for="lesson-recording-passcode" class="block text-xs font-medium text-muted">Código de la grabación (Zoom)</label>
+        <input
+          id="lesson-recording-passcode"
+          type="text"
+          name="recording_passcode"
+          value={lesson.recording_passcode ?? ''}
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="Código para acceder a la grabación"
+          autocomplete="off"
+        />
+        <p class="mt-1 text-[11px] text-muted">Si Zoom pide código para ver la grabación, pégalo aquí. Se mostrará a los estudiantes.</p>
       </div>
 
       <div>

@@ -98,6 +98,19 @@ if (!course) {
       </div>
 
       <div>
+        <label for="lesson-recording-passcode" class="block text-xs font-medium text-muted">Código de la grabación (Zoom)</label>
+        <input
+          id="lesson-recording-passcode"
+          type="text"
+          name="recording_passcode"
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="Código para acceder a la grabación"
+          autocomplete="off"
+        />
+        <p class="mt-1 text-[11px] text-muted">Si Zoom pide código para ver la grabación, pégalo aquí. Se mostrará a los estudiantes.</p>
+      </div>
+
+      <div>
         <label for="lesson-ppt" class="block text-xs font-medium text-muted">Presentación (Google Slides / Drive)</label>
         <input
           id="lesson-ppt"
