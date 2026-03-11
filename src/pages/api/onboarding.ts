@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import { normalizeAvatarId } from '../../lib/avatars';
-import { safeRedirectPath } from '../../lib/request-security';
+import { safeRedirectPath, sanitizeHttpUrl } from '../../lib/request-security';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
@@ -17,6 +17,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const selfDeclaredRoleRaw = formData.get('self_declared_role');
   const showInDirectory = formData.get('show_in_directory') === 'on';
   const timezoneRaw = formData.get('timezone');
+  const birthdayRaw = formData.get('birthday');
 
   const db = getSupabaseServiceRoleClient();
 
@@ -58,6 +59,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const description = typeof descriptionRaw === 'string' ? descriptionRaw.trim().slice(0, 500) : null;
     const selfDeclaredRole = typeof selfDeclaredRoleRaw === 'string' ? selfDeclaredRoleRaw.trim().slice(0, 80) : null;
     const timezone = typeof timezoneRaw === 'string' && timezoneRaw.trim() ? timezoneRaw.trim().slice(0, 80) : 'America/Lima';
+    const birthdayVal = typeof birthdayRaw === 'string' && birthdayRaw.trim() ? birthdayRaw.trim().slice(0, 10) : null;
+    const birthday = birthdayVal && !Number.isNaN(Date.parse(birthdayVal + 'T12:00:00')) ? birthdayVal : null;
+    const linkedinUrl = sanitizeHttpUrl(formData.get('linkedin_url'));
+    const instagramUrl = sanitizeHttpUrl(formData.get('instagram_url'));
+    const portfolioUrl = sanitizeHttpUrl(formData.get('portfolio_url'));
+    const profilePhotoUrl = sanitizeHttpUrl(formData.get('profile_photo_url'));
     try {
       await db
         .from('users')
@@ -66,10 +73,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
           self_declared_role: selfDeclaredRole || null,
           show_in_directory: showInDirectory,
           timezone,
+          birthday,
+          linkedin_url: linkedinUrl,
+          instagram_url: instagramUrl,
+          portfolio_url: portfolioUrl,
+          profile_photo_url: profilePhotoUrl,
         })
         .eq('id', userId);
     } catch (e) {
-      // Columns may not exist yet — run docs/supabase-profile-fields.sql and docs/supabase-timezone-migration.sql in Supabase
+      // Columns may not exist yet — run docs/supabase-profile-fields.sql and docs/supabase-profile-social.sql in Supabase
     }
     const redirectTo = safeRedirectPath(formData.get('redirect_to'), '/profile');
     return new Response(null, {

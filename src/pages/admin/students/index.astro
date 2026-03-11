@@ -18,9 +18,21 @@ if ((userRow?.role as string) !== 'admin') {
 
 const { data: studentRows } = await supabase
   .from('users')
-  .select('id, email, display_name, avatar_id, points')
+  .select('id, email, display_name, avatar_id')
   .eq('role', 'student')
   .order('created_at', { ascending: false });
+
+const pointsByUser = new Map<string, number>();
+if (studentRows?.length) {
+  const { data: pointsRows } = await supabase
+    .from('user_course_points')
+    .select('user_id, points')
+    .in('user_id', studentRows.map((u) => u.id));
+  for (const row of pointsRows ?? []) {
+    const uid = row.user_id as string;
+    pointsByUser.set(uid, (pointsByUser.get(uid) ?? 0) + (row.points ?? 0));
+  }
+}
 
 const clerkEmailByUserId = new Map<string, string>();
 const secretKey = import.meta.env.CLERK_SECRET_KEY ?? process.env.CLERK_SECRET_KEY;
@@ -90,7 +102,7 @@ for (const u of studentRows ?? []) {
     display_name: u.display_name ?? 'Estudiante',
     email: u.email ?? clerkEmailByUserId.get(u.id) ?? null,
     avatar_id: u.avatar_id ?? null,
-    points: u.points ?? 0,
+    points: pointsByUser.get(u.id) ?? 0,
     badgesCount: badgesCount ?? 0,
     courseNames: names.join(', ') || '—',
     enrolledCourseIds,

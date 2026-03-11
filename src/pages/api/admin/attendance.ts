@@ -72,8 +72,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
+  const courseId = lesson.course_id as string;
   for (const uid of toInsert) {
-    await addPointsForEvent({ userId: uid, type: 'lesson_attended', supabase: db });
+    await addPointsForEvent({ userId: uid, type: 'lesson_attended', courseId, supabase: db });
     await checkBadgesAfterAttendance(db, uid);
   }
   await recordAdminAudit(db, userId, 'attendance.batch_mark', {

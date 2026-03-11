@@ -74,7 +74,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const submittedAt = new Date((submission.submitted_at as string) || 0).getTime();
     const type =
       isOnDemand || (deadline != null && submittedAt <= deadline) ? 'challenge_submitted_on_time' : 'challenge_submitted_late';
-    await addPointsForEvent({ userId: submission.user_id as string, type, supabase: db });
+    if (challenge?.course_id) {
+      await addPointsForEvent({ userId: submission.user_id as string, type, courseId: challenge.course_id as string, supabase: db });
+    }
     await checkBadgesAfterApproval(db, submission.user_id as string, submission.challenge_id as string);
   }
   await recordAdminAudit(db, userId, 'submission.review', {

@@ -23,7 +23,7 @@ if (!studentId) {
 
 const { data: student } = await supabase
   .from('users')
-  .select('id, display_name, email, avatar_id, points, created_at, role')
+  .select('id, display_name, email, avatar_id, created_at, role')
   .eq('id', studentId)
   .maybeSingle();
 
@@ -59,6 +59,10 @@ const { count: coursesCount } = await supabase
   .from('enrollments')
   .select('*', { count: 'exact', head: true })
   .eq('user_id', studentId);
+
+let studentPoints = 0;
+const { data: studentPointsRows } = await supabase.from('user_course_points').select('points').eq('user_id', studentId);
+studentPoints = (studentPointsRows ?? []).reduce((a, r) => a + (r.points ?? 0), 0);
 
 const { count: approvedSubmissionsCount } = await supabase
   .from('submissions')
@@ -190,7 +194,7 @@ function formatDate(iso: string | null): string {
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <div class="rounded-xl border border-border bg-surface p-4">
         <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">Puntos</p>
-        <p class="mt-1 text-2xl font-semibold text-lime">{student.points ?? 0}</p>
+        <p class="mt-1 text-2xl font-semibold text-lime">{studentPoints}</p>
       </div>
       <div class="rounded-xl border border-border bg-surface p-4">
         <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">Insignias</p>

@@ -20,27 +20,58 @@ export const calculatePointsForEvent = (type: PointsEventType): number => {
 export type AddPointsOptions = {
   userId: string;
   type: PointsEventType;
+  courseId: string;
   supabase: import('@supabase/supabase-js').SupabaseClient;
 };
 
-/** Fetches current user points, adds the event value, and updates the DB. */
-export async function addPointsForEvent({ userId, type, supabase }: AddPointsOptions): Promise<number> {
+/** Adds points for an event, por cohorte (curso). */
+export async function addPointsForEvent({ userId, type, courseId, supabase }: AddPointsOptions): Promise<number> {
   const toAdd = calculatePointsForEvent(type);
   if (toAdd <= 0) return 0;
-  return addPoints(userId, toAdd, supabase);
+  return addPointsForCourse(userId, courseId, toAdd, supabase);
 }
 
-/** Add raw points to a user (Kahoot, manual awards, etc.) */
+/** Add raw points to a user in a specific course (Kahoot, manual awards, etc.). */
+export async function addPointsForCourse(
+  userId: string,
+  courseId: string,
+  amount: number,
+  supabase: import('@supabase/supabase-js').SupabaseClient
+): Promise<number> {
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  const { data: row } = await supabase
+    .from('user_course_points')
+    .select('points')
+    .eq('user_id', userId)
+    .eq('course_id', courseId)
+    .maybeSingle();
+  const current = (row?.points as number | undefined) ?? 0;
+  const next = current + amount;
+  await supabase
+    .from('user_course_points')
+    .upsert(
+      { user_id: userId, course_id: courseId, points: next, updated_at: new Date().toISOString() },
+      { onConflict: ['user_id', 'course_id'] }
+    );
+  return next;
+}
+
+/** @deprecated Use addPointsForCourse. Kept for backward compat. */
 export async function addPoints(
   userId: string,
   amount: number,
   supabase: import('@supabase/supabase-js').SupabaseClient
 ): Promise<number> {
   if (!Number.isFinite(amount) || amount <= 0) return 0;
-  const { data: row } = await supabase.from('users').select('points').eq('id', userId).maybeSingle();
-  const current = (row?.points as number | undefined) ?? 0;
-  const next = current + amount;
-  await supabase.from('users').update({ points: next }).eq('id', userId);
-  return next;
+  const { data: enroll } = await supabase
+    .from('enrollments')
+    .select('course_id')
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle();
+  if (enroll?.course_id) {
+    return addPointsForCourse(userId, enroll.course_id as string, amount, supabase);
+  }
+  return 0;
 }
 

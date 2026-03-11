@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { addPoints } from '../../../lib/points';
+import { addPointsForCourse } from '../../../lib/points';
 import { safeRedirectPath, withToastParams } from '../../../lib/request-security';
 import { requireAdmin } from '../../../lib/api-admin';
 import { isRateLimited } from '../../../lib/rate-limit';
@@ -90,8 +90,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   await db.from('kahoot_results').insert(results);
 
+  const courseId = lesson.course_id as string;
   for (const r of results) {
-    await addPoints(r.user_id, r.points_earned, db);
+    await addPointsForCourse(r.user_id, courseId, r.points_earned, db);
   }
 
   await recordAdminAudit(db, userId, 'kahoot.register', {

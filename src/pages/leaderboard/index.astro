@@ -13,33 +13,49 @@ const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
 const role = (userRow?.role as string) ?? 'student';
 
-// Ranking por curso: solo estudiantes inscritos en los mismos cursos que el usuario
-let studentRows: { id: string; display_name: string | null; avatar_id: string | null; points: number | null }[] | null = [];
+// Cursos inscritos (para selector y validación)
 const { data: enrollmentRows } = await supabase
   .from('enrollments')
-  .select('course_id')
+  .select('course_id, courses(id, title)')
   .eq('user_id', userId);
-const enrolledCourseIds = [...new Set((enrollmentRows ?? []).map((r) => r.course_id as string))];
+const enrolledCourses = (enrollmentRows ?? [])
+  .map((r) => {
+    const c = (r as { courses?: { id: string; title: string | null } | null }).courses;
+    return c?.id ? { id: c.id, title: c.title ?? 'Curso' } : null;
+  })
+  .filter((c): c is { id: string; title: string } => Boolean(c));
+const enrolledCourseIds = enrolledCourses.map((c) => c.id);
 
-if (enrolledCourseIds.length > 0) {
+// Curso seleccionado: query param o el primero si solo hay uno
+const courseParam = Astro.url.searchParams.get('course');
+const selectedCourseId =
+  courseParam && enrolledCourseIds.includes(courseParam)
+    ? courseParam
+    : enrolledCourses[0]?.id ?? null;
+const selectedCourse = enrolledCourses.find((c) => c.id === selectedCourseId);
+
+// Ranking por curso: solo estudiantes del curso seleccionado, puntos de ese curso
+let studentRows: { id: string; display_name: string | null; avatar_id: string | null }[] | null = [];
+let pointsByUser = new Map<string, number>();
+if (selectedCourseId) {
   const { data: cohortUserIds } = await supabase
     .from('enrollments')
     .select('user_id')
-    .in('course_id', enrolledCourseIds);
+    .eq('course_id', selectedCourseId);
   const uniqueIds = [...new Set((cohortUserIds ?? []).map((r) => r.user_id as string))];
   if (uniqueIds.length > 0) {
-    const { data } = await supabase
-      .from('users')
-      .select('id, display_name, avatar_id, points')
-      .in('id', uniqueIds)
-      .eq('role', 'student')
-      .order('points', { ascending: false });
-    studentRows = data;
+    const [userDataRes, pointsRes] = await Promise.all([
+      supabase.from('users').select('id, display_name, avatar_id').in('id', uniqueIds).eq('role', 'student'),
+      supabase.from('user_course_points').select('user_id, points').eq('course_id', selectedCourseId).in('user_id', uniqueIds),
+    ]);
+    studentRows = userDataRes.data;
+    for (const row of pointsRes.data ?? []) {
+      pointsByUser.set(row.user_id as string, row.points ?? 0);
+    }
   }
 }
 
 type LeaderboardRow = { id: string; display_name: string; avatar_id: string | null; points: number; badgesCount: number };
-const rows: LeaderboardRow[] = [];
 const studentIds = (studentRows ?? []).map((u) => u.id);
 const badgeCountByUser = new Map<string, number>();
 if (studentIds.length > 0) {
@@ -53,15 +69,15 @@ if (studentIds.length > 0) {
   }
 }
 
-for (const u of studentRows ?? []) {
-  rows.push({
+const rows: LeaderboardRow[] = (studentRows ?? [])
+  .map((u) => ({
     id: u.id,
     display_name: u.display_name ?? 'Estudiante',
     avatar_id: u.avatar_id ?? null,
-    points: u.points ?? 0,
+    points: pointsByUser.get(u.id) ?? 0,
     badgesCount: badgeCountByUser.get(u.id) ?? 0,
-  });
-}
+  }))
+  .sort((a, b) => b.points - a.points);
 
 const topScore = Math.max(1, ...rows.map((r) => r.points));
 ---
@@ -74,9 +90,31 @@ const topScore = Math.max(1, ...rows.map((r) => r.points));
       <span class="text-white">Ranking</span>
     </nav>
 
-    <header>
-      <h1 class="text-2xl font-semibold tracking-tight text-white">Ranking</h1>
-      <p class="mt-1 text-sm text-muted">Puntos del cohort ordenados de mayor a menor.</p>
+    <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight text-white">Ranking</h1>
+        <p class="mt-1 text-sm text-muted">
+          {selectedCourse
+            ? `Puntos del cohort "${selectedCourse.title}" ordenados de mayor a menor.`
+            : 'Puntos del cohort ordenados de mayor a menor.'}
+        </p>
+      </div>
+      {enrolledCourses.length > 1 && (
+        <form method="get" action="/leaderboard" class="relative w-full sm:w-56">
+          <select
+            name="course"
+            class="w-full cursor-pointer appearance-none rounded-lg border border-border bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            onchange="this.form.submit()"
+          >
+            {enrolledCourses.map((c) => (
+              <option value={c.id} selected={c.id === selectedCourseId}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+          <i class="bi bi-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
+        </form>
+      )}
     </header>
 
     {rows.length > 0 ? (

@@ -34,6 +34,7 @@ const studentNav = [
   { label: 'Cursos', href: '/courses', icon: 'bi-journal-richtext' },
   { label: 'Retos', href: '/challenges', icon: 'bi-lightning-charge-fill', showActiveCount: true },
   { label: 'Ranking', href: '/leaderboard', icon: 'bi-trophy-fill' },
+  { label: 'SuperHumans', href: '/superhumans', icon: 'bi-stars' },
 ] as const;
 
 const adminNav = [
@@ -43,6 +44,7 @@ const adminNav = [
   { label: 'Asistencia', href: '/admin/attendance', icon: 'bi-calendar2-check-fill' },
   { label: 'Alumnos', href: '/admin/students', icon: 'bi-people-fill' },
   { label: 'Submissions', href: '/admin/submissions', icon: 'bi-inbox-fill' },
+  { label: 'SuperHumans', href: '/superhumans', icon: 'bi-stars' },
 ] as const;
 
 const navLinks = role === 'admin' ? adminNav : studentNav;
@@ -54,21 +56,37 @@ if (role === 'admin') {
     .eq('is_active', true);
   activeRetosCount = activeChallengesCount ?? 0;
 } else {
-  // For students: show only active challenges still pending submission.
-  const { data: activeChallenges } = await supabase
-    .from('challenges')
-    .select('id')
-    .eq('is_active', true);
-  const activeIds = (activeChallenges ?? []).map((c) => c.id as string);
+  // For students: solo retos activos de cursos en los que está inscrito, pendientes de entregar.
+  const { data: enrollmentRows } = await supabase.from('enrollments').select('course_id, access_type').eq('user_id', userId);
+  const enrolledCourseIds = (enrollmentRows ?? []).map((r) => r.course_id);
+  const onDemandCourseIds = new Set(
+    (enrollmentRows ?? []).filter((r) => (r.access_type as string) === 'on_demand').map((r) => r.course_id as string),
+  );
 
-  if (activeIds.length > 0) {
+  const { data: challengeRows } = await supabase
+    .from('challenges')
+    .select('id, course_id, available_for_on_demand')
+    .eq('is_active', true);
+
+  const relevantIds = (challengeRows ?? [])
+    .filter((c) => {
+      if (!c.course_id) return true;
+      if (!enrolledCourseIds.includes(c.course_id)) return false;
+      if (onDemandCourseIds.has(c.course_id)) {
+        return (c.available_for_on_demand as boolean) === true;
+      }
+      return true;
+    })
+    .map((c) => c.id as string);
+
+  if (relevantIds.length > 0) {
     const { data: submittedRows } = await supabase
       .from('submissions')
       .select('challenge_id')
       .eq('user_id', userId)
-      .in('challenge_id', activeIds);
+      .in('challenge_id', relevantIds);
     const submittedSet = new Set((submittedRows ?? []).map((s) => s.challenge_id as string));
-    activeRetosCount = activeIds.filter((id) => !submittedSet.has(id)).length;
+    activeRetosCount = relevantIds.filter((id) => !submittedSet.has(id)).length;
   }
 }
 
@@ -344,6 +362,99 @@ function isActive(href: string): boolean {
         params.delete('toast_type');
         const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash || ''}`;
         window.history.replaceState({}, '', nextUrl);
+      });
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const selects = Array.from(document.querySelectorAll('.custom-select'));
+        if (!selects.length) return;
+        let openSelect = null;
+        const closeSelect = (el) => {
+          const trigger = el?.querySelector('.custom-select-trigger');
+          const panel = el?.querySelector('.custom-select-panel');
+          const icon = trigger?.querySelector('svg');
+          if (!trigger || !panel || !icon) return;
+          panel.classList.add('hidden');
+          trigger.setAttribute('aria-expanded', 'false');
+          icon.classList.remove('rotate-180');
+        };
+        const openCurrentSelect = (el) => {
+          if (openSelect && openSelect !== el) closeSelect(openSelect);
+          const trigger = el.querySelector('.custom-select-trigger');
+          const panel = el.querySelector('.custom-select-panel');
+          const icon = trigger?.querySelector('svg');
+          if (!trigger || !panel || !icon) return;
+          panel.classList.remove('hidden');
+          trigger.setAttribute('aria-expanded', 'true');
+          icon.classList.add('rotate-180');
+          openSelect = el;
+        };
+        for (const select of selects) {
+          const trigger = select.querySelector('.custom-select-trigger');
+          const panel = select.querySelector('.custom-select-panel');
+          const hidden = select.querySelector('input[type="hidden"]');
+          const label = select.querySelector('.custom-select-label');
+          const options = Array.from(select.querySelectorAll('.custom-select-option'));
+          if (!trigger || !panel || !hidden || !label || !options.length) continue;
+          if (select.hasAttribute('data-custom-select-initialized')) continue;
+          select.setAttribute('data-custom-select-initialized', 'true');
+          const updateVisual = (value) => {
+            for (const option of options) {
+              const optionValue = option.dataset.value ?? '';
+              const check = option.querySelector('span');
+              const isSelected = optionValue === value;
+              option.classList.toggle('bg-lime/10', isSelected);
+              option.classList.toggle('text-lime', isSelected);
+              option.classList.toggle('text-white', !isSelected);
+              if (check) {
+                check.classList.toggle('border-lime', isSelected);
+                check.classList.toggle('bg-lime', isSelected);
+                check.classList.toggle('text-background', isSelected);
+                check.classList.toggle('border-border', !isSelected);
+                check.classList.toggle('bg-surface-2', !isSelected);
+                check.classList.toggle('text-transparent', !isSelected);
+              }
+            }
+          };
+          trigger.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (openSelect === select) {
+              closeSelect(select);
+              openSelect = null;
+              return;
+            }
+            openCurrentSelect(select);
+          });
+          for (const option of options) {
+            option.addEventListener('click', (e) => {
+              e.preventDefault();
+              const nextValue = option.dataset.value ?? '';
+              const nextLabel = option.dataset.label ?? '';
+              hidden.value = nextValue;
+              label.textContent = nextLabel;
+              updateVisual(nextValue);
+              closeSelect(select);
+              openSelect = null;
+              const name = select.getAttribute('data-name');
+              if (name) {
+                select.dispatchEvent(new CustomEvent('custom-select-change', { detail: { name, value: nextValue }, bubbles: true }));
+              }
+            });
+          }
+          updateVisual(hidden.value);
+        }
+        document.addEventListener('click', (e) => {
+          if (!openSelect) return;
+          const target = e.target;
+          if (!(target instanceof Node) || openSelect.contains(target)) return;
+          closeSelect(openSelect);
+          openSelect = null;
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key !== 'Escape' || !openSelect) return;
+          closeSelect(openSelect);
+          openSelect = null;
+        });
       });
 
       // Fallback: ensure Cerrar sesión works if Clerk script loads after the SignOutButton script

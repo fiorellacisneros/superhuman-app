@@ -9,6 +9,7 @@ const isProtectedRoute = createRouteMatcher([
   '/challenges(.*)',
   '/leaderboard(.*)',
   '/badges(.*)',
+  '/superhumans',
   '/admin(.*)',
 ]);
 

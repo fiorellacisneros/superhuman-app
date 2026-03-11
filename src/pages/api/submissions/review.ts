@@ -50,13 +50,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (action === 'approve') {
     const { data: challenge } = await db
       .from('challenges')
-      .select('deadline')
+      .select('deadline, course_id')
       .eq('id', submission.challenge_id)
       .maybeSingle();
     const deadline = challenge?.deadline ? new Date(challenge.deadline as string).getTime() : null;
     const submittedAt = new Date((submission.submitted_at as string) || 0).getTime();
     const type = deadline != null && submittedAt <= deadline ? 'challenge_submitted_on_time' : 'challenge_submitted_late';
-    await addPointsForEvent({ userId: submission.user_id as string, type, supabase: db });
+    if (challenge?.course_id) {
+      await addPointsForEvent({ userId: submission.user_id as string, type, courseId: challenge.course_id as string, supabase: db });
+    }
   }
   await recordAdminAudit(db, userId, 'submission.review.legacy', {
     submissionId: submissionId.trim(),

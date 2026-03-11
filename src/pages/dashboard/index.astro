@@ -48,40 +48,41 @@ let recentSubmissions: { id: string; studentName: string; challengeTitle: string
 let cohortMaxPoints = 1;
 
 if (role === 'admin' && !preview) {
-  const [studentsCountRes, pendingCountRes, studentPointsRes, activeCountRes, cohortRowsRes, subRowsRes] = await Promise.all([
+  const [studentsCountRes, pendingCountRes, activeCountRes, cohortRowsRes, subRowsRes, pointsRowsRes] = await Promise.all([
     supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
     supabase.from('submissions').select('*', { count: 'exact', head: true }).eq('reviewed', false),
-    supabase.from('users').select('points').eq('role', 'student'),
     supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
-    supabase
-      .from('users')
-      .select('id, display_name, avatar_id, points')
-      .eq('role', 'student')
-      .order('points', { ascending: false }),
+    supabase.from('users').select('id, display_name, avatar_id').eq('role', 'student'),
     supabase
       .from('submissions')
       .select('id, submitted_at, users(display_name), challenges(title)')
       .eq('reviewed', false)
       .order('submitted_at', { ascending: false })
       .limit(5),
+    supabase.from('user_course_points').select('user_id, points'),
   ]);
   totalStudents = studentsCountRes.count ?? 0;
   pendingSubmissionsCount = pendingCountRes.count ?? 0;
-
-  const studentPoints = studentPointsRes.data;
-  if (studentPoints?.length) {
-    const sum = (studentPoints as { points: number | null }[]).reduce((a, r) => a + (r.points ?? 0), 0);
-    cohortAvgPoints = Math.round((sum / studentPoints.length) * 10) / 10;
-  }
   activeChallengesCount = activeCountRes.count ?? 0;
+
+  const pointsByUser = new Map<string, number>();
+  for (const row of pointsRowsRes.data ?? []) {
+    const uid = row.user_id as string;
+    pointsByUser.set(uid, (pointsByUser.get(uid) ?? 0) + (row.points ?? 0));
+  }
+  const studentIds = (cohortRowsRes.data ?? []).map((u) => u.id);
+  if (studentIds.length > 0) {
+    const sum = studentIds.reduce((a, id) => a + (pointsByUser.get(id) ?? 0), 0);
+    cohortAvgPoints = Math.round((sum / studentIds.length) * 10) / 10;
+  }
 
   const cohortRows = cohortRowsRes.data;
   cohortProgress = (cohortRows ?? []).map((u) => ({
     id: u.id,
     name: u.display_name ?? 'Estudiante',
     avatarId: u.avatar_id ?? null,
-    points: u.points ?? 0,
-  }));
+    points: pointsByUser.get(u.id) ?? 0,
+  })).sort((a, b) => b.points - a.points);
   cohortMaxPoints = Math.max(1, ...cohortProgress.map((u) => u.points));
   const subRows = subRowsRes.data;
   recentSubmissions = (subRows ?? []).map((s) => {
@@ -122,7 +123,6 @@ let upcomingLessons: UpcomingLesson[] = [];
 let upcomingByMonth: { monthLabel: string; lessons: UpcomingLesson[] }[] = [];
 
 if (role !== 'admin' || preview) {
-  points = userRow?.points ?? 0;
   const [badgeRowsRes, earnedRowsRes, sacRes, enrollmentRowsRes] = await Promise.all([
     supabase.from('badges').select('id, name, description, condition_type').order('name'),
     supabase.from('user_badges').select('badge_id, earned_at').eq('user_id', userId),
@@ -148,14 +148,24 @@ if (role !== 'admin' || preview) {
   studentActiveChallengesCount = sacRes.count ?? 0;
 
   const enrollmentRows = enrollmentRowsRes.data;
+  const enrolledCourseIdsForPoints = [...new Set((enrollmentRows ?? []).map((r) => r.course_id as string).filter(Boolean))];
+  if (enrolledCourseIdsForPoints.length > 0) {
+    const { data: myPointsRows } = await supabase
+      .from('user_course_points')
+      .select('points')
+      .eq('user_id', userId)
+      .in('course_id', enrolledCourseIdsForPoints);
+    points = (myPointsRows ?? []).reduce((a, r) => a + (r.points ?? 0), 0);
+  }
   const enrolledCourseRows = (enrollmentRows ?? [])
     .map((row) => (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses)
     .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
 
   enrolledIds = enrolledCourseRows.map((course) => course.id);
 
-  // Ranking: solo estudiantes inscritos en los mismos cursos que el usuario
-  let leaderboardRowsRes: { data: { id: string; display_name: string | null; avatar_id: string | null; points: number | null }[] | null } = { data: [] };
+  // Ranking: solo estudiantes inscritos en los mismos cursos, puntos por cohorte
+  let leaderboardRowsRes: { data: { id: string; display_name: string | null; avatar_id: string | null }[] | null } = { data: [] };
+  let leaderboardPointsByUser = new Map<string, number>();
   if (enrolledIds.length > 0) {
     const { data: cohortUserIds } = await supabase
       .from('enrollments')
@@ -163,14 +173,15 @@ if (role !== 'admin' || preview) {
       .in('course_id', enrolledIds);
     const uniqueIds = [...new Set((cohortUserIds ?? []).map((r) => r.user_id as string))];
     if (uniqueIds.length > 0) {
-      const res = await supabase
-        .from('users')
-        .select('id, display_name, avatar_id, points')
-        .in('id', uniqueIds)
-        .eq('role', 'student')
-        .order('points', { ascending: false })
-        .limit(10);
-      leaderboardRowsRes = res;
+      const [userRes, pointsRes] = await Promise.all([
+        supabase.from('users').select('id, display_name, avatar_id').in('id', uniqueIds).eq('role', 'student'),
+        supabase.from('user_course_points').select('user_id, points').in('user_id', uniqueIds).in('course_id', enrolledIds),
+      ]);
+      leaderboardRowsRes = userRes;
+      for (const row of pointsRes.data ?? []) {
+        const uid = row.user_id as string;
+        leaderboardPointsByUser.set(uid, (leaderboardPointsByUser.get(uid) ?? 0) + (row.points ?? 0));
+      }
     }
   }
 
@@ -245,9 +256,10 @@ if (role !== 'admin' || preview) {
       id: u.id,
       name: u.display_name ?? 'Estudiante',
       avatarId: u.avatar_id ?? null,
-      points: u.points ?? 0,
+      points: leaderboardPointsByUser.get(u.id) ?? 0,
     }))
     .filter((u) => u.points > 0)
+    .sort((a, b) => b.points - a.points)
     .slice(0, 5);
 }
 

@@ -17,6 +17,7 @@
 
   /* Acentos (lime para CTAs y números clave) */
   --color-lime: #C6F135;
+  --color-accent-subtle: rgba(198, 241, 53, 0.12);
   --color-white: #FFFFFF;
   --color-muted: #737373;
 }
@@ -131,13 +132,21 @@ input:disabled,
   background: rgba(198, 241, 53, 0.15) !important;
 }
 .flatpickr-months .flatpickr-month {
-  background: var(--color-surface-2) !important;
+  background: var(--color-accent-subtle) !important;
   color: var(--color-white) !important;
+}
+.flatpickr-current-month .flatpickr-monthDropdown-months {
+  appearance: menulist;
+  background: var(--color-accent-subtle) !important;
 }
 .flatpickr-current-month .numInputWrapper span.arrowUp:after,
 .flatpickr-current-month .numInputWrapper span.arrowDown:after {
   border-bottom-color: var(--color-muted) !important;
   border-top-color: var(--color-muted) !important;
+}
+span.flatpickr-weekday {
+  background: var(--color-accent-subtle) !important;
+  color: var(--color-white) !important;
 }
 
 /* Custom select: nunca usar apariencia nativa */
