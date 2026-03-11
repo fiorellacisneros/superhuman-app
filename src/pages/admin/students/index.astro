@@ -176,7 +176,7 @@ for (const u of studentRows ?? []) {
                       <form
                         method="post"
                         action="/api/admin/enrollments"
-                        class="course-picker-panel fixed z-[999] hidden w-[240px] rounded-xl border border-border bg-surface p-3 shadow-2xl"
+                        class="course-picker-panel fixed z-[9999] hidden w-[240px] rounded-xl border border-border bg-surface p-3 shadow-2xl"
                         data-user-id={s.id}
                       >
                         <input type="hidden" name="action" value="sync" />
@@ -224,6 +224,23 @@ for (const u of studentRows ?? []) {
                     >
                       Ver progreso
                     </a>
+                    <form
+                      method="post"
+                      action="/api/admin/students/delete"
+                      class="inline"
+                      data-delete-student
+                      data-student-name={s.display_name}
+                    >
+                      <input type="hidden" name="user_id" value={s.id} />
+                      <input type="hidden" name="redirect_to" value="/admin/students" />
+                      <button
+                        type="submit"
+                        class="inline-flex h-8 items-center rounded-lg border border-red-500/40 bg-red-500/10 px-3 text-xs font-medium text-red-400 transition hover:bg-red-500/20"
+                        title="Eliminar estudiante"
+                      >
+                        <i class="bi bi-trash" aria-hidden="true"></i>
+                      </button>
+                    </form>
                   </div>
                 </td>
               </tr>
@@ -261,17 +278,30 @@ for (const u of studentRows ?? []) {
 
       function openPanel(trigger, panel) {
         closeCurrent();
+        if (panel.parentElement !== document.body) {
+          document.body.appendChild(panel);
+        }
         panel.classList.remove('hidden');
 
         const rect = trigger.getBoundingClientRect();
         const panelRect = panel.getBoundingClientRect();
         const margin = 10;
+        const gap = 8;
 
         let left = rect.right - panelRect.width;
         left = Math.max(margin, Math.min(left, window.innerWidth - panelRect.width - margin));
 
-        let top = rect.bottom + 8;
-        top = Math.max(margin, Math.min(top, window.innerHeight - panelRect.height - margin));
+        let top;
+        const spaceBelow = window.innerHeight - rect.bottom - margin;
+        const spaceAbove = rect.top - margin;
+        if (spaceBelow >= panelRect.height + gap) {
+          top = rect.bottom + gap;
+        } else if (spaceAbove >= panelRect.height + gap) {
+          top = rect.top - panelRect.height - gap;
+        } else {
+          top = spaceBelow >= spaceAbove ? rect.bottom + gap : rect.top - panelRect.height - gap;
+          top = Math.max(margin, Math.min(top, window.innerHeight - panelRect.height - margin));
+        }
 
         panel.style.left = `${left}px`;
         panel.style.top = `${top}px`;
@@ -310,6 +340,15 @@ for (const u of studentRows ?? []) {
       window.addEventListener('scroll', closeCurrent, true);
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeCurrent();
+      });
+
+      document.querySelectorAll('[data-delete-student]').forEach((form) => {
+        form.addEventListener('submit', (e) => {
+          const name = (form as HTMLFormElement).dataset.studentName ?? 'este estudiante';
+          if (!confirm(`¿Eliminar a ${name}? Se borrarán sus inscripciones, entregas e insignias. Esta acción no se puede deshacer.`)) {
+            e.preventDefault();
+          }
+        });
       });
     });
   </script>
