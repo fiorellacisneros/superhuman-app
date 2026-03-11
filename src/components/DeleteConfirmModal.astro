@@ -1,0 +1,200 @@
+---
+/**
+ * Modal reutilizable para confirmar eliminaciones.
+ * El usuario debe escribir exactamente el texto de confirmación para habilitar el botón.
+ *
+ * Uso: incluir en la página (AdminLayout) y añadir a los botones:
+ *   data-delete-confirm
+ *   data-confirm-label="Nombre exacto a escribir"
+ *   data-delete-form-id="id-del-form" (opcional si el botón está dentro del form)
+ *   data-delete-description="Texto extra" (opcional)
+ *
+ * O abrir programáticamente:
+ *   window.dispatchEvent(new CustomEvent('open-delete-confirm', {
+ *     detail: { confirmLabel: 'X', title: '...', description: '...', form: formEl }
+ *   }));
+ */
+---
+<div
+  id="delete-confirm-modal"
+  class="fixed inset-0 z-[99999] hidden items-center justify-center p-4"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="delete-modal-title"
+  aria-describedby="delete-modal-desc"
+>
+  <div
+    class="delete-modal-backdrop absolute inset-0 bg-black/70 backdrop-blur-sm"
+    data-close-modal
+    aria-hidden="true"
+  ></div>
+  <div class="relative z-10 w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+    <h2 id="delete-modal-title" class="text-lg font-semibold text-white">
+      ¿Seguro que quieres eliminar?
+    </h2>
+    <p id="delete-modal-desc" class="mt-2 text-sm text-muted">
+      Esta acción no se puede deshacer.<span id="delete-desc-extra"></span> Escribe <strong id="delete-confirm-label" class="text-white">—</strong> para confirmar.
+    </p>
+    <input
+      type="text"
+      id="delete-confirm-input"
+      class="mt-4 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+      placeholder="Escribe el nombre para confirmar"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <div class="mt-6 flex flex-wrap gap-3">
+      <button
+        type="button"
+        id="delete-confirm-cancel"
+        class="flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:bg-surface-2/80"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        id="delete-confirm-submit"
+        disabled
+        class="flex-1 rounded-lg border border-red-500/60 bg-red-500/20 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Eliminar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const modal = document.getElementById('delete-confirm-modal');
+    const input = document.getElementById('delete-confirm-input') as HTMLInputElement;
+    const labelEl = document.getElementById('delete-confirm-label');
+    const submitBtn = document.getElementById('delete-confirm-submit') as HTMLButtonElement;
+    const cancelBtn = document.getElementById('delete-confirm-cancel');
+    const backdrop = document.querySelector('.delete-modal-backdrop');
+
+    let pendingConfig: {
+      confirmLabel: string;
+      title?: string;
+      description?: string;
+      formId?: string;
+      form?: HTMLFormElement;
+      onConfirm?: () => void | Promise<void>;
+    } | null = null;
+
+    function close() {
+      if (!modal) return;
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      if (input) {
+        input.value = '';
+        input.blur();
+      }
+      if (submitBtn) submitBtn.disabled = true;
+      pendingConfig = null;
+    }
+
+    function open(config: {
+      confirmLabel: string;
+      title?: string;
+      description?: string;
+      formId?: string;
+      form?: HTMLFormElement;
+      onConfirm?: () => void | Promise<void>;
+    }) {
+      pendingConfig = config;
+      if (!modal || !labelEl || !input || !submitBtn) return;
+
+      labelEl.textContent = config.confirmLabel;
+      if (config.title) {
+        const titleEl = document.getElementById('delete-modal-title');
+        if (titleEl) titleEl.textContent = config.title;
+      }
+      const extraEl = document.getElementById('delete-desc-extra');
+      if (extraEl) {
+        extraEl.textContent = config.description ? ` ${config.description} ` : '';
+      }
+      if (labelEl) labelEl.textContent = config.confirmLabel;
+
+      input.value = '';
+      submitBtn.disabled = true;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      setTimeout(() => input.focus(), 50);
+    }
+
+    function checkMatch() {
+      if (!input || !submitBtn || !pendingConfig) return;
+      submitBtn.disabled = input.value.trim() !== pendingConfig.confirmLabel;
+    }
+
+    async function doConfirm() {
+      if (!pendingConfig || submitBtn?.disabled) return;
+      const cfg = pendingConfig;
+
+      if (cfg.form) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Eliminando…';
+        try {
+          const res = await fetch(cfg.form.action, { method: cfg.form.method || 'POST', body: new FormData(cfg.form) });
+          close();
+          if (res.redirected) window.location.href = res.url;
+          else window.location.reload();
+        } catch {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Eliminar';
+        }
+      } else if (cfg.onConfirm) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Eliminando…';
+        try {
+          await cfg.onConfirm();
+          close();
+        } catch {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Eliminar';
+        }
+      }
+    }
+
+    input?.addEventListener('input', checkMatch);
+    input?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!submitBtn.disabled) doConfirm();
+      }
+      if (e.key === 'Escape') close();
+    });
+    submitBtn?.addEventListener('click', doConfirm);
+    cancelBtn?.addEventListener('click', close);
+    backdrop?.addEventListener('click', close);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) close();
+    });
+
+    document.addEventListener('click', (e) => {
+      const trigger = (e.target as Element).closest('[data-delete-confirm]');
+      if (!trigger) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const confirmLabel = trigger.getAttribute('data-confirm-label') ?? '';
+      const formId = trigger.getAttribute('data-delete-form-id');
+      const description = trigger.getAttribute('data-delete-description') ?? undefined;
+      const form = formId ? document.getElementById(formId) as HTMLFormElement : trigger.closest('form');
+
+      if (!confirmLabel.trim()) return;
+
+      open({
+        confirmLabel: confirmLabel.trim(),
+        title: '¿Seguro que quieres eliminar?',
+        description,
+        form: form ?? undefined,
+      });
+    });
+
+    window.addEventListener('open-delete-confirm', ((e: CustomEvent) => {
+      open(e.detail);
+    }) as EventListener);
+  })();
+</script>

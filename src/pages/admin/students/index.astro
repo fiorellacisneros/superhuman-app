@@ -199,14 +199,35 @@ for (const u of studentRows ?? []) {
                                 </span>
                                 <span class="min-w-0 flex-1 truncate">{c.title}</span>
                               </label>
-                              <select
-                                name={`access_type_${c.id}`}
-                                class="shrink-0 rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[11px] text-white focus:border-lime focus:outline-none"
-                                title="Live u On-demand"
-                              >
-                                <option value="live" selected={s.accessTypeByCourse[c.id] !== 'on_demand'}>Live</option>
-                                <option value="on_demand" selected={s.accessTypeByCourse[c.id] === 'on_demand'}>On-demand</option>
-                              </select>
+                              <div class="custom-select custom-select--single relative w-[100px] shrink-0" data-name={`access_type_${c.id}`}>
+                                <input type="hidden" name={`access_type_${c.id}`} value={s.accessTypeByCourse[c.id] === 'on_demand' ? 'on_demand' : 'live'} />
+                                <button
+                                  type="button"
+                                  class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[11px] text-white transition hover:border-lime/50 focus:border-lime focus:outline-none"
+                                  aria-expanded="false"
+                                  aria-haspopup="listbox"
+                                  title="Live u On-demand"
+                                >
+                                  <span class="custom-select-label truncate">{s.accessTypeByCourse[c.id] === 'on_demand' ? 'On-demand' : 'Live'}</span>
+                                  <svg class="h-3 w-3 shrink-0 text-muted" viewBox="0 0 20 20" fill="none" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
+                                  </svg>
+                                </button>
+                                <div class="custom-select-panel absolute right-0 z-50 mt-1 hidden min-w-full overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-2xl" role="listbox">
+                                  <button type="button" class={`custom-select-option flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left text-[11px] transition hover:bg-surface-2 ${s.accessTypeByCourse[c.id] !== 'on_demand' ? 'bg-lime/10 text-lime' : 'text-white'}`} data-value="live" data-label="Live">
+                                    <span class={`flex h-3 w-3 items-center justify-center rounded-[3px] border transition ${s.accessTypeByCourse[c.id] !== 'on_demand' ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                                      <i class="bi bi-check2 text-[8px] leading-none" aria-hidden="true" />
+                                    </span>
+                                    Live
+                                  </button>
+                                  <button type="button" class={`custom-select-option flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left text-[11px] transition hover:bg-surface-2 ${s.accessTypeByCourse[c.id] === 'on_demand' ? 'bg-lime/10 text-lime' : 'text-white'}`} data-value="on_demand" data-label="On-demand">
+                                    <span class={`flex h-3 w-3 items-center justify-center rounded-[3px] border transition ${s.accessTypeByCourse[c.id] === 'on_demand' ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                                      <i class="bi bi-check2 text-[8px] leading-none" aria-hidden="true" />
+                                    </span>
+                                    On-demand
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -228,13 +249,15 @@ for (const u of studentRows ?? []) {
                       method="post"
                       action="/api/admin/students/delete"
                       class="inline"
-                      data-delete-student
-                      data-student-name={s.display_name}
+                      id={`delete-form-${s.id}`}
                     >
                       <input type="hidden" name="user_id" value={s.id} />
                       <input type="hidden" name="redirect_to" value="/admin/students" />
                       <button
-                        type="submit"
+                        type="button"
+                        data-delete-confirm
+                        data-confirm-label={s.display_name}
+                        data-delete-form-id={`delete-form-${s.id}`}
                         class="inline-flex h-8 items-center rounded-lg border border-red-500/40 bg-red-500/10 px-3 text-xs font-medium text-red-400 transition hover:bg-red-500/20"
                         title="Eliminar estudiante"
                       >
@@ -342,14 +365,6 @@ for (const u of studentRows ?? []) {
         if (e.key === 'Escape') closeCurrent();
       });
 
-      document.querySelectorAll('[data-delete-student]').forEach((form) => {
-        form.addEventListener('submit', (e) => {
-          const name = (form as HTMLFormElement).dataset.studentName ?? 'este estudiante';
-          if (!confirm(`¿Eliminar a ${name}? Se borrarán sus inscripciones, entregas e insignias. Esta acción no se puede deshacer.`)) {
-            e.preventDefault();
-          }
-        });
-      });
     });
   </script>
 </AdminLayout>

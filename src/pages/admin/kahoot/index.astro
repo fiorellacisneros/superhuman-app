@@ -216,7 +216,7 @@ function formatDateTime(iso: string | null): string {
             <p class="text-sm font-medium text-lime">Ya registraste Kahoot para esta clase. Los puntos ya fueron asignados.</p>
           </div>
         ) : (
-          <form method="post" action="/api/admin/kahoot" class="space-y-6">
+          <form id="kahoot-form" method="post" action="/api/admin/kahoot" class="space-y-6">
             <input type="hidden" name="lesson_id" value={selectedLesson.id} />
             <input type="hidden" name="redirect_to" value={`/admin/kahoot?course=${selectedLesson.courseId}&lesson=${selectedLesson.id}`} />
 
@@ -226,16 +226,41 @@ function formatDateTime(iso: string | null): string {
                   {[1, 2, 3, 4, 5].map((pos) => (
                     <div>
                       <label for={`position_${pos}`} class="block text-xs font-medium text-muted">{pos}º lugar</label>
-                      <select
-                        id={`position_${pos}`}
-                        name={`position_${pos}`}
-                        class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
-                      >
-                        <option value="">—</option>
-                        {students.map((s) => (
-                          <option value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
+                      <div class="custom-select custom-select--single relative mt-1" data-name={`position_${pos}`}>
+                        <input type="hidden" id={`position_${pos}`} name={`position_${pos}`} value="" />
+                        <button
+                          type="button"
+                          class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                          aria-expanded="false"
+                          aria-haspopup="listbox"
+                        >
+                          <span class="custom-select-label truncate">—</span>
+                          <svg class="h-4 w-4 shrink-0 text-muted transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
+                          </svg>
+                        </button>
+                        <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-2xl" role="listbox">
+                          <button type="button" class="custom-select-option flex w-full cursor-pointer items-center gap-2 rounded-md bg-lime/10 px-2.5 py-2 text-left text-sm text-lime transition hover:bg-surface-2" data-value="" data-label="—">
+                            <span class="flex h-4 w-4 items-center justify-center rounded-[4px] border border-lime bg-lime text-background">
+                              <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
+                            </span>
+                            <span class="truncate">—</span>
+                          </button>
+                          {students.map((s) => (
+                            <button
+                              type="button"
+                              class="position-student-option custom-select-option mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-white transition hover:bg-surface-2"
+                              data-value={s.id}
+                              data-label={s.name}
+                            >
+                              <span class="flex h-4 w-4 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent">
+                                <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
+                              </span>
+                              <span class="truncate">{s.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -243,10 +268,10 @@ function formatDateTime(iso: string | null): string {
                 <p class="text-xs text-muted">Referencia: cruza los nombres de Kahoot con la lista de abajo.</p>
 
                 <div class="rounded-lg border border-border bg-surface-2/40 p-3">
-              <p class="mb-2 text-xs font-medium text-muted">Participaron (5 pts cada uno) — marca solo a quienes jugaron</p>
-              <div class="flex flex-wrap gap-2">
+              <p class="mb-2 text-xs font-medium text-muted">Participaron (5 pts cada uno) — marca a quienes jugaron; no aplica a los que ya tienen puntos por puesto</p>
+              <div id="kahoot-participants" class="flex flex-wrap gap-2">
                 {students.map((s) => (
-                  <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface-2/60 px-2.5 py-1.5 transition hover:border-lime/50 has-[:checked]:border-lime/50 has-[:checked]:bg-lime/10">
+                  <label class="kahoot-participant flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface-2/60 px-2.5 py-1.5 transition hover:border-lime/50 has-[:checked]:border-lime/50 has-[:checked]:bg-lime/10" data-user-id={s.id}>
                     <input type="checkbox" name="participant_ids" value={s.id} class="peer sr-only" />
                     <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-border bg-surface text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background">
                       <i class="bi bi-check-lg text-[10px] leading-none" aria-hidden="true" />
@@ -308,3 +333,115 @@ function formatDateTime(iso: string | null): string {
     )}
   </section>
 </AdminLayout>
+
+<script>
+  (function () {
+    const form = document.getElementById('kahoot-form');
+    if (!form) return;
+
+    function getPositionValues() {
+      const vals = {};
+      for (let i = 1; i <= 5; i++) {
+        const input = form.querySelector(`input[name="position_${i}"]`);
+        vals[i] = input?.value ?? '';
+      }
+      return vals;
+    }
+
+    function getPositionIds() {
+      const vals = getPositionValues();
+      const ids = new Set();
+      for (let i = 1; i <= 5; i++) {
+        if (vals[i]) ids.add(vals[i]);
+      }
+      return ids;
+    }
+
+    function resetPositionSelect(pos) {
+      const wrapper = form.querySelector(`.custom-select[data-name="position_${pos}"]`);
+      if (!wrapper) return;
+      const hidden = wrapper.querySelector('input[type="hidden"]');
+      const label = wrapper.querySelector('.custom-select-label');
+      const options = Array.from(wrapper.querySelectorAll('.custom-select-option'));
+      if (!hidden || !label) return;
+      hidden.value = '';
+      label.textContent = '—';
+      options.forEach((opt) => {
+        const v = opt.dataset.value ?? '';
+        const isSelected = v === '';
+        opt.classList.toggle('bg-lime/10', isSelected);
+        opt.classList.toggle('text-lime', isSelected);
+        opt.classList.toggle('text-white', !isSelected);
+        const check = opt.querySelector('span');
+        if (check) {
+          check.classList.toggle('border-lime', isSelected);
+          check.classList.toggle('bg-lime', isSelected);
+          check.classList.toggle('text-background', isSelected);
+          check.classList.toggle('border-border', !isSelected);
+          check.classList.toggle('bg-surface-2', !isSelected);
+          check.classList.toggle('text-transparent', !isSelected);
+        }
+      });
+    }
+
+    function syncPositionOptions() {
+      const vals = getPositionValues();
+      const byId = {};
+      for (let i = 1; i <= 5; i++) {
+        if (vals[i]) byId[vals[i]] = (byId[vals[i]] || []).concat(i);
+      }
+      for (const [id, positions] of Object.entries(byId)) {
+        if (positions.length > 1) {
+          for (let k = 1; k < positions.length; k++) resetPositionSelect(positions[k]);
+        }
+      }
+      const vals2 = getPositionValues();
+      for (let i = 1; i <= 5; i++) {
+        const wrapper = form.querySelector(`.custom-select[data-name="position_${i}"]`);
+        if (!wrapper) continue;
+        const otherIds = new Set();
+        for (let j = 1; j <= 5; j++) {
+          if (j !== i && vals2[j]) otherIds.add(vals2[j]);
+        }
+        wrapper.querySelectorAll('.position-student-option').forEach((opt) => {
+          const vid = opt.dataset.value ?? '';
+          if (otherIds.has(vid)) {
+            opt.classList.add('hidden');
+            opt.style.pointerEvents = 'none';
+          } else {
+            opt.classList.remove('hidden');
+            opt.style.pointerEvents = '';
+          }
+        });
+      }
+    }
+
+    function syncParticipants() {
+      const positionIds = getPositionIds();
+      form.querySelectorAll('.kahoot-participant').forEach((label) => {
+        const userId = label.dataset.userId;
+        const checkbox = label.querySelector('input[name="participant_ids"]');
+        if (!userId || !checkbox) return;
+        if (positionIds.has(userId)) {
+          label.classList.add('hidden');
+          checkbox.checked = false;
+        } else {
+          label.classList.remove('hidden');
+        }
+      });
+    }
+
+    function syncAll() {
+      syncPositionOptions();
+      syncParticipants();
+    }
+
+    document.addEventListener('custom-select-change', (e) => {
+      if (!e.detail?.name?.startsWith('position_')) return;
+      if (!e.target?.closest('#kahoot-form')) return;
+      syncAll();
+    });
+
+    syncAll();
+  })();
+</script>

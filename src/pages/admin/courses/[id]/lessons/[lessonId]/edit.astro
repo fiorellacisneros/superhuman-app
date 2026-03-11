@@ -47,6 +47,7 @@ const lesson =
         zoom_link: typeof raw.zoom_link === 'string' ? raw.zoom_link : null,
         recording_url: typeof raw.recording_url === 'string' ? raw.recording_url : null,
         ppt_url: typeof raw.ppt_url === 'string' ? raw.ppt_url : null,
+        resources_url: typeof raw.resources_url === 'string' ? raw.resources_url : null,
         resources: raw.resources,
         scheduled_at: typeof raw.scheduled_at === 'string' ? raw.scheduled_at : null,
         order: typeof raw.order === 'number' ? raw.order : 0,
@@ -59,12 +60,13 @@ if (lessonError || !lesson) {
 }
 
 const resources = Array.isArray(lesson.resources)
-  ? (lesson.resources as { label?: string; url?: string }[]).map((r) => ({
+  ? (lesson.resources as { label?: string; url?: string; type?: string }[]).map((r) => ({
       label: typeof r?.label === 'string' ? r.label : '',
       url: typeof r?.url === 'string' ? r.url : '',
+      type: r?.type === 'shared' ? 'shared' : 'class',
     }))
   : [];
-const resourceInputs = Array.from({ length: 3 }, (_, i) => resources[i] ?? { label: '', url: '' });
+const resourceInputs = Array.from({ length: 5 }, (_, i) => resources[i] ?? { label: '', url: '', type: 'class' as const });
 
 function toDateTimeLocal(value: string | null): string {
   if (!value) return '';
@@ -86,8 +88,6 @@ function toDateTimeLocal(value: string | null): string {
       <a href="/admin/courses" class="hover:text-white">Cursos</a>
       <span class="mx-1">/</span>
       <a href={`/admin/courses/${courseId}/edit`} class="hover:text-white">{course.title}</a>
-      <span class="mx-1">/</span>
-      <span class="text-muted">/{typeof course.slug === 'string' && course.slug.trim() ? course.slug.trim() : course.id}</span>
       <span class="mx-1">/</span>
       <span class="text-white">Editar clase</span>
     </nav>
@@ -166,16 +166,30 @@ function toDateTimeLocal(value: string | null): string {
       </div>
 
       <div>
-        <p class="mb-2 text-xs font-medium text-muted">Recursos (hasta 3)</p>
+        <label for="lesson-resources-url" class="block text-xs font-medium text-muted">Recursos de clase (carpeta / PDF principal)</label>
+        <input
+          id="lesson-resources-url"
+          type="url"
+          name="resources_url"
+          value={lesson.resources_url ?? ''}
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="https://drive.google.com/..."
+        />
+        <p class="mt-1 text-[11px] text-muted">Carpeta Drive, PDF o material oficial de la clase.</p>
+      </div>
+
+      <div>
+        <p class="mb-2 text-xs font-medium text-muted">Recursos adicionales (hasta 5)</p>
+        <p class="mb-2 text-[11px] text-muted">Indica si es recurso de clase o link compartido durante la sesión.</p>
         <div class="space-y-3">
           {resourceInputs.map((r, i) => (
-            <div class="flex gap-2">
+            <div class="flex flex-wrap gap-2 items-center">
               <input
                 type="text"
                 name={`resource_label_${i}`}
                 value={r.label}
                 placeholder="Etiqueta"
-                class="w-32 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                class="w-28 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
               />
               <input
                 type="url"
@@ -184,6 +198,34 @@ function toDateTimeLocal(value: string | null): string {
                 placeholder="URL"
                 class="min-w-0 flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
               />
+              <div class="custom-select custom-select--single relative w-[180px]" data-name={`resource_type_${i}`}>
+                <input type="hidden" name={`resource_type_${i}`} value={r.type} />
+                <button
+                  type="button"
+                  class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                  aria-expanded="false"
+                  aria-haspopup="listbox"
+                >
+                  <span class="custom-select-label truncate">{r.type === 'shared' ? 'Link compartido' : 'Recurso de clase'}</span>
+                  <svg class="h-4 w-4 shrink-0 text-muted transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
+                  </svg>
+                </button>
+                <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden min-w-full overflow-hidden rounded-xl border border-border bg-surface p-2 shadow-2xl" role="listbox">
+                  <button type="button" class={`custom-select-option flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${r.type === 'class' ? 'bg-lime/10 text-lime' : 'text-white'}`} data-value="class" data-label="Recurso de clase">
+                    <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${r.type === 'class' ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                      <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
+                    </span>
+                    <span class="truncate">Recurso de clase</span>
+                  </button>
+                  <button type="button" class={`custom-select-option mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${r.type === 'shared' ? 'bg-lime/10 text-lime' : 'text-white'}`} data-value="shared" data-label="Link compartido">
+                    <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${r.type === 'shared' ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                      <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
+                    </span>
+                    <span class="truncate">Link compartido</span>
+                  </button>
+                </div>
+              </div>
             </div>
           ))}
         </div>

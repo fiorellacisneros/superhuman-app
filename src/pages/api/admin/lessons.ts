@@ -44,6 +44,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const zoom_link = sanitizeHttpUrl(formData.get('zoom_link'));
   const recording_url = sanitizeHttpUrl(formData.get('recording_url'));
   const ppt_url = sanitizeHttpUrl(formData.get('ppt_url'));
+  const resources_url = sanitizeHttpUrl(formData.get('resources_url'));
   const orderRaw = formData.get('order');
   const order = orderRaw !== null && orderRaw !== '' ? Number(orderRaw) : 0;
   const scheduled_atRaw = formData.get('scheduled_at');
@@ -55,15 +56,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  const resources: { label: string; url: string }[] = [];
-  for (let i = 0; i < 3; i++) {
+  const resources: { label: string; url: string; type?: 'class' | 'shared' }[] = [];
+  for (let i = 0; i < 5; i++) {
     const label = formData.get(`resource_label_${i}`);
     const url = formData.get(`resource_url_${i}`);
+    const typeRaw = formData.get(`resource_type_${i}`);
     const safeUrl = sanitizeHttpUrl(url);
     if (safeUrl) {
+      const type = typeRaw === 'shared' ? 'shared' : 'class';
       resources.push({
         label: typeof label === 'string' ? label.trim() : '',
         url: safeUrl,
+        type,
       });
     }
   }
@@ -75,6 +79,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     zoom_link,
     recording_url,
     ppt_url,
+    resources_url: resources_url || null,
     resources: resources.length ? resources : [],
     order: Number.isFinite(order) ? order : 0,
     video_url: recording_url,

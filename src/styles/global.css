@@ -61,6 +61,30 @@ html {
   background: transparent;
 }
 
+/* Bottom nav: scroll horizontal con scrollbar personalizado */
+.nav-bottom-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+.nav-bottom-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+.nav-bottom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 0 0.5rem;
+}
+.nav-bottom-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+.nav-bottom-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+.nav-bottom-scroll::-webkit-scrollbar-thumb:active {
+  background: rgba(198, 241, 53, 0.4);
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-manrope);
 }

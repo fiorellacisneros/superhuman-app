@@ -55,7 +55,7 @@ if (!isAdmin) {
 
 const { data: lesson, error: lessonError } = await supabase
   .from('lessons')
-  .select('id, title, notes, ppt_url, recording_url, resources')
+  .select('id, title, notes, ppt_url, recording_url, resources_url, resources')
   .eq('id', lessonId)
   .eq('course_id', course.id)
   .maybeSingle();
@@ -69,9 +69,15 @@ const hasContent = hasRecording || hasPpt;
 if (isOnDemand && !hasContent) {
   return Astro.redirect(`/courses/${resolvedCourseSlug}`);
 }
-const resourcesList = Array.isArray(lesson.resources)
-  ? (lesson.resources as { label?: string; url?: string }[]).filter((r) => r && typeof r.url === 'string' && r.url.trim())
+type ResourceItem = { label?: string; url?: string; type?: string };
+const rawResources = Array.isArray(lesson.resources)
+  ? (lesson.resources as ResourceItem[]).filter((r) => r && typeof r.url === 'string' && r.url.trim())
   : [];
+const classResources = rawResources.filter((r) => r.type !== 'shared');
+const sharedResources = rawResources.filter((r) => r.type === 'shared');
+const hasResourcesUrl = Boolean(lesson.resources_url && String(lesson.resources_url).trim());
+const hasClassResources = hasResourcesUrl || classResources.length > 0;
+const hasSharedResources = sharedResources.length > 0;
 ---
 
 <DashboardLayout>
@@ -118,29 +124,65 @@ const resourcesList = Array.isArray(lesson.resources)
             Ver presentación
           </a>
         )}
-        {resourcesList.length > 0 && (
-          <div class="flex flex-col gap-2">
-            <button
-              type="button"
-              id="resources-toggle"
-              aria-expanded="false"
-              aria-controls="resources-list"
-              class="inline-flex w-fit items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:border-border hover:bg-surface-2/80"
-            >
-              <svg id="resources-arrow" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
-              </svg>
-              Recursos
-            </button>
-            <ul id="resources-list" class="hidden list-inside list-disc space-y-1 pl-4 text-sm text-muted" role="region" aria-label="Recursos">
-              {resourcesList.map((r) => (
-                <li>
-                  <a href={r.url!} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
-                    {r.label && r.label.trim() ? r.label : r.url}
-                  </a>
-                </li>
-              ))}
-            </ul>
+        {(hasClassResources || hasSharedResources) && (
+          <div class="flex flex-col gap-3">
+            {hasClassResources && (
+              <div class="flex flex-col gap-2">
+                <button
+                  type="button"
+                  id="class-resources-toggle"
+                  aria-expanded="false"
+                  aria-controls="class-resources-list"
+                  class="inline-flex w-fit items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:border-border hover:bg-surface-2/80"
+                >
+                  <svg id="class-resources-arrow" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Recursos de clase
+                </button>
+                <ul id="class-resources-list" class="hidden list-inside list-disc space-y-1 pl-4 text-sm text-muted" role="region" aria-label="Recursos de clase">
+                  {hasResourcesUrl && (
+                    <li>
+                      <a href={lesson.resources_url as string} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
+                        Carpeta / recursos principales
+                      </a>
+                    </li>
+                  )}
+                  {classResources.map((r) => (
+                    <li>
+                      <a href={r.url!} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
+                        {r.label && r.label.trim() ? r.label : r.url}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {hasSharedResources && (
+              <div class="flex flex-col gap-2">
+                <button
+                  type="button"
+                  id="shared-resources-toggle"
+                  aria-expanded="false"
+                  aria-controls="shared-resources-list"
+                  class="inline-flex w-fit items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:border-border hover:bg-surface-2/80"
+                >
+                  <svg id="shared-resources-arrow" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Links compartidos
+                </button>
+                <ul id="shared-resources-list" class="hidden list-inside list-disc space-y-1 pl-4 text-sm text-muted" role="region" aria-label="Links compartidos">
+                  {sharedResources.map((r) => (
+                    <li>
+                      <a href={r.url!} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
+                        {r.label && r.label.trim() ? r.label : r.url}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -162,15 +204,19 @@ const resourcesList = Array.isArray(lesson.resources)
 
 <script>
   (function () {
-    const toggle = document.getElementById('resources-toggle');
-    const list = document.getElementById('resources-list');
-    if (!toggle || !list) return;
-    toggle.addEventListener('click', () => {
-      const expanded = toggle.getAttribute('aria-expanded') === 'true';
-      toggle.setAttribute('aria-expanded', String(!expanded));
-      list.classList.toggle('hidden', expanded);
-      const arrow = document.getElementById('resources-arrow');
-      if (arrow) arrow.classList.toggle('rotate-90', !expanded);
-    });
+    function setupToggle(toggleId, listId, arrowId) {
+      const toggle = document.getElementById(toggleId);
+      const list = document.getElementById(listId);
+      if (!toggle || !list) return;
+      toggle.addEventListener('click', () => {
+        const expanded = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', String(!expanded));
+        list.classList.toggle('hidden', expanded);
+        const arrow = document.getElementById(arrowId);
+        if (arrow) arrow.classList.toggle('rotate-90', !expanded);
+      });
+    }
+    setupToggle('class-resources-toggle', 'class-resources-list', 'class-resources-arrow');
+    setupToggle('shared-resources-toggle', 'shared-resources-list', 'shared-resources-arrow');
   })();
 </script>

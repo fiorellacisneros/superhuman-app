@@ -3,6 +3,7 @@ import '../styles/global.css';
 import { getSupabaseServiceRoleClient } from '../lib/supabase';
 import { avatarImagePath } from '../lib/avatars';
 import { SignOutButton } from '@clerk/astro/components';
+import DeleteConfirmModal from '../components/DeleteConfirmModal.astro';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -374,6 +375,7 @@ function isActive(href: string): boolean {
               updateVisual(nextValue);
               closeSelect(select);
               openSelect = null;
+              select.dispatchEvent(new CustomEvent('custom-select-change', { detail: { name: hidden.name, value: nextValue }, bubbles: true }));
             });
           }
           updateVisual(hidden.value);
@@ -440,6 +442,7 @@ function isActive(href: string): boolean {
                 updateVisual(nextValue);
                 closeSelect(select);
                 openSelect = null;
+                select.dispatchEvent(new CustomEvent('custom-select-change', { detail: { name: hidden.name, value: nextValue }, bubbles: true }));
               });
             }
             updateVisual(hidden.value);
@@ -467,5 +470,6 @@ function isActive(href: string): boolean {
         }
       }, true);
     </script>
+    <DeleteConfirmModal />
   </body>
 </html>

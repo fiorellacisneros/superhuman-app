@@ -128,7 +128,7 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
 ---
 
 <DashboardLayout>
-  <section class="mx-auto max-w-2xl space-y-4">
+  <section class="mx-auto max-w-2xl space-y-5 sm:space-y-4">
     <nav aria-label="Navegación" class="mb-4">
       <ol class="flex items-center gap-1.5 text-sm text-muted">
         <li>
@@ -138,44 +138,46 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
         <li class="font-medium text-white" aria-current="page">Perfil</li>
       </ol>
     </nav>
-    <header class="mb-6">
+    <header class="mb-6 sm:mb-6">
       <p class="mb-0.5 text-xs font-semibold uppercase tracking-[0.2em] text-lime">Perfil</p>
-      <h1 class="text-2xl font-semibold tracking-tight text-white">Tu perfil</h1>
+      <h1 class="text-2xl font-semibold tracking-tight text-white sm:text-2xl">Tu perfil</h1>
     </header>
 
-    <!-- Top card: two columns -->
-    <div class="rounded-xl border border-border bg-surface p-4">
-      <div class="flex gap-4">
-        <div class="shrink-0">
-          <div class="h-20 w-20 overflow-hidden rounded-full border border-border bg-surface-2 ring-1 ring-lime/30">
-            <img src={avatarSrc} alt="" class="h-full w-full object-cover" width="80" height="80" />
+    <!-- Top card: avatar + info -->
+    <div class="rounded-xl border border-border bg-surface p-5 sm:p-6">
+      <div class="flex flex-col gap-6 sm:flex-row sm:gap-6">
+        <div class="flex flex-col items-center sm:items-start sm:shrink-0">
+          <div class="h-24 w-24 overflow-hidden rounded-full border border-border bg-surface-2 ring-2 ring-lime/30 sm:h-20 sm:w-20">
+            <img src={avatarSrc} alt="" class="h-full w-full object-cover" width="96" height="96" />
           </div>
           <button
             type="button"
             id="toggle-avatar-modal"
             aria-haspopup="dialog"
             aria-controls="avatar-modal"
-            class="mt-2 w-full rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-sm font-medium text-muted transition hover:border-lime/50 hover:text-lime"
+            class="mt-3 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm font-medium text-muted transition hover:border-lime/50 hover:text-lime sm:mt-2 sm:w-auto sm:px-2 sm:py-1.5"
           >
             Cambiar avatar
           </button>
         </div>
-        <div class="min-w-0 flex-1">
-          <div class="flex flex-wrap items-center gap-2">
+        <div class="min-w-0 flex-1 space-y-3">
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
             <p id="display-name-text" class="text-xl font-semibold text-white">{displayName}</p>
-            <button
-              type="button"
-              id="display-name-edit-btn"
-              class="rounded-lg border border-border bg-surface-2 px-2.5 py-1 text-xs font-medium text-muted transition hover:border-lime/50 hover:text-lime"
-            >
-              Editar
-            </button>
-            <span class="rounded-full bg-lime/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-lime">
-              {roleLabel}
-            </span>
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                id="display-name-edit-btn"
+                class="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-medium text-muted transition hover:border-lime/50 hover:text-lime sm:px-2.5 sm:py-1"
+              >
+                Editar
+              </button>
+              <span class="rounded-full bg-lime/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-lime">
+                {roleLabel}
+              </span>
+            </div>
           </div>
-          <div id="display-name-form-wrap" class="mt-2 hidden">
-            <form method="post" action="/api/onboarding" class="flex flex-wrap items-center gap-2">
+          <div id="display-name-form-wrap" class="hidden">
+            <form method="post" action="/api/onboarding" class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
               <input type="hidden" name="intent" value="display_name" />
               <input type="hidden" name="redirect_to" value="/profile" />
               <input
@@ -184,19 +186,21 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
                 name="display_name"
                 value={displayName}
                 required
-                class="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-base text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime min-w-[140px]"
+                class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-base text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime sm:min-w-[180px] sm:py-1.5"
                 placeholder="Nombre para mostrar"
               />
-              <button type="submit" class="rounded-lg bg-lime px-3 py-1.5 text-sm font-semibold text-background transition hover:opacity-90">
-                Guardar
-              </button>
-              <button type="button" id="display-name-cancel-btn" class="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm font-medium text-muted transition hover:text-white">
-                Cancelar
-              </button>
+              <div class="flex gap-2">
+                <button type="submit" class="flex-1 rounded-lg bg-lime px-4 py-2.5 text-sm font-semibold text-background transition hover:opacity-90 sm:flex-none sm:px-3 sm:py-1.5">
+                  Guardar
+                </button>
+                <button type="button" id="display-name-cancel-btn" class="flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2.5 text-sm font-medium text-muted transition hover:text-white sm:flex-none sm:px-3 sm:py-1.5">
+                  Cancelar
+                </button>
+              </div>
             </form>
           </div>
-          <p class="mt-0.5 truncate text-sm text-muted">{email || '—'}</p>
-          <div class="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted">
+          <p class="truncate text-sm text-muted">{email || '—'}</p>
+          <div class="flex flex-col gap-2 text-sm text-muted sm:flex-row sm:flex-wrap sm:gap-x-4 sm:gap-y-0.5">
             <span><span class="font-semibold uppercase tracking-wider text-muted/80">Puntos</span> <span class="font-medium text-lime">{points}</span></span>
             <span><span class="font-semibold uppercase tracking-wider text-muted/80">Miembro desde</span> <span class="font-medium text-white">{memberSinceFormatted}</span></span>
             <span><span class="font-semibold uppercase tracking-wider text-muted/80">Rol</span> <span class="font-medium text-white">{roleLabel}</span></span>
@@ -207,8 +211,8 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
 
     <!-- Datos de inscripción + Información en dos columnas -->
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-      <div class="rounded-xl border border-border bg-surface p-4">
-        <h2 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted">Datos de inscripción</h2>
+      <div class="rounded-xl border border-border bg-surface p-5 sm:p-4">
+        <h2 class="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-muted">Datos de inscripción</h2>
         <dl class="space-y-3 text-sm">
           <div class="flex flex-col gap-0.5">
             <dt class="font-semibold uppercase tracking-wider text-muted/80">Correo</dt>
@@ -224,8 +228,8 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
           </div>
         </dl>
       </div>
-      <div class="rounded-xl border border-border bg-surface p-4">
-        <h2 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted">Información</h2>
+      <div class="rounded-xl border border-border bg-surface p-5 sm:p-4">
+        <h2 class="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-muted">Información</h2>
         <dl class="space-y-3 text-sm">
           <div class="flex flex-col gap-0.5">
             <dt class="font-semibold uppercase tracking-wider text-muted/80">Cumpleaños</dt>
@@ -259,10 +263,10 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
     </div>
 
     <!-- Perfil público: rol, descripción, aparecer en directorio -->
-    <div class="rounded-xl border border-border bg-surface p-4">
-      <h2 class="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted">Perfil público</h2>
-      <p class="mb-3 text-sm text-muted">Estos datos pueden mostrarse en el directorio de estudiantes si lo activas.</p>
-      <form method="post" action="/api/onboarding" class="space-y-3">
+    <div class="rounded-xl border border-border bg-surface p-5 sm:p-4">
+      <h2 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted">Perfil público</h2>
+      <p class="mb-4 text-sm text-muted">Estos datos pueden mostrarse en el directorio de estudiantes si lo activas.</p>
+      <form method="post" action="/api/onboarding" class="space-y-4">
         <input type="hidden" name="intent" value="profile" />
         <input type="hidden" name="redirect_to" value="/profile" />
         <div class="flex flex-col gap-1">
@@ -299,12 +303,12 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
             placeholder="Una frase sobre ti o qué te trae al curso."
           >{description}</textarea>
         </div>
-        <div class="flex items-center justify-between gap-4 rounded-lg border border-border bg-surface-2/50 px-3 py-2.5">
-          <div>
+        <div class="flex flex-col gap-3 rounded-lg border border-border bg-surface-2/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-3 sm:py-2.5">
+          <div class="min-w-0 flex-1">
             <p class="text-sm font-medium text-white">Aparecer en el directorio</p>
-            <p class="text-sm text-muted">Tu perfil será visible para otros estudiantes en el directorio.</p>
+            <p class="mt-0.5 text-sm text-muted">Tu perfil será visible para otros estudiantes en el directorio.</p>
           </div>
-          <label class="relative inline-flex cursor-pointer items-center shrink-0">
+          <label class="relative inline-flex cursor-pointer items-center shrink-0 self-start sm:self-center">
             <input
               type="checkbox"
               name="show_in_directory"
@@ -315,8 +319,8 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
             <span class="relative h-6 w-11 rounded-full border border-border bg-surface-2 transition-colors peer-checked:border-lime peer-checked:bg-lime after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-border after:bg-white after:transition-transform after:content-[''] peer-checked:after:translate-x-5 peer-checked:after:border-lime" />
           </label>
         </div>
-        <div class="flex justify-end">
-          <button type="submit" class="rounded-lg bg-lime px-4 py-2.5 text-sm font-semibold text-background transition hover:opacity-90">
+        <div class="flex justify-end pt-1">
+          <button type="submit" class="w-full rounded-lg bg-lime px-4 py-3 text-sm font-semibold text-background transition hover:opacity-90 sm:w-auto sm:py-2.5">
             Guardar perfil público
           </button>
         </div>
@@ -336,7 +340,7 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
     <!-- Modal: elegir avatar -->
     <div
       id="avatar-modal"
-      class="fixed inset-0 z-50 flex hidden items-center justify-center p-4 bg-black/60"
+      class="fixed inset-0 z-50 flex hidden items-center justify-center p-4 bg-black/60 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="avatar-modal-title"
@@ -350,7 +354,7 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
         class="relative w-full max-w-lg max-h-[85vh] flex flex-col rounded-xl border border-border bg-surface shadow-xl"
         id="avatar-modal-panel"
       >
-        <div class="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+        <div class="flex shrink-0 items-center justify-between border-b border-border px-5 py-4 sm:px-4 sm:py-3">
           <h2 id="avatar-modal-title" class="text-sm font-semibold text-white">Elegir avatar</h2>
           <button
             type="button"
@@ -366,8 +370,8 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
         <form method="post" action="/api/onboarding" class="flex min-h-0 flex-1 flex-col overflow-hidden">
           <input type="hidden" name="intent" value="avatar" />
           <input type="hidden" name="redirect_to" value="/profile" />
-          <div class="overflow-y-auto p-4">
-            <div class="grid grid-cols-5 gap-2 sm:grid-cols-6">
+          <div class="overflow-y-auto p-5 sm:p-4">
+            <div class="grid grid-cols-5 gap-3 sm:grid-cols-6 sm:gap-2">
               {avatarOptions.map((avatar) => {
                 const isSelected = avatar.id === avatarId;
                 return (

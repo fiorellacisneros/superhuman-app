@@ -159,12 +159,21 @@ for (const c of coursesRows ?? []) {
                   >
                     Agregar clase
                   </a>
-                  <form method="post" action="/api/admin/courses" class="inline" onsubmit="return confirm('¿Eliminar este curso? Se borrarán todos los datos: clases, inscripciones, retos y entregas.');">
+                  <form
+                    method="post"
+                    action="/api/admin/courses"
+                    class="inline"
+                    id={`delete-course-form-${course.id}`}
+                  >
                     <input type="hidden" name="action" value="delete" />
                     <input type="hidden" name="course_id" value={course.id} />
                     <input type="hidden" name="redirect_to" value="/admin/courses" />
                     <button
-                      type="submit"
+                      type="button"
+                      data-delete-confirm
+                      data-confirm-label={course.title}
+                      data-delete-form-id={`delete-course-form-${course.id}`}
+                      data-delete-description="Se borrarán clases, inscripciones, retos y entregas."
                       class="rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-400 transition hover:bg-red-500/20"
                     >
                       Eliminar

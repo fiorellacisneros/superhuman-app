@@ -208,8 +208,8 @@ function isActive(href: string): boolean {
       aria-label="Navegación inferior principal"
     >
       <div class="mx-auto w-[min(94vw,430px)]">
-        <div class="pointer-events-auto rounded-[1.9rem] border border-border/80 bg-surface/95 px-1.5 py-3 shadow-[0_14px_34px_rgba(0,0,0,0.5)] backdrop-blur">
-          <div class={`grid items-center ${navLinks.length >= 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+        <div class="nav-bottom-scroll pointer-events-auto flex overflow-x-auto overflow-y-hidden rounded-[1.9rem] border border-border/80 bg-surface/95 px-2 py-3 shadow-[0_14px_34px_rgba(0,0,0,0.5)] backdrop-blur scroll-smooth">
+          <div class="flex min-w-max items-center justify-center gap-0.5">
         {navLinks.map((item) => {
           const active = isActive(item.href);
           return (
@@ -217,7 +217,7 @@ function isActive(href: string): boolean {
               href={item.href}
               aria-label={item.label}
               title={item.label}
-              class={`group relative flex min-w-0 flex-col items-center justify-center gap-1 py-1 transition ${
+              class={`group relative flex min-w-[4.5rem] shrink-0 flex-col items-center justify-center gap-1 py-1 transition sm:min-w-[5rem] ${
                 active ? 'text-lime' : 'text-muted hover:text-white'
               }`}
             >
