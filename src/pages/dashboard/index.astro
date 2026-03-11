@@ -122,7 +122,7 @@ let upcomingByMonth: { monthLabel: string; lessons: UpcomingLesson[] }[] = [];
 
 if (role !== 'admin' || preview) {
   points = userRow?.points ?? 0;
-  const [badgeRowsRes, earnedRowsRes, sacRes, enrollmentRowsRes, leaderboardRowsRes] = await Promise.all([
+  const [badgeRowsRes, earnedRowsRes, sacRes, enrollmentRowsRes] = await Promise.all([
     supabase.from('badges').select('id, name, description, condition_type').order('name'),
     supabase.from('user_badges').select('badge_id, earned_at').eq('user_id', userId),
     supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
@@ -130,7 +130,6 @@ if (role !== 'admin' || preview) {
       .from('enrollments')
       .select('course_id, courses(id, slug, title, cover_image, description)')
       .eq('user_id', userId),
-    supabase.from('users').select('id, display_name, avatar_id, points').order('points', { ascending: false }).limit(10),
   ]);
   const badgeRows = badgeRowsRes.data;
   const earnedRows = earnedRowsRes.data;
@@ -153,6 +152,27 @@ if (role !== 'admin' || preview) {
     .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
 
   const enrolledIds = enrolledCourseRows.map((course) => course.id);
+
+  // Ranking: solo estudiantes inscritos en los mismos cursos que el usuario
+  let leaderboardRowsRes: { data: { id: string; display_name: string | null; avatar_id: string | null; points: number | null }[] | null } = { data: [] };
+  if (enrolledIds.length > 0) {
+    const { data: cohortUserIds } = await supabase
+      .from('enrollments')
+      .select('user_id')
+      .in('course_id', enrolledIds);
+    const uniqueIds = [...new Set((cohortUserIds ?? []).map((r) => r.user_id as string))];
+    if (uniqueIds.length > 0) {
+      const res = await supabase
+        .from('users')
+        .select('id, display_name, avatar_id, points')
+        .in('id', uniqueIds)
+        .eq('role', 'student')
+        .order('points', { ascending: false })
+        .limit(10);
+      leaderboardRowsRes = res;
+    }
+  }
+
   let lessonsByCourse = new Map<string, { total: number; completed: number }>();
   if (enrolledIds.length > 0) {
     const { data: lessonRows } = await supabase
@@ -390,13 +410,28 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
           Hola, {displayName}
         </p>
         <h1 class="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-          Tu viaje a ser un superhuman empieza aquí.
+          {enrolledIds.length > 0 ? 'Tu viaje a ser un superhuman empieza aquí.' : 'Gracias por confiar en Superhuman'}
         </h1>
         <p class="text-sm text-muted">
-          Completa desafíos, asiste a sesiones en vivo y colecciona insignias mientras subes de nivel.
+          {enrolledIds.length > 0
+            ? 'Completa desafíos, asiste a sesiones en vivo y colecciona insignias mientras subes de nivel.'
+            : 'En breve tendrás acceso a todos tus cursos y contenidos. Te avisaremos cuando todo esté listo.'}
         </p>
       </header>
 
+      {enrolledIds.length === 0 ? (
+        <div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface-2/40 px-8 py-16 text-center">
+          <div class="flex h-16 w-16 items-center justify-center rounded-full bg-lime/20 text-lime" aria-hidden="true">
+            <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <p class="mt-4 text-lg font-medium text-white">Estamos preparando todo para ti</p>
+          <p class="mt-2 max-w-md text-sm text-muted">
+            Gracias por unirte. En breve tendrás acceso a tus cursos, desafíos y todo el contenido. Te notificaremos cuando esté listo.
+          </p>
+        </div>
+      ) : (
       <div class="grid gap-6 lg:grid-cols-3">
         <section class="lg:col-span-2 space-y-4">
           {enrolledCourses.length > 0 && (
@@ -539,7 +574,9 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
                   </svg>
                 </div>
-                <p class="text-[11px] text-muted">Sin puntos aún. Tú puedes lograrlo.</p>
+                <p class="text-[11px] text-muted">
+                  {enrolledIds.length === 0 ? 'Inscríbete en un curso para ver el ranking de tu cohort.' : 'Sin puntos aún. Tú puedes lograrlo.'}
+                </p>
               </div>
             )}
           </div>
@@ -595,6 +632,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
           </div>
         </aside>
       </div>
+      )}
     </section>
   </DashboardLayout>
 )}

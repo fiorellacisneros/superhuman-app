@@ -13,11 +13,30 @@ const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
 const role = (userRow?.role as string) ?? 'student';
 
-const { data: studentRows } = await supabase
-  .from('users')
-  .select('id, display_name, avatar_id, points')
-  .eq('role', 'student')
-  .order('points', { ascending: false });
+// Ranking por curso: solo estudiantes inscritos en los mismos cursos que el usuario
+let studentRows: { id: string; display_name: string | null; avatar_id: string | null; points: number | null }[] | null = [];
+const { data: enrollmentRows } = await supabase
+  .from('enrollments')
+  .select('course_id')
+  .eq('user_id', userId);
+const enrolledCourseIds = [...new Set((enrollmentRows ?? []).map((r) => r.course_id as string))];
+
+if (enrolledCourseIds.length > 0) {
+  const { data: cohortUserIds } = await supabase
+    .from('enrollments')
+    .select('user_id')
+    .in('course_id', enrolledCourseIds);
+  const uniqueIds = [...new Set((cohortUserIds ?? []).map((r) => r.user_id as string))];
+  if (uniqueIds.length > 0) {
+    const { data } = await supabase
+      .from('users')
+      .select('id, display_name, avatar_id, points')
+      .in('id', uniqueIds)
+      .eq('role', 'student')
+      .order('points', { ascending: false });
+    studentRows = data;
+  }
+}
 
 type LeaderboardRow = { id: string; display_name: string; avatar_id: string | null; points: number; badgesCount: number };
 const rows: LeaderboardRow[] = [];
@@ -95,8 +114,16 @@ const topScore = Math.max(1, ...rows.map((r) => r.points));
       </div>
     ) : (
       <div class="rounded-xl border border-dashed border-border bg-surface-2/60 p-8 text-center">
-        <p class="text-sm font-medium text-white">Aún no hay estudiantes en el ranking.</p>
-        <p class="mt-1 text-sm text-muted">Los puntos aparecerán cuando alguien complete retos o asista a clases.</p>
+        <p class="text-sm font-medium text-white">
+          {enrolledCourseIds.length === 0
+            ? 'No estás inscrito en ningún curso.'
+            : 'Aún no hay estudiantes en el ranking.'}
+        </p>
+        <p class="mt-1 text-sm text-muted">
+          {enrolledCourseIds.length === 0
+            ? 'El ranking muestra a los estudiantes de tus cursos. Inscríbete en un curso para verlo.'
+            : 'Los puntos aparecerán cuando alguien complete retos o asista a clases.'}
+        </p>
         <a href="/dashboard" class="mt-4 inline-block rounded-lg border border-lime bg-lime/15 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/25">
           Volver al panel
         </a>
