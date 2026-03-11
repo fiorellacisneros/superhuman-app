@@ -56,6 +56,7 @@ type StudentWithMeta = {
   badgesCount: number;
   courseNames: string;
   enrolledCourseIds: string[];
+  accessTypeByCourse: Record<string, 'live' | 'on_demand'>;
 };
 
 const students: StudentWithMeta[] = [];
@@ -71,7 +72,7 @@ for (const u of studentRows ?? []) {
     .eq('user_id', u.id);
   const { data: enrolls } = await supabase
     .from('enrollments')
-    .select('course_id, courses(title)')
+    .select('course_id, access_type, courses(title)')
     .eq('user_id', u.id);
   const names = (enrolls ?? [])
     .map((e) => (e.courses as { title: string | null } | null)?.title ?? '')
@@ -79,6 +80,11 @@ for (const u of studentRows ?? []) {
   const enrolledCourseIds = (enrolls ?? [])
     .map((e) => e.course_id as string)
     .filter(Boolean);
+  const accessTypeByCourse: Record<string, 'live' | 'on_demand'> = {};
+  for (const e of enrolls ?? []) {
+    const cid = e.course_id as string;
+    accessTypeByCourse[cid] = (e.access_type as string) === 'on_demand' ? 'on_demand' : 'live';
+  }
   students.push({
     id: u.id,
     display_name: u.display_name ?? 'Estudiante',
@@ -88,6 +94,7 @@ for (const u of studentRows ?? []) {
     badgesCount: badgesCount ?? 0,
     courseNames: names.join(', ') || '—',
     enrolledCourseIds,
+    accessTypeByCourse,
   });
 }
 ---
@@ -176,21 +183,31 @@ for (const u of studentRows ?? []) {
                         <input type="hidden" name="user_id" value={s.id} />
                         <input type="hidden" name="redirect_to" value="/admin/students" />
                         <p class="mb-2 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Cursos</p>
-                        <div class="max-h-44 space-y-1 overflow-y-auto pr-1">
+                        <div class="max-h-52 space-y-1 overflow-y-auto pr-1">
                           {allCourses.map((c) => (
-                            <label class="group/option flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-white transition hover:bg-surface-2">
-                              <input
-                                type="checkbox"
-                                name="course_ids"
-                                value={c.id}
-                                checked={s.enrolledCourseIds.includes(c.id)}
-                                class="peer sr-only"
-                              />
-                              <span class="flex h-4 w-4 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-white peer-checked:shadow-[0_0_0_1px_var(--color-lime)] group-hover/option:border-lime/60">
-                                <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
-                              </span>
-                              <span class="min-w-0 flex-1 truncate">{c.title}</span>
-                            </label>
+                            <div class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs">
+                              <label class="group/option flex min-w-0 flex-1 cursor-pointer items-center gap-2 transition hover:bg-surface-2">
+                                <input
+                                  type="checkbox"
+                                  name="course_ids"
+                                  value={c.id}
+                                  checked={s.enrolledCourseIds.includes(c.id)}
+                                  class="peer sr-only"
+                                />
+                                <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-white peer-checked:shadow-[0_0_0_1px_var(--color-lime)] group-hover/option:border-lime/60">
+                                  <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
+                                </span>
+                                <span class="min-w-0 flex-1 truncate">{c.title}</span>
+                              </label>
+                              <select
+                                name={`access_type_${c.id}`}
+                                class="shrink-0 rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[11px] text-white focus:border-lime focus:outline-none"
+                                title="Live u On-demand"
+                              >
+                                <option value="live" selected={s.accessTypeByCourse[c.id] !== 'on_demand'}>Live</option>
+                                <option value="on_demand" selected={s.accessTypeByCourse[c.id] === 'on_demand'}>On-demand</option>
+                              </select>
+                            </div>
                           ))}
                         </div>
                         <button

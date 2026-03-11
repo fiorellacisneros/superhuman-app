@@ -160,6 +160,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const redirect = safeRedirectPath(formData.get('redirect_to'), '/admin/courses');
-  const url = withToastParams(redirect, action === 'create' ? 'Lesson created' : 'Lesson updated', 'success');
+  const url = withToastParams(redirect, action === 'create' ? 'Clase creada' : 'Clase actualizada', 'success');
   return new Response(null, { status: 303, headers: { Location: url } });
 };

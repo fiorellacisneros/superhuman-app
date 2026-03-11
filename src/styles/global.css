@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css");
+@import "flatpickr/dist/themes/dark.css";
 
 /* Google Fonts */
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&display=swap");
@@ -27,6 +28,39 @@ body {
   color: var(--color-white);
 }
 
+/* Scrollbars estilizados (página y contenedores) */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+/* WebKit: Chrome, Safari, Edge */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: rgba(198, 241, 53, 0.4);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-manrope);
 }
@@ -44,4 +78,50 @@ button:disabled,
 input:disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;
+}
+
+/* Flatpickr dark theme overrides (lime accent) */
+.flatpickr-calendar {
+  background: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
+}
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+  background: var(--color-lime) !important;
+  border-color: var(--color-lime) !important;
+  color: #0D0D0D !important;
+}
+.flatpickr-day:hover {
+  background: rgba(198, 241, 53, 0.2) !important;
+  border-color: var(--color-lime) !important;
+}
+.flatpickr-time input:hover,
+.flatpickr-time .flatpickr-am-pm:hover,
+.flatpickr-time input:focus,
+.flatpickr-time .flatpickr-am-pm:focus {
+  background: rgba(198, 241, 53, 0.15) !important;
+}
+.flatpickr-months .flatpickr-month {
+  background: var(--color-surface-2) !important;
+  color: var(--color-white) !important;
+}
+.flatpickr-current-month .numInputWrapper span.arrowUp:after,
+.flatpickr-current-month .numInputWrapper span.arrowDown:after {
+  border-bottom-color: var(--color-muted) !important;
+  border-top-color: var(--color-muted) !important;
+}
+
+/* Custom select: nunca usar apariencia nativa */
+.custom-select-trigger {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: none;
+}
+
+/* Variante single: sin checkboxes, solo texto (evita confusión con multi-select) */
+.custom-select--single .custom-select-option > span:first-child {
+  display: none;
 }

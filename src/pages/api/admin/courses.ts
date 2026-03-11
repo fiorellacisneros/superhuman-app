@@ -28,8 +28,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const formData = await request.formData();
   const action = formData.get('action');
-  if (action !== 'create' && action !== 'update') {
-    return new Response(JSON.stringify({ error: 'action=create|update required' }), {
+  if (action !== 'create' && action !== 'update' && action !== 'delete') {
+    return new Response(JSON.stringify({ error: 'action=create|update|delete required' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -89,6 +89,39 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
     await recordAdminAudit(db, userId, 'course.create', { title, slug });
+  } else if (action === 'delete') {
+    const course_id = formData.get('course_id');
+    if (typeof course_id !== 'string' || !course_id.trim()) {
+      return new Response(JSON.stringify({ error: 'course_id required for delete' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const cid = course_id.trim();
+
+    const { data: challengeRows } = await db.from('challenges').select('id').eq('course_id', cid);
+    const challengeIds = (challengeRows ?? []).map((c) => c.id);
+    if (challengeIds.length > 0) {
+      await db.from('submissions').delete().in('challenge_id', challengeIds);
+    }
+    await db.from('challenges').delete().eq('course_id', cid);
+
+    const { data: lessonRows } = await db.from('lessons').select('id').eq('course_id', cid);
+    const lessonIds = (lessonRows ?? []).map((l) => l.id);
+    if (lessonIds.length > 0) {
+      await db.from('attendance').delete().in('lesson_id', lessonIds);
+      await db.from('kahoot_results').delete().in('lesson_id', lessonIds);
+    }
+    await db.from('lessons').delete().eq('course_id', cid);
+    await db.from('enrollments').delete().eq('course_id', cid);
+    const { error: delErr } = await db.from('courses').delete().eq('id', cid);
+    if (delErr) {
+      return new Response(JSON.stringify({ error: delErr.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    await recordAdminAudit(db, userId, 'course.delete', { courseId: cid });
   } else {
     const course_id = formData.get('course_id');
     if (typeof course_id !== 'string' || !course_id.trim()) {
@@ -107,6 +140,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const redirect = safeRedirectPath(formData.get('redirect_to'), '/admin/courses');
-  const url = withToastParams(redirect, action === 'create' ? 'Course created' : 'Course updated', 'success');
+  const msg = action === 'create' ? 'Curso creado' : action === 'delete' ? 'Curso eliminado' : 'Curso actualizado';
+  const url = withToastParams(redirect, msg, 'success');
   return new Response(null, { status: 303, headers: { Location: url } });
 };

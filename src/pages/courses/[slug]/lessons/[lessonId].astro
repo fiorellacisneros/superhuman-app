@@ -18,26 +18,39 @@ const { data: userRow } = await supabase.from('users').select('role').eq('id', u
 const roleFromClaims = (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role;
 const isAdmin = roleFromClaims === 'admin' || (userRow?.role as string) === 'admin';
 
-const { data: course } = await supabase
+let course: { id: string; slug: string | null; title: string } | null = null;
+const { data: bySlug } = await supabase
   .from('courses')
   .select('id, slug, title')
-  .or(`slug.eq.${courseSlug},id.eq.${courseSlug}`)
+  .eq('slug', courseSlug)
   .maybeSingle();
+if (bySlug) {
+  course = bySlug;
+} else {
+  const { data: byId } = await supabase
+    .from('courses')
+    .select('id, slug, title')
+    .eq('id', courseSlug)
+    .maybeSingle();
+  course = byId;
+}
 if (!course) {
   return Astro.redirect('/dashboard');
 }
 const resolvedCourseSlug = typeof course.slug === 'string' && course.slug.trim() ? course.slug.trim() : course.id;
 
+let isOnDemand = false;
 if (!isAdmin) {
   const { data: enrollment } = await supabase
     .from('enrollments')
-    .select('course_id')
+    .select('course_id, access_type')
     .eq('user_id', userId)
     .eq('course_id', course.id)
     .maybeSingle();
   if (!enrollment) {
     return Astro.redirect('/dashboard');
   }
+  isOnDemand = (enrollment.access_type as string) === 'on_demand';
 }
 
 const { data: lesson, error: lessonError } = await supabase
@@ -52,6 +65,10 @@ if (lessonError || !lesson) {
 
 const hasRecording = Boolean(lesson.recording_url && String(lesson.recording_url).trim());
 const hasPpt = Boolean(lesson.ppt_url && String(lesson.ppt_url).trim());
+const hasContent = hasRecording || hasPpt;
+if (isOnDemand && !hasContent) {
+  return Astro.redirect(`/courses/${resolvedCourseSlug}`);
+}
 const resourcesList = Array.isArray(lesson.resources)
   ? (lesson.resources as { label?: string; url?: string }[]).filter((r) => r && typeof r.url === 'string' && r.url.trim())
   : [];

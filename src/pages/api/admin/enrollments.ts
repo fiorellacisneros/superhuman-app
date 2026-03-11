@@ -52,9 +52,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     const existingSet = new Set((existingRows ?? []).map((r) => r.course_id as string));
     const selectedSet = new Set(selectedCourseIds);
+    const accessType = (v: string) => (v === 'on_demand' ? 'on_demand' : 'live');
 
     const toInsert = selectedCourseIds.filter((id) => !existingSet.has(id));
     const toDelete = Array.from(existingSet).filter((id) => !selectedSet.has(id));
+    const toUpdate = selectedCourseIds.filter((id) => existingSet.has(id));
 
     if (toInsert.length > 0) {
       const { error: insertError } = await db.from('enrollments').insert(
@@ -62,6 +64,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
           user_id: user_id.trim(),
           course_id: courseId,
           enrolled_at: new Date().toISOString(),
+          access_type: accessType((formData.get(`access_type_${courseId}`) as string) ?? 'live'),
         })),
       );
       if (insertError) {
@@ -70,6 +73,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
           headers: { 'Content-Type': 'application/json' },
         });
       }
+    }
+
+    for (const courseId of toUpdate) {
+      const newAccess = accessType((formData.get(`access_type_${courseId}`) as string) ?? 'live');
+      await db
+        .from('enrollments')
+        .update({ access_type: newAccess })
+        .eq('user_id', user_id.trim())
+        .eq('course_id', courseId);
     }
 
     if (toDelete.length > 0) {
@@ -100,19 +112,21 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     if (action === 'enroll') {
-    const { data: existing } = await db
-      .from('enrollments')
-      .select('user_id')
-      .eq('user_id', user_id.trim())
-      .eq('course_id', course_id.trim())
-      .maybeSingle();
-    if (!existing) {
-      await db.from('enrollments').insert({
-        user_id: user_id.trim(),
-        course_id: course_id.trim(),
-        enrolled_at: new Date().toISOString(),
-      });
-    }
+      const accessType = (v: string) => (v === 'on_demand' ? 'on_demand' : 'live');
+      const { data: existing } = await db
+        .from('enrollments')
+        .select('user_id')
+        .eq('user_id', user_id.trim())
+        .eq('course_id', course_id.trim())
+        .maybeSingle();
+      if (!existing) {
+        await db.from('enrollments').insert({
+          user_id: user_id.trim(),
+          course_id: course_id.trim(),
+          enrolled_at: new Date().toISOString(),
+          access_type: accessType((formData.get('access_type') as string) ?? 'live'),
+        });
+      }
     } else {
       await db.from('enrollments').delete().eq('user_id', user_id.trim()).eq('course_id', course_id.trim());
     }
@@ -126,10 +140,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const url = withToastParams(
     redirect,
     action === 'sync'
-      ? 'Student enrollments updated'
+      ? 'Cursos del alumno actualizados'
       : action === 'enroll'
-        ? 'Student enrolled'
-        : 'Student unenrolled',
+        ? 'Alumno inscrito'
+        : 'Alumno desinscrito',
     'success',
   );
   return new Response(null, { status: 303, headers: { Location: url } });

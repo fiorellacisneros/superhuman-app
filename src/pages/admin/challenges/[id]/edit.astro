@@ -19,11 +19,22 @@ if (!challengeId) {
   return Astro.redirect('/admin/challenges');
 }
 
-const { data: challenge } = await supabase
+let challenge: { id: string; title: string | null; description: string | null; deadline: string | null; points_reward: number; course_id: string | null; is_active: boolean; available_for_on_demand: boolean } | null = null;
+const { data: chFull, error: errFull } = await supabase
   .from('challenges')
-  .select('id, title, description, deadline, points_reward, course_id, is_active')
+  .select('id, title, description, deadline, points_reward, course_id, is_active, available_for_on_demand')
   .eq('id', challengeId)
   .maybeSingle();
+if (!errFull && chFull) {
+  challenge = { ...chFull, available_for_on_demand: Boolean(chFull.available_for_on_demand) };
+} else if (errFull) {
+  const { data: chBasic } = await supabase
+    .from('challenges')
+    .select('id, title, description, deadline, points_reward, course_id, is_active')
+    .eq('id', challengeId)
+    .maybeSingle();
+  challenge = chBasic ? { ...chBasic, available_for_on_demand: false } : null;
+}
 
 if (!challenge) {
   return Astro.redirect('/admin/challenges');
@@ -31,6 +42,8 @@ if (!challenge) {
 
 const { data: coursesRows } = await supabase.from('courses').select('id, title').order('title');
 const courses = (coursesRows ?? []).map((c) => ({ id: c.id, title: c.title ?? 'Sin título' }));
+const selectedCourse = courses.find((c) => c.id === (challenge.course_id as string)) ?? null;
+const selectedCourseLabel = selectedCourse?.title ?? '— Sin curso —';
 
 const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string).toISOString().slice(0, 16) : '';
 ---
@@ -50,66 +63,100 @@ const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string
       <p class="mt-1 text-sm text-muted">{challenge.title}</p>
     </header>
 
-    <form method="post" action="/api/admin/challenges" class="max-w-xl space-y-4 rounded-xl border border-border bg-surface p-5">
+    <form method="post" action="/api/admin/challenges" class="max-w-xl space-y-6 rounded-xl border border-border bg-surface p-6">
       <input type="hidden" name="action" value="update" />
       <input type="hidden" name="challenge_id" value={challengeId} />
       <input type="hidden" name="redirect_to" value="/admin/challenges" />
 
       <div>
         <label for="edit-title" class="block text-xs font-medium text-muted">Título</label>
-        <input id="edit-title" type="text" name="title" required value={challenge.title ?? ''} class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
+        <input id="edit-title" type="text" name="title" required value={challenge.title ?? ''} class="mt-1.5 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
       </div>
       <div>
         <label for="edit-description" class="block text-xs font-medium text-muted">Descripción</label>
-        <textarea id="edit-description" name="description" rows={4} class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime">{(challenge.description as string) ?? ''}</textarea>
+        <textarea id="edit-description" name="description" rows={4} class="mt-1.5 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime">{(challenge.description as string) ?? ''}</textarea>
       </div>
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="grid gap-6 sm:grid-cols-2">
         <div>
           <label for="edit-deadline" class="block text-xs font-medium text-muted">Fecha límite</label>
-          <input id="edit-deadline" type="datetime-local" name="deadline" value={deadlineLocal} class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
+          <div class="relative mt-1.5">
+            <input id="edit-deadline" type="text" name="deadline" value={deadlineLocal} readonly class="w-full cursor-pointer rounded-lg border border-border bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Elegir fecha y hora" autocomplete="off" />
+            <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
+          </div>
         </div>
         <div>
           <label for="edit-points" class="block text-xs font-medium text-muted">Puntos</label>
-          <input id="edit-points" type="number" name="points_reward" min="0" value={challenge.points_reward ?? 30} class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
+          <input id="edit-points" type="number" name="points_reward" min="0" value={challenge.points_reward ?? 30} class="mt-1.5 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
         </div>
       </div>
       <div>
         <label for="edit-course" class="block text-xs font-medium text-muted">Curso</label>
-        <div class="relative mt-1">
-          <select
-            id="edit-course"
-            name="course_id"
-            class="w-full appearance-none rounded-lg border border-border bg-surface-2 px-3 py-2 pr-10 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+        <div class="custom-select custom-select--single relative mt-1.5" data-name="course_id">
+          <input id="edit-course" type="hidden" name="course_id" value={(challenge.course_id as string) ?? ''} />
+          <button
+            type="button"
+            class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            aria-expanded="false"
           >
-            <option value="" selected={!challenge.course_id}>— Sin curso —</option>
-            {courses.map((c) => (
-              <option value={c.id} selected={(challenge.course_id as string) === c.id}>{c.title}</option>
-            ))}
-          </select>
-          <svg
-            class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
-          </svg>
+            <span class="custom-select-label truncate">{selectedCourseLabel}</span>
+            <svg class="h-4 w-4 shrink-0 text-muted transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
+            </svg>
+          </button>
+          <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-2xl">
+            <button type="button" class={`custom-select-option flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${!challenge.course_id ? 'bg-lime/10 text-lime' : 'text-white'}`} data-value="" data-label="— Sin curso —">
+              <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${!challenge.course_id ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
+              </span>
+              <span class="truncate">— Sin curso —</span>
+            </button>
+            {courses.map((c) => {
+              const isSelected = (challenge.course_id as string) === c.id;
+              return (
+                <button
+                  type="button"
+                  class={`custom-select-option mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${isSelected ? 'bg-lime/10 text-lime' : 'text-white'}`}
+                  data-value={c.id}
+                  data-label={c.title}
+                >
+                  <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${isSelected ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                    <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
+                  </span>
+                  <span class="truncate">{c.title}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
-      <label class="inline-flex cursor-pointer items-center gap-2">
-        <input
-          type="checkbox"
-          name="is_active"
-          value="on"
-          class="peer sr-only"
-          checked={challenge.is_active ?? false}
-        />
-        <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
-          <i class="bi bi-check-lg text-[11px] leading-none" aria-hidden="true" />
-        </span>
-        <span class="text-sm text-white">Activo</span>
-      </label>
+      <div class="flex flex-wrap gap-6">
+        <label class="inline-flex cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            name="is_active"
+            value="on"
+            class="peer sr-only"
+            checked={challenge.is_active ?? false}
+          />
+          <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
+            <i class="bi bi-check-lg text-[11px] leading-none" aria-hidden="true" />
+          </span>
+          <span class="text-sm text-white">Activo</span>
+        </label>
+        <label class="inline-flex cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            name="available_for_on_demand"
+            value="on"
+            class="peer sr-only"
+            checked={challenge.available_for_on_demand ?? false}
+          />
+          <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
+            <i class="bi bi-check-lg text-[11px] leading-none" aria-hidden="true" />
+          </span>
+          <span class="text-sm text-white">Disponible para on-demand</span>
+        </label>
+      </div>
       <div class="flex gap-3 pt-2">
         <button type="submit" class="rounded-lg border border-lime bg-lime px-4 py-2 text-sm font-medium text-background transition hover:bg-lime/90">
           Guardar cambios
@@ -121,3 +168,26 @@ const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string
     </form>
   </section>
 </AdminLayout>
+
+<script>
+  import flatpickr from 'flatpickr';
+  import { Spanish } from 'flatpickr/dist/l10n/es.js';
+
+  const init = () => {
+    const el = document.getElementById('edit-deadline');
+    if (el) {
+      flatpickr(el, {
+        enableTime: true,
+        dateFormat: 'Y-m-d H:i',
+        locale: Spanish,
+        time_24hr: true,
+        allowInput: false,
+      });
+    }
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+</script>

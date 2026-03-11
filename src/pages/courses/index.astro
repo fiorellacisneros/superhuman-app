@@ -2,6 +2,7 @@
 import '../../styles/global.css';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+import { isLessonCompleted } from '../../lib/lessons';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -45,9 +46,8 @@ if (enrolledIds.length > 0) {
     const courseId = lesson.course_id as string;
     const current = lessonsByCourse.get(courseId) ?? { total: 0, completed: 0 };
     current.total += 1;
-    if (lesson.scheduled_at) {
-      const t = new Date(lesson.scheduled_at as string).getTime();
-      if (Number.isFinite(t) && t < nowMs) current.completed += 1;
+    if (lesson.scheduled_at && isLessonCompleted(lesson.scheduled_at as string, nowMs)) {
+      current.completed += 1;
     }
     lessonsByCourse.set(courseId, current);
   }

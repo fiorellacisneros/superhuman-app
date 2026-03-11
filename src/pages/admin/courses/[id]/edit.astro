@@ -71,14 +71,14 @@ if (!course) {
         >{course.description ?? ''}</textarea>
       </div>
       <div>
-        <label for="edit-cover" class="block text-xs font-medium text-muted">Archivo de portada</label>
+        <label for="edit-cover" class="block text-xs font-medium text-muted">Imagen de portada</label>
         <input
           id="edit-cover"
           type="text"
           name="cover_image"
           value={course.cover_image ?? ''}
           class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
-          placeholder="Ej: webflow-01.jpg"
+          placeholder="URL de la imagen (sube en Webflow y pega el enlace)"
         />
       </div>
       <div class="flex gap-3">

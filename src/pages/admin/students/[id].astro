@@ -68,7 +68,7 @@ const { count: approvedSubmissionsCount } = await supabase
 
 const { data: enrollmentsRows } = await supabase
   .from('enrollments')
-  .select('course_id, enrolled_at, courses(id, slug, title)')
+  .select('course_id, enrolled_at, access_type, courses(id, slug, title)')
   .eq('user_id', studentId)
   .order('enrolled_at', { ascending: false });
 
@@ -79,6 +79,7 @@ const enrolledCourses = (enrollmentsRows ?? []).map((e) => {
     slug: typeof c?.slug === 'string' && c.slug.trim() ? c.slug.trim() : (c?.id ?? e.course_id),
     title: c?.title ?? 'Curso',
     enrolledAt: e.enrolled_at as string | null,
+    accessType: (e.access_type as string) === 'on_demand' ? 'on_demand' : 'live',
   };
 });
 
@@ -216,7 +217,12 @@ function formatDate(iso: string | null): string {
                   <a href={`/courses/${c.slug}`} class="truncate text-sm font-medium text-white hover:text-lime">
                     {c.title}
                   </a>
-                  <span class="shrink-0 text-[11px] text-muted">{formatDate(c.enrolledAt)}</span>
+                  <div class="flex shrink-0 items-center gap-2">
+                    <span class={`rounded px-1.5 py-0.5 text-[10px] font-medium ${c.accessType === 'on_demand' ? 'bg-amber-500/15 text-amber-400' : 'bg-lime/15 text-lime'}`}>
+                      {c.accessType === 'on_demand' ? 'On-demand' : 'Live'}
+                    </span>
+                    <span class="text-[11px] text-muted">{formatDate(c.enrolledAt)}</span>
+                  </div>
                 </div>
               </li>
             ))}

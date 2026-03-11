@@ -6,6 +6,11 @@ import { esES } from '@clerk/localizations';
 export default defineConfig({
   output: 'server',
   adapter: vercel(),
+  vite: {
+    optimizeDeps: {
+      include: ['flatpickr', 'flatpickr/dist/l10n/es.js'],
+    },
+  },
   security: {
     // We handle CSRF checks in middleware with same-site fallbacks
     // (Origin/Referer/Sec-Fetch-Site) to avoid false positives on forms.

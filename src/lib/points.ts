@@ -27,9 +27,19 @@ export type AddPointsOptions = {
 export async function addPointsForEvent({ userId, type, supabase }: AddPointsOptions): Promise<number> {
   const toAdd = calculatePointsForEvent(type);
   if (toAdd <= 0) return 0;
+  return addPoints(userId, toAdd, supabase);
+}
+
+/** Add raw points to a user (Kahoot, manual awards, etc.) */
+export async function addPoints(
+  userId: string,
+  amount: number,
+  supabase: import('@supabase/supabase-js').SupabaseClient
+): Promise<number> {
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
   const { data: row } = await supabase.from('users').select('points').eq('id', userId).maybeSingle();
   const current = (row?.points as number | undefined) ?? 0;
-  const next = current + toAdd;
+  const next = current + amount;
   await supabase.from('users').update({ points: next }).eq('id', userId);
   return next;
 }

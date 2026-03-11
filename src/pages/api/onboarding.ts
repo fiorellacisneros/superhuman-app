@@ -16,6 +16,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const descriptionRaw = formData.get('description');
   const selfDeclaredRoleRaw = formData.get('self_declared_role');
   const showInDirectory = formData.get('show_in_directory') === 'on';
+  const timezoneRaw = formData.get('timezone');
 
   const db = getSupabaseServiceRoleClient();
 
@@ -56,6 +57,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (intent === 'profile') {
     const description = typeof descriptionRaw === 'string' ? descriptionRaw.trim().slice(0, 500) : null;
     const selfDeclaredRole = typeof selfDeclaredRoleRaw === 'string' ? selfDeclaredRoleRaw.trim().slice(0, 80) : null;
+    const timezone = typeof timezoneRaw === 'string' && timezoneRaw.trim() ? timezoneRaw.trim().slice(0, 80) : 'America/Lima';
     try {
       await db
         .from('users')
@@ -63,10 +65,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
           description: description || null,
           self_declared_role: selfDeclaredRole || null,
           show_in_directory: showInDirectory,
+          timezone,
         })
         .eq('id', userId);
     } catch (e) {
-      // Columns may not exist yet — run docs/supabase-profile-fields.sql in Supabase
+      // Columns may not exist yet — run docs/supabase-profile-fields.sql and docs/supabase-timezone-migration.sql in Supabase
     }
     const redirectTo = safeRedirectPath(formData.get('redirect_to'), '/profile');
     return new Response(null, {

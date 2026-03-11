@@ -4,6 +4,7 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { SignOutButton } from '@clerk/astro/components';
 import { getSupabaseServiceRoleClient } from '../lib/supabase';
 import { avatarImagePath } from '../lib/avatars';
+import { TIMEZONE_OPTIONS } from '../lib/timezones';
 
 const { isAuthenticated, userId, redirectToSignIn, sessionClaims } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -50,19 +51,22 @@ if (!email || (!signupFullName && !signupFirstName)) {
   }
 }
 
-// Optional profile fields (run docs/supabase-profile-fields.sql if missing)
+// Optional profile fields (run docs/supabase-profile-fields.sql and docs/supabase-timezone-migration.sql if missing)
 let description = '';
 let selfDeclaredRole = '';
 let showInDirectory = false;
+let timezone = 'America/Lima';
 const { data: profileRow, error: _profileErr } = await supabase
   .from('users')
-  .select('description, self_declared_role, show_in_directory')
+  .select('description, self_declared_role, show_in_directory, timezone')
   .eq('id', userId)
   .maybeSingle();
 if (!_profileErr && profileRow) {
   description = (profileRow as any)?.description ?? '';
   selfDeclaredRole = (profileRow as any)?.self_declared_role ?? '';
   showInDirectory = Boolean((profileRow as any)?.show_in_directory);
+  const tz = (profileRow as any)?.timezone;
+  timezone = typeof tz === 'string' && tz.trim() ? tz : 'America/Lima';
 }
 
 if (userRow?.email) email = String(userRow.email);
@@ -261,6 +265,19 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
       <form method="post" action="/api/onboarding" class="space-y-3">
         <input type="hidden" name="intent" value="profile" />
         <input type="hidden" name="redirect_to" value="/profile" />
+        <div class="flex flex-col gap-1">
+          <label for="profile-timezone" class="text-sm font-medium text-muted">Zona horaria / país</label>
+          <select
+            id="profile-timezone"
+            name="timezone"
+            class="rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-base text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          >
+            {TIMEZONE_OPTIONS.map(([label, tz]) => (
+              <option value={tz} selected={tz === timezone}>{label}</option>
+            ))}
+          </select>
+          <p class="text-xs text-muted">Las horas de las clases se mostrarán en tu zona local.</p>
+        </div>
         <div class="flex flex-col gap-1">
           <label for="profile-role" class="text-sm font-medium text-muted">Tu rol</label>
           <input

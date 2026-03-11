@@ -49,7 +49,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const validUserIds = uniqueSelectedUserIds.filter((id) => enrolledSet.has(id));
   if (validUserIds.length === 0) {
     const redirect = safeRedirectPath(formData.get('redirect_to'), '/admin/attendance');
-    const url = withToastParams(redirect, 'No students selected for this lesson', 'info');
+    const url = withToastParams(redirect, 'No seleccionaste alumnos para esta clase', 'info');
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
@@ -85,8 +85,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const url = withToastParams(
     redirect,
     toInsert.length > 0
-      ? `Attendance saved (${toInsert.length} student${toInsert.length === 1 ? '' : 's'})`
-      : 'Attendance already up to date',
+      ? `Asistencia guardada (${toInsert.length} alumno${toInsert.length === 1 ? '' : 's'})`
+      : 'La asistencia ya estaba al día',
     toInsert.length > 0 ? 'success' : 'info',
   );
   return new Response(null, { status: 303, headers: { Location: url } });

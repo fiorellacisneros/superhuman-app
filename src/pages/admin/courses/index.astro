@@ -88,13 +88,13 @@ for (const c of coursesRows ?? []) {
             />
           </div>
           <div>
-            <label for="course-cover" class="block text-xs font-medium text-muted">Archivo de portada</label>
+            <label for="course-cover" class="block text-xs font-medium text-muted">Imagen de portada</label>
             <input
               id="course-cover"
               type="text"
               name="cover_image"
               class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
-              placeholder="Ej: webflow-01.jpg (sube el archivo en public/courses/)"
+              placeholder="URL de la imagen (sube en Webflow y pega el enlace)"
             />
           </div>
           <button
@@ -159,6 +159,17 @@ for (const c of coursesRows ?? []) {
                   >
                     Agregar clase
                   </a>
+                  <form method="post" action="/api/admin/courses" class="inline" onsubmit="return confirm('¿Eliminar este curso? Se borrarán todos los datos: clases, inscripciones, retos y entregas.');">
+                    <input type="hidden" name="action" value="delete" />
+                    <input type="hidden" name="course_id" value={course.id} />
+                    <input type="hidden" name="redirect_to" value="/admin/courses" />
+                    <button
+                      type="submit"
+                      class="rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-400 transition hover:bg-red-500/20"
+                    >
+                      Eliminar
+                    </button>
+                  </form>
                 </div>
               </div>
             </li>

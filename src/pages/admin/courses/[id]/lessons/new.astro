@@ -132,15 +132,21 @@ if (!course) {
         </div>
       </div>
 
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="grid gap-6 sm:grid-cols-2">
         <div>
           <label for="lesson-scheduled" class="block text-xs font-medium text-muted">Programada (fecha y hora)</label>
-          <input
-            id="lesson-scheduled"
-            type="datetime-local"
-            name="scheduled_at"
-            class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
-          />
+          <div class="relative mt-1.5">
+            <input
+              id="lesson-scheduled"
+              type="text"
+              name="scheduled_at"
+              readonly
+              class="w-full cursor-pointer rounded-lg border border-border bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              placeholder="Elegir fecha y hora"
+              autocomplete="off"
+            />
+            <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
+          </div>
         </div>
         <div>
           <label for="lesson-order" class="block text-xs font-medium text-muted">Orden</label>
@@ -150,7 +156,7 @@ if (!course) {
             name="order"
             value="0"
             min="0"
-            class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            class="mt-1.5 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           />
         </div>
       </div>
@@ -172,3 +178,21 @@ if (!course) {
     </form>
   </section>
 </AdminLayout>
+
+<script>
+  import flatpickr from 'flatpickr';
+  import { Spanish } from 'flatpickr/dist/l10n/es.js';
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('lesson-scheduled');
+    if (el) {
+      flatpickr(el, {
+        enableTime: true,
+        dateFormat: 'Y-m-d H:i',
+        locale: Spanish,
+        time_24hr: true,
+        allowInput: false,
+      });
+    }
+  });
+</script>

@@ -17,6 +17,7 @@
     "@tailwindcss/postcss": "^4.2.1",
     "astro": "^5.17.1",
     "bootstrap-icons": "^1.13.1",
+    "flatpickr": "^4.6.13",
     "lucide-react": "^0.576.0",
     "resend": "^6.9.3",
     "tailwindcss": "^4.2.1"

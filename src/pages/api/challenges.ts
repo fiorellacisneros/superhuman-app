@@ -39,10 +39,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
+  let isOnDemand = false;
   if (challenge.course_id) {
     const { data: enrollment } = await db
       .from('enrollments')
-      .select('user_id')
+      .select('user_id, access_type')
       .eq('user_id', userId)
       .eq('course_id', challenge.course_id as string)
       .maybeSingle();
@@ -52,10 +53,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
         headers: { 'Content-Type': 'application/json' },
       });
     }
+    isOnDemand = (enrollment.access_type as string) === 'on_demand';
   }
 
   const deadlineIso = (challenge?.deadline as string | null) ?? null;
-  const canEditByDeadline = !deadlineIso || new Date(deadlineIso).getTime() > Date.now();
+  const canEditByDeadline = isOnDemand || !deadlineIso || new Date(deadlineIso).getTime() > Date.now();
 
   const { data: existing } = await db
     .from('submissions')
@@ -69,11 +71,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (mode === 'update' && canEditByDeadline) {
       await db.from('submissions').update({ link: linkStr }).eq('id', existing.id);
       const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
-      const url = withToastParams(redirect, 'Submission updated', 'success');
+      const url = withToastParams(redirect, 'Entrega actualizada', 'success');
       return new Response(null, { status: 303, headers: { Location: url } });
     }
     const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
-    const url = withToastParams(redirect, 'Submission already sent', 'info');
+    const url = withToastParams(redirect, 'La entrega ya fue enviada', 'info');
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
@@ -85,6 +87,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
   });
 
   const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
-  const url = withToastParams(redirect, 'Submission sent successfully', 'success');
+  const url = withToastParams(redirect, 'Entrega enviada correctamente', 'success');
   return new Response(null, { status: 303, headers: { Location: url } });
 };
