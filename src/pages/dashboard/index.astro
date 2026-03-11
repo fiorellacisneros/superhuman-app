@@ -117,7 +117,7 @@ let studentActiveChallengesCount = 0;
 let enrolledIds: string[] = [];
 let enrolledCourses: { id: string; slug: string; title: string; cover_image: string | null; description: string | null; totalLessons: number; completedLessons: number }[] = [];
 let leaderboard: { id: string; name: string; avatarId: string | null; points: number }[] = [];
-type UpcomingLesson = { id: string; title: string; scheduled_at: string; zoom_link: string | null; courseTitle: string };
+type UpcomingLesson = { id: string; title: string; scheduled_at: string; zoom_link: string | null; courseTitle: string; courseSlug: string };
 let upcomingLessons: UpcomingLesson[] = [];
 let upcomingByMonth: { monthLabel: string; lessons: UpcomingLesson[] }[] = [];
 
@@ -210,20 +210,22 @@ if (role !== 'admin' || preview) {
     const now = new Date().toISOString();
     const { data: lessonRows } = await supabase
       .from('lessons')
-      .select('id, title, scheduled_at, zoom_link, course_id, courses(title)')
+      .select('id, title, scheduled_at, zoom_link, course_id, courses(title, slug, zoom_link)')
       .in('course_id', enrolledIds)
       .not('scheduled_at', 'is', null)
       .gt('scheduled_at', now)
       .order('scheduled_at', { ascending: true })
       .limit(6);
     upcomingLessons = (lessonRows ?? []).map((l) => {
-      const course = l.courses as { title: string | null } | null;
+      const course = l.courses as { title: string | null; slug: string | null; zoom_link?: string | null } | null;
+      const zoomUrl = (l.zoom_link?.trim() || course?.zoom_link?.trim() || null) ?? null;
       return {
         id: l.id,
         title: l.title ?? 'Clase',
         scheduled_at: l.scheduled_at as string,
-        zoom_link: l.zoom_link ?? null,
+        zoom_link: zoomUrl,
         courseTitle: course?.title ?? 'Curso',
+        courseSlug: (course?.slug ?? l.course_id) as string,
       };
     });
     const monthMap = new Map<string, UpcomingLesson[]>();
@@ -607,14 +609,14 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
                                 <p class="mt-0.5 text-xs font-medium text-white">{lesson.title}</p>
                                 <p class="mt-0.5 text-[10px] text-muted">{lesson.courseTitle}</p>
                               </div>
-                              {joinUrl && (
+                              {isNext && joinUrl && (
                                 <a
                                   href={joinUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   class="shrink-0 rounded border border-lime bg-lime/15 px-2 py-1 text-[10px] font-medium text-lime transition hover:bg-lime/25"
                                 >
-                                  Unirse
+                                  Ver clase
                                 </a>
                               )}
                             </div>

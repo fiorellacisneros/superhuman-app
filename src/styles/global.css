@@ -67,6 +67,9 @@ html {
   scrollbar-color: var(--color-border) transparent;
   -webkit-overflow-scrolling: touch;
 }
+.nav-bottom-visible {
+  overflow-y: visible !important;
+}
 .nav-bottom-scroll::-webkit-scrollbar {
   height: 4px;
 }

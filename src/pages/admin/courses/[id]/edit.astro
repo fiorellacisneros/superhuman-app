@@ -21,7 +21,7 @@ if (!courseId) {
 
 const { data: course } = await supabase
   .from('courses')
-  .select('id, title, description, cover_image')
+  .select('id, title, description, cover_image, zoom_link')
   .eq('id', courseId)
   .maybeSingle();
 
@@ -80,6 +80,18 @@ if (!course) {
           class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           placeholder="URL de la imagen (sube en Webflow y pega el enlace)"
         />
+      </div>
+      <div>
+        <label for="edit-zoom-link" class="block text-xs font-medium text-muted">Enlace Zoom (por defecto del curso)</label>
+        <input
+          id="edit-zoom-link"
+          type="url"
+          name="zoom_link"
+          value={course.zoom_link ?? ''}
+          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="https://zoom.us/j/..."
+        />
+        <p class="mt-1 text-[11px] text-muted">Se aplica a todas las clases del curso. Puedes sobrescribirlo en cada clase si hace falta.</p>
       </div>
       <div class="flex gap-3">
         <button

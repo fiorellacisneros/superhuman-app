@@ -97,6 +97,17 @@ for (const c of coursesRows ?? []) {
               placeholder="URL de la imagen (sube en Webflow y pega el enlace)"
             />
           </div>
+          <div>
+            <label for="course-zoom-link" class="block text-xs font-medium text-muted">Enlace Zoom (por defecto del curso)</label>
+            <input
+              id="course-zoom-link"
+              type="url"
+              name="zoom_link"
+              class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              placeholder="https://zoom.us/j/..."
+            />
+            <p class="mt-1 text-[11px] text-muted">Se aplica a todas las clases. Puedes sobrescribirlo en cada clase si hace falta.</p>
+          </div>
           <button
             type="submit"
             class="rounded-lg border border-lime bg-lime px-4 py-2 text-sm font-medium text-background transition hover:bg-lime/90"

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { safeRedirectPath, withToastParams } from '../../../lib/request-security';
+import { safeRedirectPath, sanitizeHttpUrl, withToastParams } from '../../../lib/request-security';
 import { requireAdmin } from '../../../lib/api-admin';
 import { isRateLimited } from '../../../lib/rate-limit';
 import { recordAdminAudit } from '../../../lib/security-audit';
@@ -44,6 +44,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const title = typeof formData.get('title') === 'string' ? String(formData.get('title')).trim().slice(0, 140) : '';
   const description = typeof formData.get('description') === 'string' ? String(formData.get('description')).trim().slice(0, 4000) || null : null;
   const cover_image = sanitizeCoverImage(formData.get('cover_image'));
+  const zoom_link = sanitizeHttpUrl(formData.get('zoom_link'));
 
   if (action === 'create') {
     if (!title) {
@@ -80,6 +81,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         slug,
         description,
         cover_image,
+        zoom_link,
         created_by: userId,
       });
     if (error) {
@@ -130,9 +132,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    const update: { title?: string; description: string | null; cover_image: string | null } = {
+    const update: { title?: string; description: string | null; cover_image: string | null; zoom_link: string | null } = {
       description,
       cover_image,
+      zoom_link,
     };
     if (title) update.title = title;
     await db.from('courses').update(update).eq('id', course_id.trim());

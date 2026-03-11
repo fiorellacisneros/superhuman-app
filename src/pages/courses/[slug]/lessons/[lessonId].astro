@@ -131,68 +131,47 @@ const hasSharedResources = sharedResources.length > 0;
             Ver presentación
           </a>
         )}
-        {(hasClassResources || hasSharedResources) && (
-          <div class="flex flex-col gap-3">
-            {hasClassResources && (
-              <div class="flex flex-col gap-2">
-                <button
-                  type="button"
-                  id="class-resources-toggle"
-                  aria-expanded="false"
-                  aria-controls="class-resources-list"
-                  class="inline-flex w-fit items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:border-border hover:bg-surface-2/80"
-                >
-                  <svg id="class-resources-arrow" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
-                  </svg>
-                  Recursos de clase
-                </button>
-                <ul id="class-resources-list" class="hidden list-inside list-disc space-y-1 pl-4 text-sm text-muted" role="region" aria-label="Recursos de clase">
-                  {hasResourcesUrl && (
-                    <li>
-                      <a href={lesson.resources_url as string} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
-                        Carpeta / recursos principales
-                      </a>
-                    </li>
-                  )}
-                  {classResources.map((r) => (
-                    <li>
-                      <a href={r.url!} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
-                        {r.label && r.label.trim() ? r.label : r.url}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {hasSharedResources && (
-              <div class="flex flex-col gap-2">
-                <button
-                  type="button"
-                  id="shared-resources-toggle"
-                  aria-expanded="false"
-                  aria-controls="shared-resources-list"
-                  class="inline-flex w-fit items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:border-border hover:bg-surface-2/80"
-                >
-                  <svg id="shared-resources-arrow" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
-                  </svg>
-                  Links compartidos
-                </button>
-                <ul id="shared-resources-list" class="hidden list-inside list-disc space-y-1 pl-4 text-sm text-muted" role="region" aria-label="Links compartidos">
-                  {sharedResources.map((r) => (
-                    <li>
-                      <a href={r.url!} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
-                        {r.label && r.label.trim() ? r.label : r.url}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
       </div>
+
+      {(hasClassResources || hasSharedResources) && (
+        <div class="mt-5 flex flex-col gap-4">
+          {hasClassResources && (
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wider text-muted">Recursos de clase</p>
+              <ul class="mt-1.5 list-inside list-disc space-y-1 pl-1 text-sm">
+                {hasResourcesUrl && (
+                  <li>
+                    <a href={lesson.resources_url as string} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
+                      Carpeta / recursos principales
+                    </a>
+                  </li>
+                )}
+                {classResources.map((r) => (
+                  <li>
+                    <a href={r.url!} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
+                      {r.label && r.label.trim() ? r.label : r.url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {hasSharedResources && (
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wider text-muted">Links compartidos</p>
+              <ul class="mt-1.5 list-inside list-disc space-y-1 pl-1 text-sm">
+                {sharedResources.map((r) => (
+                  <li>
+                    <a href={r.url!} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
+                      {r.label && r.label.trim() ? r.label : r.url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       <div class="mt-4 border-t border-border pt-3">
         <p class="text-xs text-muted">
@@ -209,21 +188,3 @@ const hasSharedResources = sharedResources.length > 0;
   </section>
 </DashboardLayout>
 
-<script>
-  (function () {
-    function setupToggle(toggleId, listId, arrowId) {
-      const toggle = document.getElementById(toggleId);
-      const list = document.getElementById(listId);
-      if (!toggle || !list) return;
-      toggle.addEventListener('click', () => {
-        const expanded = toggle.getAttribute('aria-expanded') === 'true';
-        toggle.setAttribute('aria-expanded', String(!expanded));
-        list.classList.toggle('hidden', expanded);
-        const arrow = document.getElementById(arrowId);
-        if (arrow) arrow.classList.toggle('rotate-90', !expanded);
-      });
-    }
-    setupToggle('class-resources-toggle', 'class-resources-list', 'class-resources-arrow');
-    setupToggle('shared-resources-toggle', 'shared-resources-list', 'shared-resources-arrow');
-  })();
-</script>

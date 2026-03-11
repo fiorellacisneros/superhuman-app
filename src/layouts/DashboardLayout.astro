@@ -203,13 +203,13 @@ function isActive(href: string): boolean {
       </main>
     </div>
     <nav
-      class="pointer-events-none fixed inset-x-0 z-[100] md:hidden"
-      style="bottom: calc(env(safe-area-inset-bottom) + 0.65rem);"
+      class="pointer-events-none fixed inset-x-0 z-[100] md:hidden overflow-visible"
+      style="bottom: calc(env(safe-area-inset-bottom) + 0.5rem);"
       aria-label="Navegación inferior principal"
     >
-      <div class="mx-auto w-[min(94vw,430px)]">
-        <div class="nav-bottom-scroll pointer-events-auto flex overflow-x-auto overflow-y-hidden rounded-[1.9rem] border border-border/80 bg-surface/95 px-2 py-3 shadow-[0_14px_34px_rgba(0,0,0,0.5)] backdrop-blur scroll-smooth">
-          <div class="flex min-w-max items-center justify-center gap-0.5">
+      <div class="mx-auto w-fit max-w-[min(92vw,360px)] overflow-visible">
+        <div class="pointer-events-auto flex overflow-visible rounded-full border border-border/80 bg-surface/95 px-3 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur">
+          <div class={`flex items-end justify-center gap-1 ${navLinks.length <= 4 ? 'min-w-full justify-around' : 'min-w-max'}`}>
         {navLinks.map((item) => {
           const active = isActive(item.href);
           return (
@@ -217,7 +217,7 @@ function isActive(href: string): boolean {
               href={item.href}
               aria-label={item.label}
               title={item.label}
-              class={`group relative flex min-w-[4.5rem] shrink-0 flex-col items-center justify-center gap-1 py-1 transition sm:min-w-[5rem] ${
+              class={`group relative flex shrink-0 flex-col items-center justify-center gap-0.5 py-1 transition ${navLinks.length <= 4 ? 'min-w-[3.75rem]' : 'min-w-[3rem]'} ${
                 active ? 'text-lime' : 'text-muted hover:text-white'
               }`}
             >
@@ -234,11 +234,11 @@ function isActive(href: string): boolean {
               ) : (
                 <i class={`bi ${item.icon} text-[17px] leading-none text-muted group-hover:text-white/90`} aria-hidden="true" />
               )}
-              <span class={`max-w-full truncate px-1 text-[10px] font-medium leading-tight ${active ? 'text-lime' : 'text-muted group-hover:text-white/90'}`}>
+              <span class={`max-w-full truncate text-[10px] font-medium leading-tight ${active ? 'text-lime' : 'text-muted group-hover:text-white/90'}`}>
                 {item.label}
               </span>
               {item.showActiveCount && activeRetosCount > 0 && (
-                <span class="absolute right-1 top-0 inline-flex min-w-4 items-center justify-center rounded-full bg-lime/20 px-1 py-0.5 text-[9px] font-semibold text-lime">
+                <span class="absolute -right-0.5 top-0 inline-flex min-w-4 items-center justify-center rounded-full bg-lime/20 px-1 py-0.5 text-[9px] font-semibold text-lime">
                   {activeRetosCount}
                 </span>
               )}
