@@ -114,6 +114,7 @@ let points = 0;
 type DashboardBadge = { id: string; name: string; description: string | null; condition_type: string | null; earned: boolean; earned_at: string | null };
 let dashboardBadges: DashboardBadge[] = [];
 let studentActiveChallengesCount = 0;
+let enrolledIds: string[] = [];
 let enrolledCourses: { id: string; slug: string; title: string; cover_image: string | null; description: string | null; totalLessons: number; completedLessons: number }[] = [];
 let leaderboard: { id: string; name: string; avatarId: string | null; points: number }[] = [];
 type UpcomingLesson = { id: string; title: string; scheduled_at: string; zoom_link: string | null; courseTitle: string };
@@ -151,7 +152,7 @@ if (role !== 'admin' || preview) {
     .map((row) => (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses)
     .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
 
-  const enrolledIds = enrolledCourseRows.map((course) => course.id);
+  enrolledIds = enrolledCourseRows.map((course) => course.id);
 
   // Ranking: solo estudiantes inscritos en los mismos cursos que el usuario
   let leaderboardRowsRes: { data: { id: string; display_name: string | null; avatar_id: string | null; points: number | null }[] | null } = { data: [] };
