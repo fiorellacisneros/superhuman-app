@@ -53,14 +53,14 @@ function isActive(href: string): boolean {
   </head>
   <body class="min-h-screen bg-background text-white antialiased">
     <div class="min-h-screen">
-      <header class="border-b border-border bg-surface px-4 py-4 sm:px-6">
+      <header class="border-b border-transparent bg-surface px-4 py-4 sm:px-6">
         <div class="relative mx-auto flex max-w-5xl items-center justify-between gap-3">
           <a href="/dashboard" class="shrink-0">
             <img src="/logo.png" alt="Superhuman School" class="h-5 w-auto" />
           </a>
 
           <div class="hidden min-w-0 flex-1 overflow-x-auto md:flex md:flex-none md:overflow-visible">
-            <nav class="flex w-max items-center gap-1 rounded-xl border border-border/80 bg-surface-2/40 p-1 sm:w-auto" aria-label="Admin">
+            <nav class="flex w-max items-center gap-1 rounded-xl border border-transparent/80 bg-surface-2/40 p-1 sm:w-auto" aria-label="Admin">
               {adminNav.map((item) => {
                 const active = isActive(item.href);
                 return (
@@ -105,7 +105,7 @@ function isActive(href: string): boolean {
               id="user-menu-button"
               aria-expanded="false"
               aria-haspopup="true"
-              class="flex cursor-pointer items-center gap-2 rounded-lg border border-transparent py-1.5 pl-1 pr-2 transition hover:border-border hover:bg-surface-2"
+              class="flex cursor-pointer items-center gap-2 rounded-lg border border-transparent py-1.5 pl-1 pr-2 transition hover:border-transparent hover:bg-surface-2"
             >
               {avatarSrc ? (
                 <img
@@ -130,12 +130,12 @@ function isActive(href: string): boolean {
             </button>
             <div
               id="user-menu-dropdown"
-              class="pointer-events-none absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border bg-surface-2 py-1 shadow-lg opacity-0 transition-[opacity,transform] duration-200 ease-out"
+              class="pointer-events-none absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-transparent bg-surface-2 py-1 shadow-lg opacity-0 transition-[opacity,transform] duration-200 ease-out"
               style="transform: translateY(-8px);"
               role="menu"
               aria-hidden="true"
             >
-              <div class="flex items-center gap-2 border-b border-border px-4 py-2 text-xs font-medium text-lime/90" role="none">
+              <div class="flex items-center gap-2 border-b border-transparent px-4 py-2 text-xs font-medium text-lime/90" role="none">
                 <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 16L3 5l5.5 2.5L12 4l3.5 3.5L21 5l-2 11H5z" />
                 </svg>
@@ -148,7 +148,7 @@ function isActive(href: string): boolean {
               >
                 Ver perfil
               </a>
-              <div class="mt-1 border-t border-border pt-1">
+              <div class="mt-1 border-t border-transparent pt-1">
                 <SignOutButton
                   redirectUrl="/"
                   class="mx-1 w-[calc(100%-0.5rem)] rounded-lg px-3 py-2.5 text-left text-sm text-muted transition hover:bg-surface hover:text-lime"
@@ -172,7 +172,7 @@ function isActive(href: string): boolean {
       aria-label="Navegación inferior admin"
     >
       <div class="mx-auto w-fit max-w-[min(92vw,360px)] overflow-visible">
-        <div class="pointer-events-auto flex overflow-visible rounded-full border border-border/80 bg-surface/95 px-2 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur">
+        <div class="pointer-events-auto flex overflow-visible rounded-full border border-transparent/80 bg-surface/95 px-2 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur">
           <div class="flex min-w-max items-end justify-center gap-1">
         {adminNav.map((item) => {
           const active = isActive(item.href);
@@ -349,7 +349,7 @@ function isActive(href: string): boolean {
                 check.classList.toggle('border-lime', isSelected);
                 check.classList.toggle('bg-lime', isSelected);
                 check.classList.toggle('text-background', isSelected);
-                check.classList.toggle('border-border', !isSelected);
+                check.classList.toggle('border-transparent', !isSelected);
                 check.classList.toggle('bg-surface-2', !isSelected);
                 check.classList.toggle('text-transparent', !isSelected);
               }
@@ -416,7 +416,7 @@ function isActive(href: string): boolean {
                   check.classList.toggle('border-lime', isSelected);
                   check.classList.toggle('bg-lime', isSelected);
                   check.classList.toggle('text-background', isSelected);
-                  check.classList.toggle('border-border', !isSelected);
+                  check.classList.toggle('border-transparent', !isSelected);
                   check.classList.toggle('bg-surface-2', !isSelected);
                   check.classList.toggle('text-transparent', !isSelected);
                 }

@@ -49,7 +49,7 @@ const users: DirectoryUser[] = (directoryRows ?? []).map((u) => {
 <DashboardLayout role={role === 'admin' ? 'admin' : 'student'}>
   <section class="space-y-6">
     <nav class="text-sm text-muted">
-      <a href="/dashboard" class="hover:text-white">Panel</a>
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
       <span class="mx-1">/</span>
       <span class="text-white">SuperHumans</span>
     </nav>
@@ -62,7 +62,7 @@ const users: DirectoryUser[] = (directoryRows ?? []).map((u) => {
     {users.length > 0 ? (
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {users.map((u) => (
-          <article class="rounded-xl border border-border bg-surface p-4 transition hover:border-lime/30">
+          <article class="rounded-xl border border-transparent bg-surface p-4 transition hover:border-lime/30">
             <div class="flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-left sm:gap-4">
               <div class="shrink-0">
                 <img
@@ -84,7 +84,7 @@ const users: DirectoryUser[] = (directoryRows ?? []).map((u) => {
                       href={u.linkedinUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-2 text-muted transition hover:border-lime/50 hover:text-lime"
+                      class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent bg-surface-2 text-muted transition hover:border-lime/50 hover:text-lime"
                       aria-label="LinkedIn"
                     >
                       <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -97,7 +97,7 @@ const users: DirectoryUser[] = (directoryRows ?? []).map((u) => {
                       href={u.instagramUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-2 text-muted transition hover:border-lime/50 hover:text-lime"
+                      class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent bg-surface-2 text-muted transition hover:border-lime/50 hover:text-lime"
                       aria-label="Instagram"
                     >
                       <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -110,7 +110,7 @@ const users: DirectoryUser[] = (directoryRows ?? []).map((u) => {
                       href={u.portfolioUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-2 text-muted transition hover:border-lime/50 hover:text-lime"
+                      class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent bg-surface-2 text-muted transition hover:border-lime/50 hover:text-lime"
                       aria-label="Portafolio"
                     >
                       <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -125,11 +125,14 @@ const users: DirectoryUser[] = (directoryRows ?? []).map((u) => {
         ))}
       </div>
     ) : (
-      <div class="rounded-xl border border-border bg-surface p-8 text-center">
+      <div class="rounded-xl border border-transparent bg-surface p-8 text-center">
         <p class="text-muted">Aún nadie ha activado "Aparecer en el directorio".</p>
         <p class="mt-1 text-sm text-muted">Ve a tu perfil y activa la opción para que otros te encuentren.</p>
-        <a href="/profile" class="mt-4 inline-block rounded-lg border border-lime bg-lime/10 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/20">
+        <a href="/profile" class="mt-4 inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
           Ir a mi perfil
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
         </a>
       </div>
     )}

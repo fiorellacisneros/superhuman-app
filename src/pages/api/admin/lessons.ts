@@ -49,6 +49,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const resources_url = sanitizeHttpUrl(formData.get('resources_url'));
   const orderRaw = formData.get('order');
   const order = orderRaw !== null && orderRaw !== '' ? Number(orderRaw) : 0;
+  const module_idRaw = formData.get('module_id');
+  const module_id = typeof module_idRaw === 'string' && module_idRaw.trim() ? module_idRaw.trim() : null;
   const scheduled_atRaw = formData.get('scheduled_at');
   const scheduled_at = typeof scheduled_atRaw === 'string' && scheduled_atRaw.trim() ? scheduled_atRaw.trim() : null;
   if (scheduled_at && Number.isNaN(Date.parse(scheduled_at))) {
@@ -86,6 +88,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     resources: resources.length ? resources : [],
     order: Number.isFinite(order) ? order : 0,
     video_url: recording_url,
+    module_id: module_id || null,
   };
   if (scheduled_at) {
     payload.scheduled_at = scheduled_at;

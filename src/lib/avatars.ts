@@ -1,6 +1,7 @@
 /**
  * Avatar filenames in public/avatars are zero-padded: avatar-01.png, avatar-04.png, etc.
  * Normalize avatar_id (e.g. "avatar-4") to match filenames ("avatar-04").
+ * Only accepts format: avatar-N or avatar-NN.
  */
 export function avatarImagePath(avatarId: string | null | undefined): string | null {
   if (!avatarId || typeof avatarId !== 'string') return null;

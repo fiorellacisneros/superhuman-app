@@ -1,6 +1,6 @@
 ---
 import '../../../styles/global.css';
-import AdminLayout from '../../../layouts/AdminLayout.astro';
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
@@ -107,7 +107,7 @@ function tabUrl(nextView: string): string {
 }
 ---
 
-<AdminLayout>
+<DashboardLayout>
   <Fragment slot="head">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js" defer></script>
@@ -118,7 +118,7 @@ function tabUrl(nextView: string): string {
       <p class="mt-1 text-sm text-muted">Crear y activar desafíos para el cohort.</p>
     </header>
 
-    <div class="rounded-xl border border-border bg-surface">
+    <div class="rounded-xl border border-transparent bg-surface">
       <button
         type="button"
         id="toggle-create-challenge"
@@ -131,27 +131,27 @@ function tabUrl(nextView: string): string {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-      <div id="create-challenge-form" class="hidden border-t border-border px-5 pb-6 pt-5" role="region">
+      <div id="create-challenge-form" class="hidden border-t border-transparent px-5 pb-6 pt-5" role="region">
         <form method="post" action="/api/admin/challenges" class="space-y-6">
           <input type="hidden" name="action" value="create" />
           <input type="hidden" name="redirect_to" value="/admin/challenges" />
           <div>
             <label for="challenge-title" class="block text-xs font-medium text-muted">Título</label>
-            <input id="challenge-title" type="text" name="title" required class="mt-1.5 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Ej: Landing en Webflow" />
+            <input id="challenge-title" type="text" name="title" required class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Ej: Landing en Webflow" />
           </div>
           <div>
             <label for="challenge-description" class="block text-xs font-medium text-muted">Descripción</label>
-            <textarea id="challenge-description" name="description" rows={4} class="mt-1.5 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Instrucciones del reto"></textarea>
+            <textarea id="challenge-description" name="description" rows={4} class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Instrucciones del reto"></textarea>
           </div>
           <div class="grid gap-6 sm:grid-cols-2">
             <div>
               <label for="challenge-points" class="block text-xs font-medium text-muted">Puntos</label>
-              <input id="challenge-points" type="number" name="points_reward" value="30" min="0" class="mt-1.5 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
+              <input id="challenge-points" type="number" name="points_reward" value="30" min="0" class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
             </div>
             <div>
               <label for="challenge-deadline" class="block text-xs font-medium text-muted">Fecha límite</label>
               <div class="relative mt-1.5">
-                <input id="challenge-deadline" type="text" name="deadline" readonly class="w-full cursor-pointer rounded-lg border border-border bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Elegir fecha y hora" autocomplete="off" />
+                <input id="challenge-deadline" type="text" name="deadline" readonly class="w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Elegir fecha y hora" autocomplete="off" />
                 <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
               </div>
             </div>
@@ -162,7 +162,7 @@ function tabUrl(nextView: string): string {
               <input id="challenge-course" type="hidden" name="course_id" value="" />
               <button
                 type="button"
-                class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
                 aria-expanded="false"
               >
                 <span class="custom-select-label truncate">— Sin curso —</span>
@@ -170,7 +170,7 @@ function tabUrl(nextView: string): string {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
                 </svg>
               </button>
-              <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-2xl">
+              <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-transparent bg-surface p-2 shadow-2xl">
                 <button type="button" class="custom-select-option flex w-full cursor-pointer items-center gap-2 rounded-md bg-lime/10 px-2.5 py-2 text-left text-sm text-lime transition hover:bg-surface-2" data-value="" data-label="— Sin curso —">
                   <span class="flex h-4 w-4 items-center justify-center rounded-[4px] border border-lime bg-lime text-background">
                     <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
@@ -184,7 +184,7 @@ function tabUrl(nextView: string): string {
                     data-value={c.id}
                     data-label={c.title}
                   >
-                    <span class="flex h-4 w-4 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition">
+                    <span class="flex h-4 w-4 items-center justify-center rounded-[4px] border border-transparent bg-surface-2 text-transparent transition">
                       <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
                     </span>
                     <span class="truncate">{c.title}</span>
@@ -196,14 +196,14 @@ function tabUrl(nextView: string): string {
           <div class="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:gap-8">
             <label class="flex cursor-pointer items-center gap-2.5">
               <input type="checkbox" name="activate_now" value="on" class="peer sr-only" />
-              <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
+              <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-transparent bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
                 <i class="bi bi-check-lg text-[11px] leading-none" aria-hidden="true" />
               </span>
               <span class="text-sm text-white">Activar ahora</span>
             </label>
             <label class="flex cursor-pointer items-center gap-2.5">
               <input type="checkbox" name="available_for_on_demand" value="on" class="peer sr-only" />
-              <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
+              <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-transparent bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
                 <i class="bi bi-check-lg text-[11px] leading-none" aria-hidden="true" />
               </span>
               <span class="text-sm text-white">Disponible para on-demand</span>
@@ -211,14 +211,17 @@ function tabUrl(nextView: string): string {
             <div id="scheduled-at-wrap" class="hidden min-w-[240px] flex-1">
               <label for="challenge-scheduled" class="block text-xs font-medium text-muted">Programar para</label>
               <div class="relative mt-1.5">
-                <input id="challenge-scheduled" type="text" name="scheduled_at" readonly class="w-full cursor-pointer rounded-lg border border-border bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Elegir fecha y hora" autocomplete="off" />
+                <input id="challenge-scheduled" type="text" name="scheduled_at" readonly class="w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Elegir fecha y hora" autocomplete="off" />
                 <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
               </div>
             </div>
           </div>
           <div class="pt-2">
-          <button type="submit" class="rounded-lg border border-lime bg-lime px-5 py-2.5 text-sm font-medium text-background transition hover:bg-lime/90">
+          <button type="submit" class="btn btn-primary">
             Crear reto
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
           </button>
           </div>
         </form>
@@ -226,27 +229,27 @@ function tabUrl(nextView: string): string {
     </div>
 
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <div class="rounded-xl border border-border bg-surface p-4">
-        <p class="text-[11px] uppercase tracking-[0.14em] text-muted">Total retos</p>
-        <p class="mt-1 text-2xl font-semibold text-white">{totalChallenges}</p>
+      <div class="rounded-xl border border-transparent bg-[#012EDC] p-4">
+        <p class="font-manrope text-2xl font-semibold text-white/90">Total retos</p>
+        <p class="mt-8 font-manrope text-2xl font-semibold text-white sm:text-4xl">{totalChallenges}</p>
       </div>
-      <div class="rounded-xl border border-border bg-surface p-4">
-        <p class="text-[11px] uppercase tracking-[0.14em] text-muted">Activos</p>
-        <p class="mt-1 text-2xl font-semibold text-lime">{activeChallenges}</p>
+      <div class="rounded-xl border border-transparent bg-[#FFBE00] p-4">
+        <p class="font-manrope text-2xl font-semibold text-background/80">Activos</p>
+        <p class="mt-8 font-manrope text-2xl font-semibold text-background sm:text-4xl">{activeChallenges}</p>
       </div>
-      <div class="rounded-xl border border-border bg-surface p-4">
-        <p class="text-[11px] uppercase tracking-[0.14em] text-muted">Entregas</p>
-        <p class="mt-1 text-2xl font-semibold text-white">{totalSubmissions}</p>
+      <div class="rounded-xl border border-transparent bg-[#012EDC] p-4">
+        <p class="font-manrope text-2xl font-semibold text-white/90">Entregas</p>
+        <p class="mt-8 font-manrope text-2xl font-semibold text-white sm:text-4xl">{totalSubmissions}</p>
       </div>
-      <div class="rounded-xl border border-border bg-surface p-4">
-        <p class="text-[11px] uppercase tracking-[0.14em] text-muted">Pendientes</p>
-        <p class="mt-1 text-2xl font-semibold text-amber-300">{pendingSubmissions}</p>
+      <div class="rounded-xl border border-transparent bg-[#FFBE00] p-4">
+        <p class="font-manrope text-2xl font-semibold text-background/80">Pendientes</p>
+        <p class="mt-8 font-manrope text-2xl font-semibold text-background sm:text-4xl">{pendingSubmissions}</p>
       </div>
     </div>
 
     <div class="space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface p-1">
+        <div class="flex flex-wrap items-center gap-2 rounded-xl border border-transparent bg-surface p-1">
           <a href={tabUrl('all')} class={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${view === 'all' ? 'bg-lime/15 text-lime' : 'text-muted hover:text-white'}`}>Todos</a>
           <a href={tabUrl('active')} class={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${view === 'active' ? 'bg-lime/15 text-lime' : 'text-muted hover:text-white'}`}>Activos</a>
           <a href={tabUrl('inactive')} class={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${view === 'inactive' ? 'bg-lime/15 text-lime' : 'text-muted hover:text-white'}`}>Inactivos</a>
@@ -259,7 +262,7 @@ function tabUrl(nextView: string): string {
               <input type="hidden" id="course-filter" name="course" value={courseFilter} />
               <button
                 type="button"
-                class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-transparent bg-background px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
                 aria-expanded="false"
               >
                 <span class="custom-select-label truncate">{selectedCourseFilterLabel}</span>
@@ -267,9 +270,9 @@ function tabUrl(nextView: string): string {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
                 </svg>
               </button>
-              <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-2xl">
+              <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-transparent bg-surface p-2 shadow-2xl">
                 <button type="button" class={`custom-select-option flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${!courseFilter ? 'bg-lime/10 text-lime' : 'text-white'}`} data-value="" data-label="— Todos los cursos —">
-                  <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${!courseFilter ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                  <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${!courseFilter ? 'border-lime bg-lime text-background' : 'border-transparent bg-surface-2 text-transparent'}`}>
                     <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
                   </span>
                   <span class="truncate">— Todos los cursos —</span>
@@ -283,7 +286,7 @@ function tabUrl(nextView: string): string {
                       data-value={c.id}
                       data-label={c.title}
                     >
-                      <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${isSelected ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                      <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${isSelected ? 'border-lime bg-lime text-background' : 'border-transparent bg-surface-2 text-transparent'}`}>
                         <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
                       </span>
                       <span class="truncate">{c.title}</span>
@@ -301,19 +304,22 @@ function tabUrl(nextView: string): string {
               name="q"
               value={query}
               placeholder="Título o descripción..."
-              class="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              class="mt-1 w-full rounded-lg border border-transparent bg-surface px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
             />
           </div>
-          <button type="submit" class="rounded-lg border border-lime bg-lime/15 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/25">
-            Filtrar
-          </button>
+<button type="submit" class="btn btn-secondary">
+          Filtrar
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+        </button>
         </form>
       </div>
 
       {filteredChallenges.length > 0 ? (
         <div class="space-y-3">
           {filteredChallenges.map((ch) => (
-            <article class="rounded-xl border border-border bg-surface p-4 shadow-[0_8px_24px_rgba(0,0,0,0.16)]">
+            <article class="rounded-xl border border-transparent bg-surface p-4 shadow-[0_8px_24px_rgba(0,0,0,0.16)]">
               <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div class="min-w-0 space-y-2">
                   <div class="flex flex-wrap items-center gap-2">
@@ -327,16 +333,16 @@ function tabUrl(nextView: string): string {
                     <p class="line-clamp-2 max-w-2xl text-sm text-muted">{ch.description}</p>
                   )}
                   <div class="flex flex-wrap items-center gap-2 text-xs">
-                    <span class="rounded-md border border-border bg-surface-2 px-2 py-1 text-muted">
+                    <span class="rounded-md border border-transparent bg-surface-2 px-2 py-1 text-muted">
                       Curso: <span class="text-white">{ch.courseTitle}</span>
                     </span>
-                    <span class="rounded-md border border-border bg-surface-2 px-2 py-1 text-muted">
+                    <span class="rounded-md border border-transparent bg-surface-2 px-2 py-1 text-muted">
                       Límite: <span class="text-white">{formatDeadline(ch.deadline)}</span>
                     </span>
                     <span class="rounded-md border border-lime/40 bg-lime/10 px-2 py-1 font-semibold text-lime">
                       {ch.points_reward} pts
                     </span>
-                    <span class="rounded-md border border-border bg-surface-2 px-2 py-1 text-muted">
+                    <span class="rounded-md border border-transparent bg-surface-2 px-2 py-1 text-muted">
                       Entregas: <span class="text-white">{ch.submissionsCount}</span>
                     </span>
                     {ch.pendingCount > 0 && (
@@ -348,26 +354,24 @@ function tabUrl(nextView: string): string {
                 </div>
 
                 <div class="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
-                  <a href={`/admin/submissions?challenge=${ch.id}`} class="inline-flex h-8 items-center rounded-lg border border-lime/40 bg-lime/10 px-3 text-xs font-medium text-lime transition hover:bg-lime/20">
-                    Ver submissions
-                  </a>
-                  <a href={`/admin/challenges/${ch.id}/edit`} class="inline-flex h-8 items-center rounded-lg border border-border bg-surface-2 px-3 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80">
-                    Editar
+                  <a href={`/admin/submissions?challenge=${ch.id}`} class="btn btn-secondary h-8 text-xs">Ver submissions</a>
+                  <a href={`/admin/challenges/${ch.id}/edit`} class="btn btn-ghost btn-icon h-8 w-8" title="Editar" aria-label="Editar">
+                    <i class="bi bi-pencil" aria-hidden="true"></i>
                   </a>
                   <form method="post" action="/api/admin/challenges" class="inline">
                     <input type="hidden" name="action" value="toggle" />
                     <input type="hidden" name="challenge_id" value={ch.id} />
                     <input type="hidden" name="redirect_to" value="/admin/challenges" />
-                    <button type="submit" title={ch.is_active ? 'Desactivar' : 'Activar'} class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-2 text-muted transition hover:border-lime/50 hover:bg-surface-2/80 hover:text-white" aria-label={ch.is_active ? 'Desactivar' : 'Activar'}>
-                      <i class={`bi text-lg ${ch.is_active ? 'bi-pause-circle' : 'bi-play-circle'}`} aria-hidden="true"></i>
+                    <button type="submit" title={ch.is_active ? 'Desactivar' : 'Activar'} class="btn btn-ghost btn-icon h-8 w-8" aria-label={ch.is_active ? 'Desactivar' : 'Activar'}>
+                      <i class={`bi ${ch.is_active ? 'bi-pause-circle' : 'bi-play-circle'}`} aria-hidden="true"></i>
                     </button>
                   </form>
                   <form method="post" action="/api/admin/challenges" class="inline" onsubmit="return confirm('¿Eliminar este reto?');">
                     <input type="hidden" name="action" value="delete" />
                     <input type="hidden" name="challenge_id" value={ch.id} />
                     <input type="hidden" name="redirect_to" value="/admin/challenges" />
-                    <button type="submit" title="Eliminar" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/5 text-red-400 transition hover:bg-red-500/15 hover:border-red-500/50" aria-label="Eliminar">
-                      <i class="bi bi-trash text-lg" aria-hidden="true"></i>
+                    <button type="submit" title="Eliminar" class="btn btn-danger btn-icon h-8 w-8" aria-label="Eliminar">
+                      <i class="bi bi-trash" aria-hidden="true"></i>
                     </button>
                   </form>
                 </div>
@@ -376,7 +380,7 @@ function tabUrl(nextView: string): string {
           ))}
         </div>
       ) : (
-        <p class="rounded-xl border border-dashed border-border bg-surface-2/60 p-6 text-center text-sm text-muted">
+        <p class="rounded-xl border border-dashed border-transparent bg-surface-2/60 p-6 text-center text-sm text-muted">
           {challenges.length === 0
             ? 'Aún no hay retos. Crea el primero con el formulario de arriba.'
             : 'No se encontraron retos con ese filtro.'}
@@ -384,7 +388,7 @@ function tabUrl(nextView: string): string {
       )}
     </div>
   </section>
-</AdminLayout>
+</DashboardLayout>
 
 <script is:inline>
   (function() {

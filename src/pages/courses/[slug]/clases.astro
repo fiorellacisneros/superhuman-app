@@ -1,0 +1,169 @@
+---
+import '../../../styles/global.css';
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+import { formatDayAndDate, formatTime } from '../../../lib/format-date';
+import { isLessonCompleted } from '../../../lib/lessons';
+
+const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const { slug: courseSlug } = Astro.params as { slug: string };
+if (!courseSlug) {
+  return Astro.redirect('/dashboard');
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role, timezone').eq('id', userId).maybeSingle();
+const roleFromClaims = (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role;
+const isAdmin = roleFromClaims === 'admin' || (userRow?.role as string) === 'admin';
+
+let course: { id: string; slug: string | null; title: string; description: string | null; cover_image: string | null } | null = null;
+const { data: bySlug } = await supabase
+  .from('courses')
+  .select('id, slug, title, description, cover_image')
+  .eq('slug', courseSlug)
+  .maybeSingle();
+if (bySlug) {
+  course = bySlug;
+} else {
+  const { data: byId } = await supabase
+    .from('courses')
+    .select('id, slug, title, description, cover_image')
+    .eq('id', courseSlug)
+    .maybeSingle();
+  course = byId;
+}
+if (!course) {
+  return Astro.redirect('/dashboard');
+}
+const resolvedCourseSlug = typeof course.slug === 'string' && course.slug.trim() ? course.slug.trim() : course.id;
+
+if (!isAdmin) {
+  const { data: enrollment } = await supabase
+    .from('enrollments')
+    .select('course_id, access_type')
+    .eq('user_id', userId)
+    .eq('course_id', course.id)
+    .maybeSingle();
+  if (!enrollment) {
+    return Astro.redirect('/dashboard');
+  }
+}
+
+const [{ data: modulesData }, { data: lessons }] = await Promise.all([
+  supabase.from('course_modules').select('id, title, order').eq('course_id', course.id).order('order', { ascending: true }),
+  supabase.from('lessons').select('id, title, order, scheduled_at, recording_url, ppt_url, module_id').eq('course_id', course.id).order('order', { ascending: true }),
+]);
+const modules = (modulesData ?? []) as { id: string; title: string; order: number }[];
+const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone ?? null;
+const now = Date.now();
+const lessonItems = (lessons ?? []).map((lesson) => {
+  const hasContent = Boolean((lesson.recording_url && String(lesson.recording_url).trim()) || (lesson.ppt_url && String(lesson.ppt_url).trim()));
+  const completed = hasContent ? true : isLessonCompleted(lesson.scheduled_at, now);
+  const available = hasContent || true;
+  return { ...lesson, completed, available, hasContent };
+});
+
+type LessonItem = (typeof lessonItems)[number];
+const moduleIds = new Set(modules.map((m) => m.id));
+const lessonsByModule: { moduleTitle: string; moduleId: string | null; lessons: LessonItem[] }[] = [];
+for (const mod of modules) {
+  const inModule = lessonItems.filter((l) => (l as LessonItem & { module_id?: string | null }).module_id === mod.id);
+  if (inModule.length > 0) {
+    lessonsByModule.push({ moduleTitle: mod.title, moduleId: mod.id, lessons: inModule });
+  }
+}
+const noModule = lessonItems.filter((l) => {
+  const mid = (l as LessonItem & { module_id?: string | null }).module_id;
+  return !mid || !moduleIds.has(mid);
+});
+if (noModule.length > 0) {
+  lessonsByModule.push({ moduleTitle: 'Sin módulo', moduleId: null, lessons: noModule });
+}
+---
+
+<DashboardLayout>
+  <section class="space-y-6">
+    <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
+      <span class="mx-1">/</span>
+      <a href="/courses" class="hover:text-white">Mis cursos</a>
+      <span class="mx-1">/</span>
+      <a href={`/courses/${resolvedCourseSlug}`} class="hover:text-white">{course.title}</a>
+      <span class="mx-1">/</span>
+      <span class="text-white">Clases</span>
+    </nav>
+
+    <div class="rounded-xl bg-surface p-4 sm:p-5">
+      <h1 class="text-lg font-semibold text-white">Clases</h1>
+      <p class="mt-0.5 text-xs text-muted">Desglose por módulo. Haz clic en una clase para ver el contenido.</p>
+      {lessons && lessons.length > 0 ? (
+        <div class="mt-6 space-y-8">
+          {lessonsByModule.map(({ moduleTitle, lessons: moduleLessons }) => (
+            <section>
+              <h2 class="mb-4 font-work-sans text-xl font-normal text-[#CCCCCC]">{moduleTitle}</h2>
+              <ul class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {moduleLessons.map((lesson) => {
+                  const isUpcoming = lesson.scheduled_at ? new Date(lesson.scheduled_at).getTime() > now : false;
+                  const canOpen = isAdmin || lesson.available;
+                  const href = isAdmin ? `/admin/courses/${course.id}/lessons/${lesson.id}/edit` : (canOpen ? `/courses/${resolvedCourseSlug}/lessons/${lesson.id}` : '#');
+                  return (
+                    <li>
+                      {canOpen ? (
+                        <a
+                          href={href}
+                          class={`flex items-center gap-3 rounded-xl border px-4 py-3 transition ${
+                            lesson.completed
+                              ? 'border-yellow bg-yellow/5 hover:bg-yellow/10'
+                              : 'border-transparent bg-[#262626] hover:border-[#012EDC]/50 hover:bg-[#333]'
+                          }`}
+                        >
+                          <span class={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${lesson.completed ? 'bg-yellow text-[#1A1A1A]' : 'bg-[#404040] text-muted'}`} aria-hidden="true">
+                            {lesson.completed ? (
+                              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                            ) : isUpcoming ? (
+                              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 7v5l3 2" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            ) : (
+                              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 6v12l9-6-9-6z" /></svg>
+                            )}
+                          </span>
+                          <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-medium text-white">{lesson.title}</p>
+                            {lesson.completed ? (
+                              <p class="mt-0.5 text-xs font-medium text-yellow">Completado</p>
+                            ) : (
+                              <p class="mt-0.5 text-xs text-muted">
+                                {isUpcoming && lesson.scheduled_at
+                                  ? `${formatDayAndDate(lesson.scheduled_at, userTimezone)} ${formatTime(lesson.scheduled_at, userTimezone)}`
+                                  : !lesson.hasContent ? 'Próximamente' : 'Por completar'}
+                              </p>
+                            )}
+                          </div>
+                        </a>
+                      ) : (
+                        <div class="flex items-center gap-3 rounded-xl bg-[#262626] px-4 py-3 opacity-75">
+                          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#404040] text-muted" aria-hidden="true">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                          </span>
+                          <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-medium text-white">{lesson.title}</p>
+                            <p class="mt-0.5 text-xs text-muted">Próximamente</p>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <p class="mt-4 text-sm text-muted">Aún no hay clases en este curso.</p>
+      )}
+    </div>
+  </section>
+</DashboardLayout>

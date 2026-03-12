@@ -1,6 +1,6 @@
 ---
 import '../../../styles/global.css';
-import AdminLayout from '../../../layouts/AdminLayout.astro';
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 import { avatarImagePath } from '../../../lib/avatars';
 
@@ -89,21 +89,21 @@ function formatDate(iso: string) {
 }
 ---
 
-<AdminLayout>
+<DashboardLayout>
   <section class="space-y-6">
     <header>
       <h1 class="text-2xl font-semibold tracking-tight text-white">Submissions</h1>
       <p class="mt-1 text-sm text-muted">Revisar y aprobar entregas de estudiantes.</p>
     </header>
 
-    <form method="get" action="/admin/submissions" class="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface p-4">
+    <form method="get" action="/admin/submissions" class="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-transparent bg-surface p-4">
       <div class="min-w-[260px] flex-1">
         <label for="challenge-filter" class="block text-xs font-medium text-muted">Filtrar por reto</label>
         <div class="custom-select custom-select--single relative mt-1" data-name="challenge">
           <input type="hidden" id="challenge-filter" name="challenge" value={challengeFilter} />
           <button
             type="button"
-            class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
             aria-expanded="false"
           >
             <span class="custom-select-label truncate">{selectedChallengeLabel}</span>
@@ -111,9 +111,9 @@ function formatDate(iso: string) {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
             </svg>
           </button>
-          <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-2xl">
+          <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-transparent bg-surface p-2 shadow-2xl">
             <button type="button" class={`custom-select-option flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${!challengeFilter ? 'bg-lime/10 text-lime' : 'text-white'}`} data-value="" data-label="— Todos los retos —">
-              <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${!challengeFilter ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+              <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${!challengeFilter ? 'border-lime bg-lime text-background' : 'border-transparent bg-surface-2 text-transparent'}`}>
                 <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
               </span>
               <span class="truncate">— Todos los retos —</span>
@@ -127,7 +127,7 @@ function formatDate(iso: string) {
                   data-value={c.id}
                   data-label={c.title}
                 >
-                  <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${isSelected ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                  <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${isSelected ? 'border-lime bg-lime text-background' : 'border-transparent bg-surface-2 text-transparent'}`}>
                     <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
                   </span>
                   <span class="truncate">{c.title}</span>
@@ -138,12 +138,15 @@ function formatDate(iso: string) {
         </div>
       </div>
       <input type="hidden" name="tab" value={tab} />
-      <button type="submit" class="rounded-lg border border-lime bg-lime/15 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/25">
-        Filtrar
+<button type="submit" class="btn btn-secondary">
+          Filtrar
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
       </button>
     </form>
 
-    <div class="flex flex-wrap gap-2 border-b border-border pb-2">
+    <div class="flex flex-wrap gap-2 border-b border-transparent pb-2">
       <a href={tabUrl('all')} class={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${tab === 'all' ? 'bg-lime/15 text-lime' : 'text-muted hover:text-white'}`}>Todos</a>
       <a href={tabUrl('pending')} class={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${tab === 'pending' ? 'bg-lime/15 text-lime' : 'text-muted hover:text-white'}`}>Pendientes</a>
       <a href={tabUrl('approved')} class={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${tab === 'approved' ? 'bg-lime/15 text-lime' : 'text-muted hover:text-white'}`}>Aprobados</a>
@@ -151,10 +154,10 @@ function formatDate(iso: string) {
     </div>
 
     {list.length > 0 ? (
-      <div class="-mx-2 overflow-x-auto rounded-xl border border-border bg-surface px-2 shadow-[0_8px_30px_rgba(0,0,0,0.18)] sm:mx-0 sm:px-0">
+      <div class="-mx-2 overflow-x-auto rounded-xl border border-transparent bg-surface px-2 shadow-[0_8px_30px_rgba(0,0,0,0.18)] sm:mx-0 sm:px-0">
         <table class="w-full min-w-[760px] text-left text-sm">
           <thead>
-            <tr class="border-b border-border bg-surface-2/40 text-muted">
+            <tr class="border-b border-transparent bg-surface-2/40 text-muted">
               <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Estudiante</th>
               <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Reto</th>
               <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Enlace</th>
@@ -165,10 +168,10 @@ function formatDate(iso: string) {
           </thead>
           <tbody>
             {list.map((s) => (
-              <tr class="border-b border-border/60 transition-colors hover:bg-surface-2/30 last:border-0">
+              <tr class="border-b border-transparent/60 transition-colors hover:bg-surface-2/30 last:border-0">
                 <td class="px-4 py-4">
                   <div class="flex items-center gap-2">
-                    <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-border bg-surface-2">
+                    <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-transparent bg-surface-2">
                       {avatarImagePath(s.avatar_id) ? (
                         <img src={avatarImagePath(s.avatar_id)!} alt="" class="h-full w-full object-cover" width="32" height="32" />
                       ) : (
@@ -200,10 +203,10 @@ function formatDate(iso: string) {
                   {!s.reviewed ? (
                     <a
                       href={`/admin/submissions/${s.id}`}
-                      class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-lime/50 bg-lime/10 px-3 text-xs font-medium text-lime transition hover:bg-lime/25"
+                      class="btn btn-primary"
                     >
-                      <i class="bi bi-eye" aria-hidden="true"></i>
                       Revisar
+                      <i class="bi bi-eye h-4 w-4" aria-hidden="true"></i>
                     </a>
                   ) : (
                     <span class="text-muted">—</span>
@@ -215,7 +218,7 @@ function formatDate(iso: string) {
         </table>
       </div>
     ) : (
-      <div class="rounded-xl border border-dashed border-border bg-surface-2/60 p-8 text-center">
+      <div class="rounded-xl border border-dashed border-transparent bg-surface-2/60 p-8 text-center">
         <p class="text-sm text-muted">
           {tab === 'all' && !challengeFilter && 'No hay submissions.'}
           {tab === 'all' && challengeFilter && 'No hay submissions para este reto.'}
@@ -226,4 +229,4 @@ function formatDate(iso: string) {
       </div>
     )}
   </section>
-</AdminLayout>
+</DashboardLayout>

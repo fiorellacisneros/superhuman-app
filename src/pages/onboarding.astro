@@ -62,7 +62,7 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
       </header>
 
       {showStep1 && (
-        <section class="rounded-2xl border border-border bg-surface p-6">
+        <section class="rounded-2xl border border-transparent bg-surface p-6">
           <form method="post" action="/api/onboarding" class="space-y-4">
             <input type="hidden" name="intent" value="display_name" />
             <label for="display_name" class="block text-sm font-medium text-white">
@@ -75,7 +75,7 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
               required
               autocomplete="name"
               placeholder="Tu nombre o apodo"
-              class="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              class="w-full rounded-xl border border-transparent bg-surface-2 px-4 py-3 text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
             />
             <button
               type="submit"
@@ -88,13 +88,13 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
       )}
 
       {showStep2 && (
-        <section class="rounded-2xl border border-border bg-surface p-6">
+        <section class="rounded-2xl border border-transparent bg-surface p-6">
           <p class="mb-4 text-sm text-muted">
             Elige tu avatar para el leaderboard. Podrás cambiarlo después.
           </p>
           <form method="post" action="/api/onboarding">
             <input type="hidden" name="intent" value="avatar" />
-            <div class="max-h-[min(60vh,400px)] overflow-y-auto rounded-xl border border-border bg-surface-2/50 p-2">
+            <div class="max-h-[min(60vh,400px)] overflow-y-auto rounded-xl border border-transparent bg-surface-2/50 p-2">
               <div class="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6">
               {avatarOptions.map((avatar, idx) => {
                 const isSelected = avatar.id === avatarId || (!avatarId && idx === 0);
@@ -107,7 +107,7 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
                       checked={isSelected}
                       class="peer sr-only"
                     />
-                    <div class="flex aspect-square items-center justify-center rounded-xl border border-border bg-surface-2 transition hover:border-lime/60 peer-checked:border-lime peer-checked:bg-lime/10 peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
+                    <div class="flex aspect-square items-center justify-center rounded-xl border border-transparent bg-surface-2 transition hover:border-lime/60 peer-checked:border-lime peer-checked:bg-lime/10 peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
                       <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-2 ring-1 ring-border">
                       <img
                         src={avatar.src}
