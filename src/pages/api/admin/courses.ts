@@ -45,6 +45,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const description = typeof formData.get('description') === 'string' ? String(formData.get('description')).trim().slice(0, 4000) || null : null;
   const cover_image = sanitizeCoverImage(formData.get('cover_image'));
   const zoom_link = sanitizeHttpUrl(formData.get('zoom_link'));
+  const ends_at_raw = formData.get('ends_at');
+  const ends_at = typeof ends_at_raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ends_at_raw.trim()) ? ends_at_raw.trim() : null;
+  const calendly_link_1to1 = sanitizeHttpUrl(formData.get('calendly_link_1to1'));
 
   if (action === 'create') {
     if (!title) {
@@ -132,10 +135,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    const update: { title?: string; description: string | null; cover_image: string | null; zoom_link: string | null } = {
+    const update: {
+      title?: string;
+      description: string | null;
+      cover_image: string | null;
+      zoom_link: string | null;
+      ends_at?: string | null;
+      calendly_link_1to1?: string | null;
+    } = {
       description,
       cover_image,
       zoom_link,
+      ends_at: ends_at ?? null,
+      calendly_link_1to1: calendly_link_1to1 ?? null,
     };
     if (title) update.title = title;
     await db.from('courses').update(update).eq('id', course_id.trim());

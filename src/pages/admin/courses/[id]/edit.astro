@@ -10,7 +10,8 @@ if (!isAuthenticated || !userId) {
 
 const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
-if ((userRow?.role as string) !== 'admin') {
+const role = (userRow?.role as string)?.toLowerCase?.() ?? '';
+if (role !== 'admin') {
   return Astro.redirect('/dashboard');
 }
 
@@ -20,7 +21,7 @@ if (!courseId) {
 }
 
 const [{ data: course }, { data: modulesData }] = await Promise.all([
-  supabase.from('courses').select('id, title, description, cover_image, zoom_link').eq('id', courseId).maybeSingle(),
+  supabase.from('courses').select('id, title, description, cover_image, zoom_link, ends_at, calendly_link_1to1').eq('id', courseId).maybeSingle(),
   supabase.from('course_modules').select('id, title, order').eq('course_id', courseId).order('order', { ascending: true }),
 ]);
 const modules = (modulesData ?? []) as { id: string; title: string; order: number }[];
@@ -29,8 +30,27 @@ if (!course) {
   return Astro.redirect('/admin/courses');
 }
 ---
+<script>
+  import flatpickr from 'flatpickr';
+  import { Spanish } from 'flatpickr/dist/l10n/es.js';
+  const init = () => {
+    const el = document.getElementById('edit-ends-at');
+    if (el) {
+      flatpickr(el, {
+        dateFormat: 'Y-m-d',
+        locale: Spanish,
+        allowInput: false,
+      });
+    }
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+</script>
 
-<DashboardLayout>
+<DashboardLayout role="admin">
   <section class="space-y-6">
     <nav class="text-sm text-muted">
       <a href="/dashboard" class="hover:text-white">Dashboard</a>
@@ -94,6 +114,35 @@ if (!course) {
           placeholder="https://zoom.us/j/..."
         />
         <p class="mt-1 text-[11px] text-muted">Se aplica a todas las clases del curso. Puedes sobrescribirlo en cada clase si hace falta.</p>
+      </div>
+      <div>
+        <label for="edit-ends-at" class="block text-xs font-medium text-muted">Fecha fin del curso</label>
+        <div class="relative mt-1">
+          <input
+            id="edit-ends-at"
+            type="text"
+            name="ends_at"
+            value={course.ends_at ? new Date(course.ends_at).toISOString().slice(0, 10) : ''}
+            readonly
+            autocomplete="off"
+            class="w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            placeholder="Elegir fecha"
+          />
+          <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
+        </div>
+        <p class="mt-1 text-[11px] text-muted">Después de esta fecha los alumnos no podrán agendar sesiones 1:1.</p>
+      </div>
+      <div>
+        <label for="edit-calendly-1to1" class="block text-xs font-medium text-muted">Link Calendly (sesiones 1:1)</label>
+        <input
+          id="edit-calendly-1to1"
+          type="url"
+          name="calendly_link_1to1"
+          value={course.calendly_link_1to1 ?? ''}
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="https://calendly.com/tu-usuario/1to1"
+        />
+        <p class="mt-1 text-[11px] text-muted">Cuando un alumno reserve en Calendly, regístralo manualmente en la página Sesiones 1:1 para que cuente en su cuota.</p>
       </div>
       <div class="flex gap-3">
         <button type="submit" class="btn btn-primary">
