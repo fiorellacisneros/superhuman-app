@@ -1,0 +1,367 @@
+---
+import '../../styles/global.css';
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+const role = (userRow?.role as string) ?? 'student';
+
+type Course1to1 = {
+  id: string;
+  title: string;
+  slug: string;
+  ends_at: string | null;
+  calendly_link_1to1: string | null;
+  bookingCount: number;
+  bookings: { id: string; scheduled_at: string; status: string; display_name?: string | null }[];
+  liveStudents?: { id: string; display_name: string }[];
+};
+
+const courses1to1: Course1to1[] = [];
+
+if (role === 'admin') {
+  const { data: allCourses } = await supabase
+    .from('courses')
+    .select('id, title, slug, ends_at, calendly_link_1to1')
+    .not('calendly_link_1to1', 'is', null);
+  const today = new Date().toISOString().slice(0, 10);
+  for (const c of allCourses ?? []) {
+    const endsAt = c.ends_at ? String(c.ends_at).slice(0, 10) : null;
+    if (endsAt && endsAt < today) continue;
+    const { count } = await supabase
+      .from('one_on_one_bookings')
+      .select('*', { count: 'exact', head: true })
+      .eq('course_id', c.id)
+      .in('status', ['scheduled', 'completed']);
+    const { data: bookings } = await supabase
+      .from('one_on_one_bookings')
+      .select('id, scheduled_at, status, users(display_name)')
+      .eq('course_id', c.id)
+      .order('scheduled_at', { ascending: false })
+      .limit(10);
+    const { data: liveEnrollments } = await supabase
+      .from('enrollments')
+      .select('user_id, users(id, display_name)')
+      .eq('course_id', c.id)
+      .neq('access_type', 'on_demand');
+    const liveStudents = (liveEnrollments ?? []).map((e) => {
+      const u = (e as { users?: { id: string; display_name: string | null } | null }).users;
+      return { id: u?.id ?? (e as { user_id: string }).user_id, display_name: u?.display_name ?? 'Sin nombre' };
+    });
+    courses1to1.push({
+      id: c.id,
+      title: (c.title as string) ?? 'Curso',
+      slug: (c.slug as string) ?? c.id,
+      ends_at: c.ends_at as string | null,
+      calendly_link_1to1: c.calendly_link_1to1 as string | null,
+      bookingCount: count ?? 0,
+      bookings: (bookings ?? []).map((b) => {
+        const u = (b as { users?: { display_name?: string | null } | null }).users;
+        return { id: b.id, scheduled_at: b.scheduled_at as string, status: b.status as string, display_name: u?.display_name ?? null };
+      }),
+      liveStudents,
+    });
+  }
+} else {
+  const { data: enrollments } = await supabase
+    .from('enrollments')
+    .select('course_id')
+    .eq('user_id', userId)
+    .neq('access_type', 'on_demand');
+  const liveCourseIds = (enrollments ?? []).map((r) => (r as { course_id: string }).course_id).filter(Boolean);
+  if (liveCourseIds.length > 0) {
+    const { data: courseRows } = await supabase
+      .from('courses')
+      .select('id, title, slug, ends_at, calendly_link_1to1')
+      .in('id', liveCourseIds)
+      .not('calendly_link_1to1', 'is', null);
+    const today = new Date().toISOString().slice(0, 10);
+    for (const c of courseRows ?? []) {
+      const endsAt = c.ends_at ? String(c.ends_at).slice(0, 10) : null;
+      if (endsAt && endsAt < today) continue;
+      const { count } = await supabase
+        .from('one_on_one_bookings')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('course_id', c.id)
+        .in('status', ['scheduled', 'completed']);
+      const { data: bookings } = await supabase
+        .from('one_on_one_bookings')
+        .select('id, scheduled_at, status')
+        .eq('user_id', userId)
+        .eq('course_id', c.id)
+        .order('scheduled_at', { ascending: false })
+        .limit(10);
+      courses1to1.push({
+        id: c.id,
+        title: (c.title as string) ?? 'Curso',
+        slug: (c.slug as string) ?? c.id,
+        ends_at: c.ends_at as string | null,
+        calendly_link_1to1: c.calendly_link_1to1 as string | null,
+        bookingCount: count ?? 0,
+        bookings: (bookings ?? []).map((b) => ({ id: b.id, scheduled_at: b.scheduled_at as string, status: b.status as string, display_name: null })),
+      });
+    }
+  }
+}
+
+function formatBookingDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch {
+    return iso;
+  }
+}
+
+const today = new Date().toISOString().slice(0, 10);
+const firstBadgeUrl =
+  (role !== 'admin' &&
+    courses1to1.find(
+      (c) => !(c.ends_at && c.ends_at < today) && c.bookingCount < 2 && c.calendly_link_1to1
+    )?.calendly_link_1to1) ?? null;
+---
+
+<DashboardLayout role={role === 'admin' ? 'admin' : 'student'}>
+  {firstBadgeUrl && (
+    <Fragment slot="head">
+      <link href="https://assets.calendly.com/assets/external/widget.css" rel="stylesheet" />
+    </Fragment>
+  )}
+  <section class="space-y-6">
+    <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
+      <span class="mx-1">/</span>
+      <span class="text-white">Sesiones 1:1</span>
+    </nav>
+
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Sesiones 1:1</h1>
+      <p class="mt-1 text-sm text-muted">
+        {role === 'admin'
+          ? 'Cursos con Calendly configurado. Los alumnos en vivo pueden reservar hasta 2 sesiones por curso mientras esté activo.'
+          : 'Tienes hasta 2 sesiones 1:1 por curso (en vivo). Reserva desde el enlace de Calendly antes de que termine el curso.'}
+      </p>
+    </header>
+
+    {courses1to1.length === 0 ? (
+      <div class="rounded-xl border border-transparent bg-surface p-6">
+        <p class="text-sm text-muted">
+          {role === 'admin'
+            ? 'No hay cursos con link de Calendly 1:1. Edita un curso y añade el enlace + fecha fin.'
+            : 'No tienes cursos en vivo con sesiones 1:1 disponibles, o el curso ya terminó.'}
+        </p>
+        {role === 'admin' && (
+          <p class="mt-3">
+            <a href="/admin/courses" class="btn btn-primary">
+              Ir a Cursos para editar
+            </a>
+          </p>
+        )}
+      </div>
+    ) : (
+      <ul class="space-y-4">
+        {courses1to1.map((course) => {
+          const today = new Date().toISOString().slice(0, 10);
+          const ended = course.ends_at ? course.ends_at < today : false;
+          const canBook = !ended && course.bookingCount < 2 && course.calendly_link_1to1;
+          return (
+            <li class="rounded-xl border border-transparent bg-surface p-5">
+              <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 class="font-semibold text-white">{course.title}</h2>
+                  {course.ends_at && (
+                    <p class="mt-0.5 text-xs text-muted">
+                      Curso hasta: {new Date(course.ends_at).toLocaleDateString('es', { dateStyle: 'long' })}
+                      {ended && <span class="ml-1 text-amber-400">(finalizado)</span>}
+                    </p>
+                  )}
+                  {role !== 'admin' && (
+                    <p class="mt-1 text-sm text-white/80">
+                      Sesiones usadas: <span class="font-medium text-lime">{course.bookingCount}/2</span>
+                    </p>
+                  )}
+                </div>
+                {canBook && (
+                  <button
+                    type="button"
+                    class="btn btn-primary shrink-0 calendly-open"
+                    data-calendly-url={course.calendly_link_1to1!}
+                    aria-label="Abrir Calendly para reservar sesión 1:1"
+                  >
+                    Reservar sesión 1:1
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                )}
+                {ended && role !== 'admin' && (
+                  <p class="text-xs text-muted shrink-0">Ya no puedes agendar; el curso terminó.</p>
+                )}
+                {!ended && role !== 'admin' && course.bookingCount >= 2 && (
+                  <div class="shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-left">
+                    <p class="text-sm font-medium text-amber-200">Ya usaste tus 2 sesiones 1:1 para este curso.</p>
+                    <p class="mt-1 text-xs text-muted">Si necesitas más ayuda, contáctanos directamente.</p>
+                  </div>
+                )}
+              </div>
+              {course.bookings.length > 0 && (
+                <div class="mt-4 border-t border-white/10 pt-4">
+                  <h3 class="text-xs font-medium text-muted">
+                    {role === 'admin' ? 'Últimas reservas del curso' : 'Tus reservas'}
+                  </h3>
+                  <ul class="mt-2 space-y-1.5">
+                    {course.bookings.map((b) => (
+                      <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background/60 px-3 py-2 text-sm">
+                        <div class="min-w-0">
+                          <span class="text-white">{formatBookingDate(b.scheduled_at)}</span>
+                          {role === 'admin' && b.display_name && <span class="ml-2 text-muted">· {b.display_name}</span>}
+                        </div>
+                        <span
+                          class={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                            b.status === 'scheduled' ? 'bg-lime/15 text-lime' : b.status === 'completed' ? 'bg-white/10 text-muted' : 'bg-red-500/15 text-red-400'
+                          }`}
+                        >
+                          {b.status === 'scheduled' ? 'Programada' : b.status === 'completed' ? 'Realizada' : 'Cancelada'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {role === 'admin' && course.liveStudents && course.liveStudents.length > 0 && (
+                <form method="post" action="/api/admin/one-on-one-bookings" class="mt-4 border-t border-white/10 pt-4">
+                  <input type="hidden" name="course_id" value={course.id} />
+                  <input type="hidden" name="redirect_to" value="/sesiones-1-1" />
+                  <h3 class="text-xs font-medium text-muted">Registrar reserva manual</h3>
+                  <p class="mt-0.5 text-[11px] text-muted">Cuando un alumno reserve en Calendly, anótala aquí para que cuente en su cuota.</p>
+                  <div class="mt-3 flex flex-wrap items-end gap-3">
+                    <div>
+                      <label for={`student-${course.id}`} class="block text-[11px] text-muted">Alumno</label>
+                      <select
+                        id={`student-${course.id}`}
+                        name="user_id"
+                        required
+                        class="mt-0.5 min-w-[180px] rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                      >
+                        <option value="">Elegir…</option>
+                        {course.liveStudents.map((s) => (
+                          <option value={s.id}>{s.display_name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label for={`date-${course.id}`} class="block text-[11px] text-muted">Fecha y hora</label>
+                      <div class="relative mt-0.5">
+                        <input
+                          id={`date-${course.id}`}
+                          type="text"
+                          name="scheduled_at"
+                          required
+                          readonly
+                          autocomplete="off"
+                          class="flatpickr-scheduled w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                          placeholder="Elegir fecha y hora"
+                        />
+                        <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
+                      </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                      Guardar reserva
+                    </button>
+                  </div>
+                </form>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    )}
+  </section>
+
+  {courses1to1.some((c) => c.calendly_link_1to1) && role !== 'admin' && (
+    <script is:inline src="https://assets.calendly.com/assets/external/widget.js" async></script>
+  )}
+  {courses1to1.some((c) => c.calendly_link_1to1) && role !== 'admin' && (
+    <script is:inline>
+      (function () {
+        function openCalendly(url) {
+          if (typeof window.Calendly !== 'undefined') {
+            window.Calendly.initPopupWidget({ url: url });
+            return;
+          }
+          var s = document.createElement('script');
+          s.src = 'https://assets.calendly.com/assets/external/widget.js';
+          s.async = true;
+          s.onload = function () {
+            window.Calendly.initPopupWidget({ url: url });
+          };
+          document.head.appendChild(s);
+        }
+        document.querySelectorAll('.calendly-open').forEach(function (btn) {
+          var url = btn.getAttribute('data-calendly-url');
+          if (url) btn.addEventListener('click', function () { openCalendly(url); });
+        });
+      })();
+    </script>
+  )}
+  {firstBadgeUrl && (
+    <script is:inline define:vars={{ firstBadgeUrl }}>
+      (function () {
+        var url = firstBadgeUrl;
+        var opts = {
+          url: url,
+          text: 'Reservar sesión 1:1',
+          color: '#FFBE00',
+          textColor: '#0D0D0D',
+          branding: true,
+        };
+        function initBadge() {
+          if (typeof window.Calendly !== 'undefined') {
+            window.Calendly.initBadgeWidget(opts);
+            return;
+          }
+          var s = document.createElement('script');
+          s.src = 'https://assets.calendly.com/assets/external/widget.js';
+          s.async = true;
+          s.onload = function () {
+            window.Calendly.initBadgeWidget(opts);
+          };
+          document.head.appendChild(s);
+        }
+        if (document.readyState === 'complete') initBadge();
+        else window.addEventListener('load', initBadge);
+      })();
+    </script>
+  )}
+
+  {role === 'admin' && (
+    <script>
+      import flatpickr from 'flatpickr';
+      import { Spanish } from 'flatpickr/dist/l10n/es.js';
+      const init = () => {
+        document.querySelectorAll('.flatpickr-scheduled').forEach((el) => {
+          if (el.dataset.flatpickrInit) return;
+          el.dataset.flatpickrInit = '1';
+          flatpickr(el, {
+            enableTime: true,
+            dateFormat: 'Y-m-d H:i',
+            locale: Spanish,
+            time_24hr: true,
+            allowInput: false,
+          });
+        });
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    </script>
+  )}
+</DashboardLayout>

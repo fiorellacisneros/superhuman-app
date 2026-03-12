@@ -10,7 +10,8 @@ if (!isAuthenticated || !userId) {
 
 const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
-if ((userRow?.role as string) !== 'admin') {
+const role = (userRow?.role as string)?.toLowerCase?.() ?? '';
+if (role !== 'admin') {
   return new Response(null, { status: 302, headers: { Location: '/dashboard' } });
 }
 
@@ -42,7 +43,7 @@ for (const c of coursesRows ?? []) {
 }
 ---
 
-<DashboardLayout>
+<DashboardLayout role="admin">
   <section class="space-y-8">
     <header>
       <h1 class="text-2xl font-semibold tracking-tight text-white">Cursos</h1>
@@ -165,7 +166,12 @@ for (const c of coursesRows ?? []) {
                     </svg>
                   </a>
                   <span class="inline-flex items-center gap-1" aria-label="Acciones">
-                    <a href={`/admin/courses/${course.id}/edit`} class="btn btn-ghost btn-icon" title="Editar" aria-label="Editar">
+                    <a
+                      href={`/admin/courses/${course.id}/edit`}
+                      class="btn btn-ghost btn-icon inline-flex cursor-pointer items-center justify-center border border-white/20 text-white/80 hover:border-white/40 hover:bg-white/10 hover:text-white"
+                      title="Editar"
+                      aria-label="Editar curso"
+                    >
                       <i class="bi bi-pencil" aria-hidden="true"></i>
                     </a>
                     <form method="post" action="/api/admin/courses" class="inline" id={`delete-course-form-${course.id}`}>
@@ -178,9 +184,9 @@ for (const c of coursesRows ?? []) {
                         data-confirm-label={course.title}
                         data-delete-form-id={`delete-course-form-${course.id}`}
                         data-delete-description="Se borrarán clases, inscripciones, retos y entregas."
-                        class="btn btn-danger btn-icon"
+                        class="btn btn-danger btn-icon inline-flex cursor-pointer items-center justify-center"
                         title="Eliminar"
-                        aria-label="Eliminar"
+                        aria-label="Eliminar curso"
                       >
                         <i class="bi bi-trash" aria-hidden="true"></i>
                       </button>
