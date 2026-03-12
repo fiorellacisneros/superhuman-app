@@ -13,6 +13,7 @@
     "@clerk/astro": "^3.0.1",
     "@clerk/backend": "^3.0.1",
     "@clerk/localizations": "^4.0.0",
+    "@clerk/ui": "^1.2.1",
     "@supabase/supabase-js": "^2.98.0",
     "@tailwindcss/postcss": "^4.2.1",
     "astro": "^5.17.1",
