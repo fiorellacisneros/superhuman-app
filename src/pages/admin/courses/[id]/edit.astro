@@ -1,6 +1,6 @@
 ---
 import '../../../../styles/global.css';
-import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../../lib/supabase';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
@@ -19,20 +19,22 @@ if (!courseId) {
   return Astro.redirect('/admin/courses');
 }
 
-const { data: course } = await supabase
-  .from('courses')
-  .select('id, title, description, cover_image, zoom_link')
-  .eq('id', courseId)
-  .maybeSingle();
+const [{ data: course }, { data: modulesData }] = await Promise.all([
+  supabase.from('courses').select('id, title, description, cover_image, zoom_link').eq('id', courseId).maybeSingle(),
+  supabase.from('course_modules').select('id, title, order').eq('course_id', courseId).order('order', { ascending: true }),
+]);
+const modules = (modulesData ?? []) as { id: string; title: string; order: number }[];
 
 if (!course) {
   return Astro.redirect('/admin/courses');
 }
 ---
 
-<AdminLayout>
+<DashboardLayout>
   <section class="space-y-6">
     <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
+      <span class="mx-1">/</span>
       <a href="/admin/courses" class="hover:text-white">Cursos</a>
       <span class="mx-1">/</span>
       <span class="text-white">{course.title}</span>
@@ -45,7 +47,7 @@ if (!course) {
       <p class="mt-1 text-sm text-muted">{course.title}</p>
     </header>
 
-    <form method="post" action="/api/admin/courses" class="max-w-xl space-y-4 rounded-xl border border-border bg-surface p-5">
+    <form method="post" action="/api/admin/courses" class="max-w-xl space-y-4 rounded-xl border border-transparent bg-surface p-5">
       <input type="hidden" name="action" value="update" />
       <input type="hidden" name="course_id" value={courseId} />
       <input type="hidden" name="redirect_to" value="/admin/courses" />
@@ -58,7 +60,7 @@ if (!course) {
           name="title"
           required
           value={course.title ?? ''}
-          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
         />
       </div>
       <div>
@@ -67,7 +69,7 @@ if (!course) {
           id="edit-description"
           name="description"
           rows={3}
-          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
         >{course.description ?? ''}</textarea>
       </div>
       <div>
@@ -77,7 +79,7 @@ if (!course) {
           type="text"
           name="cover_image"
           value={course.cover_image ?? ''}
-          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           placeholder="URL de la imagen (sube en Webflow y pega el enlace)"
         />
       </div>
@@ -88,25 +90,70 @@ if (!course) {
           type="url"
           name="zoom_link"
           value={course.zoom_link ?? ''}
-          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           placeholder="https://zoom.us/j/..."
         />
         <p class="mt-1 text-[11px] text-muted">Se aplica a todas las clases del curso. Puedes sobrescribirlo en cada clase si hace falta.</p>
       </div>
       <div class="flex gap-3">
-        <button
-          type="submit"
-          class="rounded-lg border border-lime bg-lime px-4 py-2 text-sm font-medium text-background transition hover:bg-lime/90"
-        >
+        <button type="submit" class="btn btn-primary">
           Guardar cambios
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
         </button>
-        <a
-          href="/admin/courses"
-          class="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:bg-surface-2/80"
-        >
-          Cancelar
-        </a>
+        <a href="/admin/courses" class="btn btn-ghost">Cancelar</a>
       </div>
     </form>
+
+    <div class="max-w-xl space-y-4 rounded-xl border border-transparent bg-surface p-5">
+      <h2 class="text-sm font-semibold text-white">Módulos del curso</h2>
+      <p class="text-xs text-muted">Crea módulos (ej. Intro, Maquetado) para agrupar las clases. Luego asigna cada clase a un módulo al crearla o editarla.</p>
+      {modules.length > 0 ? (
+        <ul class="space-y-2">
+          {modules.map((mod, i) => (
+            <li class="flex items-center gap-2 rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white">
+              <span class="text-muted">{i + 1}.</span>
+              <span>{mod.title}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="text-sm text-muted">Aún no hay módulos. Agrega uno abajo.</p>
+      )}
+      <form method="post" action="/api/admin/course-modules" class="flex flex-wrap items-end gap-3">
+        <input type="hidden" name="action" value="create" />
+        <input type="hidden" name="course_id" value={courseId} />
+        <input type="hidden" name="redirect_to" value={`/admin/courses/${courseId}/edit`} />
+        <div>
+          <label for="module-title" class="block text-xs font-medium text-muted">Nombre del módulo</label>
+          <input
+            id="module-title"
+            type="text"
+            name="title"
+            required
+            placeholder="Ej: Intro, Maquetado"
+            class="mt-1 w-48 rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          />
+        </div>
+        <div>
+          <label for="module-order" class="block text-xs font-medium text-muted">Orden</label>
+          <input
+            id="module-order"
+            type="number"
+            name="order"
+            value={modules.length}
+            min={0}
+            class="mt-1 w-20 rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          />
+        </div>
+        <button type="submit" class="btn btn-primary">
+          Agregar módulo
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+      </form>
+    </div>
   </section>
-</AdminLayout>
+</DashboardLayout>

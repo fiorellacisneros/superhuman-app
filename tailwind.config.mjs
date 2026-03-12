@@ -9,10 +9,13 @@ export default {
       },
       colors: {
         background: "#0D0D0D",
+        gray: "#404040",
         surface: "#141414",
         "surface-2": "#1A1A1A",
         border: "#262626",
-        lime: "#C6F135",
+        blue: "#012EDC",
+        yellow: "#FFBE00",
+        lime: "#FFBE00", /* alias para compatibilidad; mismo que yellow */
         white: "#FFFFFF",
         muted: "#737373",
       },

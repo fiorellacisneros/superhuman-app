@@ -53,7 +53,7 @@ function formatDate(iso: string) {
 <DashboardLayout role={role}>
   <section class="space-y-6">
     <nav class="text-sm text-muted">
-      <a href="/dashboard" class="hover:text-white">Panel</a>
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
       <span class="mx-1">/</span>
       <span class="text-white">Insignias</span>
     </nav>
@@ -68,7 +68,7 @@ function formatDate(iso: string) {
         {badges.map((b) => (
           <li
             class={`group rounded-xl border p-4 transition-colors ${
-              b.earned ? 'border-border bg-surface' : 'border-border bg-surface-2/60 opacity-50'
+              b.earned ? 'border-transparent bg-gray' : 'border-transparent bg-surface-2/60 opacity-50'
             }`}
           >
             <div class="flex items-start gap-4">
@@ -94,11 +94,14 @@ function formatDate(iso: string) {
         ))}
       </ul>
     ) : (
-      <div class="rounded-xl border border-dashed border-border bg-surface-2/60 p-8 text-center">
+      <div class="rounded-xl border border-dashed border-transparent bg-surface-2/60 p-8 text-center">
         <p class="text-sm font-medium text-white">Aún no hay insignias creadas.</p>
         <p class="mt-1 text-sm text-muted">Cuando existan insignias, aparecerán aquí para desbloquear.</p>
-        <a href="/dashboard" class="mt-4 inline-block rounded-lg border border-lime bg-lime/15 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/25">
-          Volver al panel
+        <a href="/dashboard" class="mt-4 inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Volver al dashboard
         </a>
       </div>
     )}

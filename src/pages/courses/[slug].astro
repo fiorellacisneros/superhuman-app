@@ -2,8 +2,24 @@
 import '../../styles/global.css';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+import { avatarImagePath } from '../../lib/avatars';
+import BadgeIcon from '../../components/BadgeIcon.astro';
+import BadgeOutline from '../../components/BadgeOutline.astro';
 import { formatDayAndDate, formatTime } from '../../lib/format-date';
 import { isLessonCompleted } from '../../lib/lessons';
+
+const iconMap: Record<string, string> = {
+  first_submission: 'first_submission',
+  on_time: 'on_time',
+  early_bird: 'early_bird',
+  streak_3: 'streak_3',
+  attendance_streak_3: 'attendance_streak_3',
+  first_attendance: 'first_attendance',
+  module_complete: 'module_complete',
+  night_owl: 'night_owl',
+  course_complete: 'course_complete',
+  manual: 'manual',
+};
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -55,11 +71,51 @@ if (!isAdmin) {
   isOnDemand = (enrollment.access_type as string) === 'on_demand';
 }
 
-const { data: lessons } = await supabase
-  .from('lessons')
-  .select('id, title, order, scheduled_at, recording_url, ppt_url')
+const [{ data: modulesData }, { data: lessons }] = await Promise.all([
+  supabase
+    .from('course_modules')
+    .select('id, title, order')
+    .eq('course_id', course.id)
+    .order('order', { ascending: true }),
+  supabase
+    .from('lessons')
+    .select('id, title, order, scheduled_at, recording_url, ppt_url, module_id')
+    .eq('course_id', course.id)
+    .order('order', { ascending: true }),
+]);
+const modules = (modulesData ?? []) as { id: string; title: string; order: number }[];
+
+// Desafíos y puntos por curso
+let courseChallengesCompleted = 0;
+let courseChallengesTotal = 0;
+let coursePoints = 0;
+
+const { data: courseChallenges } = await supabase
+  .from('challenges')
+  .select('id')
   .eq('course_id', course.id)
-  .order('order', { ascending: true });
+  .eq('is_active', true);
+const challengeIds = (courseChallenges ?? []).map((c) => (c as { id: string }).id);
+courseChallengesTotal = challengeIds.length;
+
+if (challengeIds.length > 0) {
+  const { data: mySubs } = await supabase
+    .from('submissions')
+    .select('challenge_id, user_id, approved')
+    .eq('user_id', userId)
+    .eq('approved', true)
+    .in('challenge_id', challengeIds);
+  const completedSet = new Set((mySubs ?? []).map((s) => (s as { challenge_id: string }).challenge_id));
+  courseChallengesCompleted = completedSet.size;
+}
+
+// Puntos específicos de este curso para el usuario actual
+const { data: myCoursePointsRows } = await supabase
+  .from('user_course_points')
+  .select('points')
+  .eq('user_id', userId)
+  .eq('course_id', course.id);
+coursePoints = (myCoursePointsRows ?? []).reduce((acc, row) => acc + ((row as { points: number | null }).points ?? 0), 0);
 
 const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone ?? null;
 const totalLessons = (lessons ?? []).length;
@@ -82,123 +138,257 @@ const lessonItems = (lessons ?? []).map((lesson) => {
     hasContent,
   };
 });
+
+// Agrupar clases por módulo: primero cada módulo en orden, luego las sin módulo
+type LessonItem = typeof lessonItems[number];
+const moduleIds = new Set(modules.map((m) => m.id));
+const lessonsByModule: { moduleTitle: string; moduleId: string | null; lessons: LessonItem[] }[] = [];
+for (const mod of modules) {
+  const inModule = lessonItems.filter((l) => (l as LessonItem & { module_id?: string | null }).module_id === mod.id);
+  if (inModule.length > 0) {
+    lessonsByModule.push({ moduleTitle: mod.title, moduleId: mod.id, lessons: inModule });
+  }
+}
+const noModule = lessonItems.filter((l) => {
+  const mid = (l as LessonItem & { module_id?: string | null }).module_id;
+  return !mid || !moduleIds.has(mid);
+});
+if (noModule.length > 0) {
+  lessonsByModule.push({ moduleTitle: 'Sin módulo', moduleId: null, lessons: noModule });
+}
+
+// Próximas sesiones para la card del dashboard (solo preview; el desglose completo está en /clases)
+const upcomingSessionsPreview = (lessons ?? [])
+  .filter((l) => l.scheduled_at && new Date(l.scheduled_at).getTime() >= now)
+  .sort((a, b) => new Date(a.scheduled_at!).getTime() - new Date(b.scheduled_at!).getTime())
+  .slice(0, 5)
+  .map((l) => ({ id: l.id, title: l.title, scheduled_at: l.scheduled_at! }));
+const nextMonthLabel =
+  upcomingSessionsPreview.length > 0
+    ? (() => {
+        const d = new Date(upcomingSessionsPreview[0].scheduled_at);
+        const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        return `${months[d.getMonth()]} de ${d.getFullYear()}`;
+      })()
+    : '';
+
+// Ranking del curso: inscritos con sus puntos en este curso
+let courseLeaderboard: { id: string; name: string; avatarId: string | null; points: number }[] = [];
+const { data: enrollmentsData } = await supabase.from('enrollments').select('user_id').eq('course_id', course.id);
+const enrolledUserIds = [...new Set((enrollmentsData ?? []).map((r) => (r as { user_id: string }).user_id).filter(Boolean))];
+if (enrolledUserIds.length > 0) {
+  const [{ data: pointsData }, { data: usersData }] = await Promise.all([
+    supabase.from('user_course_points').select('user_id, points').eq('course_id', course.id).in('user_id', enrolledUserIds),
+    supabase.from('users').select('id, display_name, avatar_id').in('id', enrolledUserIds),
+  ]);
+  const pointsByUser = new Map<string, number>();
+  for (const row of pointsData ?? []) {
+    const uid = (row as { user_id: string; points: number }).user_id;
+    const pts = (row as { user_id: string; points: number }).points ?? 0;
+    pointsByUser.set(uid, (pointsByUser.get(uid) ?? 0) + pts);
+  }
+  const usersRows = (usersData ?? []) as { id: string; display_name: string | null; avatar_id: string | null }[];
+  courseLeaderboard = usersRows
+    .map((u) => ({ id: u.id, name: u.display_name ?? 'Sin nombre', avatarId: u.avatar_id, points: pointsByUser.get(u.id) ?? 0 }))
+    .filter((u) => u.points > 0)
+    .sort((a, b) => b.points - a.points);
+  if (courseLeaderboard.length === 0) {
+    courseLeaderboard = usersRows
+      .map((u) => ({ id: u.id, name: u.display_name ?? 'Sin nombre', avatarId: u.avatar_id, points: pointsByUser.get(u.id) ?? 0 }))
+      .sort((a, b) => b.points - a.points);
+  }
+}
+
+// Badges: mismas insignias que en el dashboard (globales), para mostrar en contexto del curso
+type CourseBadge = { id: string; name: string; description: string | null; condition_type: string | null; earned: boolean; earned_at: string | null; earnedCount: number };
+let courseBadges: CourseBadge[] = [];
+const [{ data: badgeRows }, { data: earnedRows }] = await Promise.all([
+  supabase.from('badges').select('id, name, description, condition_type').order('name'),
+  supabase.from('user_badges').select('badge_id, earned_at').eq('user_id', userId),
+]);
+const earnedSet = new Set((earnedRows ?? []).map((e) => (e as { badge_id: string }).badge_id));
+const earnedAtMap = new Map((earnedRows ?? []).map((e) => [(e as { badge_id: string }).badge_id, (e as { earned_at: string }).earned_at]));
+const earnedCountMap = new Map<string, number>();
+for (const row of earnedRows ?? []) {
+  const id = (row as { badge_id: string }).badge_id;
+  earnedCountMap.set(id, (earnedCountMap.get(id) ?? 0) + 1);
+}
+courseBadges = (badgeRows ?? []).map((b) => ({
+  id: b.id,
+  name: (b as { name: string | null }).name ?? 'Insignia',
+  description: (b as { description: string | null }).description ?? null,
+  condition_type: (b as { condition_type: string | null }).condition_type ?? null,
+  earned: earnedSet.has(b.id),
+  earned_at: earnedAtMap.get(b.id) ?? null,
+  earnedCount: earnedCountMap.get(b.id) ?? 0,
+}));
 ---
 
 <DashboardLayout>
   <section class="space-y-6">
     <nav class="text-sm text-muted">
-      <a href="/dashboard" class="hover:text-white">Panel</a>
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
+      <span class="mx-1">/</span>
+      <a href="/courses" class="hover:text-white">Mis cursos</a>
       <span class="mx-1">/</span>
       <span class="text-white">{course.title}</span>
     </nav>
 
-    <div class="overflow-hidden rounded-xl border border-border">
-      <div class="relative h-[180px] w-full overflow-hidden bg-surface-2 sm:h-[200px]">
-        {course.cover_image ? (
-          <img
-            src={course.cover_image.startsWith('http') ? course.cover_image : `/courses/${course.cover_image}`}
-            alt=""
-            class="h-full w-full object-cover"
-            width="1200"
-            height="200"
-          />
-        ) : (
-          <div class="flex h-full w-full items-center justify-center text-muted">
-            <svg class="h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
+    <!-- Dos columnas: izquierda = progreso+contenido; derecha = ranking desde arriba -->
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px] lg:items-start">
+      <div class="min-w-0 space-y-6">
+        <div class="overflow-hidden rounded-xl">
+          <div class="group relative h-[180px] w-full overflow-hidden bg-surface-2 sm:h-[200px]">
+            {course.cover_image ? (
+              <img
+                src={course.cover_image.startsWith('http') ? course.cover_image : `/courses/${course.cover_image}`}
+                alt=""
+                class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                width="1200"
+                height="200"
+              />
+            ) : (
+              <div class="flex h-full w-full items-center justify-center text-muted">
+                <svg class="h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+            )}
+            <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" aria-hidden="true" />
+            <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-5">
+              <h1 class="text-xl font-semibold tracking-tight text-white drop-shadow sm:text-2xl">{course.title}</h1>
+              {course.description && (
+                <p class="mt-1 max-w-2xl text-sm text-white/90 drop-shadow">{course.description}</p>
+              )}
+            </div>
           </div>
-        )}
-        <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" aria-hidden="true" />
-        <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-5">
-          <h1 class="text-xl font-semibold tracking-tight text-white drop-shadow sm:text-2xl">{course.title}</h1>
-          {course.description && (
-            <p class="mt-1 max-w-2xl text-sm text-white/90 drop-shadow">{course.description}</p>
+          <div class="flex flex-wrap items-center gap-4 bg-surface px-4 py-3 sm:px-5">
+            <div class="min-w-0 flex-1">
+              <p class="text-xs text-muted">{completedLessons} de {totalLessons} clases completadas</p>
+              <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
+                <div
+                  class="h-full rounded-full bg-lime transition-all duration-300"
+                  style={`width: ${totalLessons ? (completedLessons / totalLessons) * 100 : 0}%`}
+                />
+              </div>
+            </div>
+            <a
+              href={`/courses/${resolvedCourseSlug}/clases`}
+              class="inline-flex shrink-0 items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+            >
+              Ver curso
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          </div>
+        </div>
+        <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+          <div class="flex min-w-0 flex-col rounded-xl bg-[#012EDC] p-3 sm:p-5">
+            <dt class="font-manrope text-2xl font-semibold text-white">Desafíos</dt>
+            <dd class="mt-8 flex items-baseline gap-0.5">
+              <span class="font-manrope text-2xl font-semibold leading-none text-white sm:text-[48px]">{courseChallengesCompleted}</span>
+              <span class="font-manrope text-2xl font-semibold leading-none text-[#436AFE] sm:text-[48px]">/{courseChallengesTotal}</span>
+            </dd>
+          </div>
+          <div class="flex min-w-0 flex-col rounded-xl bg-[#F5B800] p-3 sm:p-5">
+            <dt class="font-manrope text-2xl font-semibold text-[#1A1A1A]">Puntos</dt>
+            <dd class="mt-8 font-manrope text-2xl font-semibold leading-none text-[#1A1A1A] sm:text-[48px]">{coursePoints}</dd>
+          </div>
+        </dl>
+
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div class="rounded-xl p-4 sm:p-5" style="background-color: #D6D6D6;">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <h2 class="font-manrope text-xl font-semibold text-[#1A1A1A] sm:text-2xl">Sesiones</h2>
+                {nextMonthLabel && <p class="mt-0.5 text-xs text-[#404040]">{nextMonthLabel}</p>}
+              </div>
+              <a
+                href={`/courses/${resolvedCourseSlug}/clases`}
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#012EDC] transition hover:bg-[#012EDC]/15"
+                title="Ver todas las clases"
+                aria-label="Ver todas las clases"
+              >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
+            {upcomingSessionsPreview.length > 0 ? (
+              <ul class="mt-3 max-h-[220px] space-y-2 overflow-y-auto py-1 pr-1" style="scrollbar-color: #404040 transparent;">
+                {upcomingSessionsPreview.map((s, idx) => {
+                  const isNext = idx === 0;
+                  return (
+                  <li>
+                    <a
+                      href={`/courses/${resolvedCourseSlug}/lessons/${s.id}`}
+                      class={`block rounded-lg px-3 py-2.5 transition hover:opacity-90 ${isNext ? 'border-l-4 border-l-[#012EDC]' : ''}`}
+                      style="background-color: #FFFFFF;"
+                    >
+                      <p class="text-[11px] font-medium text-[#404040]">
+                        {formatDayAndDate(s.scheduled_at, userTimezone)} {formatTime(s.scheduled_at, userTimezone)}
+                      </p>
+                      <p class="mt-0.5 text-sm font-medium text-[#1A1A1A]">{s.title}</p>
+                      <p class="mt-0.5 text-xs text-[#737373]">{course.title}</p>
+                    </a>
+                  </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p class="mt-3 text-sm text-[#404040]">No hay sesiones próximas.</p>
+            )}
+          </div>
+
+          <div class="flex min-h-0 flex-col rounded-[24px] bg-background p-5" style="min-height: 0;">
+            <h2 class="font-manrope text-xl font-semibold text-white sm:text-2xl">Badges</h2>
+            <p class="mt-0.5 text-xs text-muted">Completa lecciones y desafíos.</p>
+            {courseBadges.length > 0 ? (
+              <ul class="mt-4 grid max-h-[220px] min-h-0 grid-cols-3 gap-3 overflow-y-auto py-1 pr-1" style="scrollbar-color: #404040 transparent;">
+                {courseBadges.map((b) => (
+                  <li class="group flex min-w-0 flex-col items-center rounded-xl transition-colors">
+                    <BadgeOutline id={b.id} variant={b.earned ? 'earned' : 'unearned'} count={b.earnedCount > 0 ? b.earnedCount : undefined}>
+                      <BadgeIcon
+                        icon={iconMap[b.condition_type ?? ''] ?? 'manual'}
+                        class={`transition-transform duration-200 group-hover:scale-110 ${b.earned ? 'text-[#012EDC]' : 'text-[#595959]'}`}
+                      />
+                    </BadgeOutline>
+                    <p class="mt-2 min-w-0 max-w-full truncate text-center font-work-sans text-xs font-normal text-white" title={b.name}>{b.name}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p class="mt-3 text-sm text-muted">No hay insignias definidas aún.</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <aside>
+        <div class="rounded-xl bg-surface p-4">
+          <h2 class="font-manrope text-xl font-semibold text-white sm:text-2xl">Ranking {course.title}</h2>
+          <p class="mt-0.5 text-[10px] text-muted">Puntos de este curso.</p>
+          {courseLeaderboard.length > 0 ? (
+            <ul class="mt-3 space-y-1.5">
+              {courseLeaderboard.map((u, i) => (
+                <li class="flex items-center gap-2 rounded-lg bg-background px-2 py-1.5">
+                  <span class={`w-5 shrink-0 text-[10px] font-semibold ${i === 0 ? 'text-lime' : 'text-muted'}`}>{i + 1}º</span>
+                  <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-surface-2">
+                    <img src={avatarImagePath(u.avatarId) ?? '/avatars/avatar-01.png'} alt="" class="h-full w-full object-cover" width="32" height="32" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-[11px] font-medium text-white" title={u.name}>{u.name}</p>
+                    <p class="text-[10px] font-semibold text-lime">{u.points} pts</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p class="mt-3 text-xs text-muted">Sin puntos aún en este curso.</p>
           )}
         </div>
-      </div>
-      <div class="border-t border-border bg-surface px-4 py-3 sm:px-5">
-        <p class="text-xs text-muted">{completedLessons} de {totalLessons} clases completadas</p>
-        <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
-          <div
-            class="h-full rounded-full bg-lime transition-all duration-300"
-            style={`width: ${totalLessons ? (completedLessons / totalLessons) * 100 : 0}%`}
-          />
-        </div>
-      </div>
-    </div>
-
-    <div class="rounded-xl border border-border bg-surface p-4 sm:p-5">
-      <h2 class="text-sm font-semibold text-white">Clases</h2>
-      {lessons && lessons.length > 0 ? (
-        <ul class="mt-4 space-y-2">
-          {lessonItems.map((lesson) => {
-            const completed = lesson.completed;
-            const isUpcoming = !isOnDemand && lesson.scheduled_at ? new Date(lesson.scheduled_at).getTime() > now : false;
-            const canOpen = isAdmin || lesson.available;
-            const href = isAdmin ? `/admin/courses/${course.id}/lessons/${lesson.id}/edit` : (canOpen ? `/courses/${resolvedCourseSlug}/lessons/${lesson.id}` : '#');
-            return (
-              <li>
-                {canOpen ? (
-                  <a
-                    href={href}
-                    class={`flex items-center gap-3 rounded-lg border px-4 py-3 transition ${
-                      completed
-                        ? 'border-lime/40 bg-lime/10 hover:bg-lime/15'
-                        : 'border-border bg-surface-2/60 hover:border-lime/40 hover:bg-surface-2'
-                    }`}
-                  >
-                    <span class={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${completed ? 'border-lime/40 bg-lime/15 text-lime' : 'border-border bg-surface text-muted'}`} aria-hidden="true">
-                      {completed ? (
-                        <svg class="h-4 w-4 text-lime" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : isUpcoming ? (
-                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 7v5l3 2" />
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      ) : (
-                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 6v12l9-6-9-6z" />
-                        </svg>
-                      )}
-                    </span>
-                    <div class="min-w-0 flex-1">
-                      <p class="truncate text-sm font-medium text-white">{lesson.title}</p>
-                      {completed ? (
-                        <p class="text-[11px] font-medium text-lime">Completada</p>
-                      ) : (
-                        <p class="text-[11px] text-muted">
-                          {isUpcoming && lesson.scheduled_at
-                            ? `${formatDayAndDate(lesson.scheduled_at, userTimezone)} · ${formatTime(lesson.scheduled_at, userTimezone)}`
-                            : isOnDemand && !lesson.hasContent
-                              ? 'Próximamente'
-                              : 'Por completar'}
-                        </p>
-                      )}
-                    </div>
-                  </a>
-                ) : (
-                  <div class="flex items-center gap-3 rounded-lg border border-border bg-surface-2/40 px-4 py-3 opacity-75">
-                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-muted" aria-hidden="true">
-                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                    </span>
-                    <div class="min-w-0 flex-1">
-                      <p class="truncate text-sm font-medium text-muted">{lesson.title}</p>
-                      <p class="text-[11px] text-muted">Próximamente (grabación o PPT)</p>
-                    </div>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p class="mt-4 text-sm text-muted">Aún no hay clases en este curso.</p>
-      )}
+      </aside>
     </div>
   </section>
 </DashboardLayout>

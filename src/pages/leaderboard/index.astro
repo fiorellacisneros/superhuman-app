@@ -85,7 +85,7 @@ const topScore = Math.max(1, ...rows.map((r) => r.points));
 <DashboardLayout role={role === 'admin' ? 'admin' : 'student'}>
   <section class="space-y-6">
     <nav class="text-sm text-muted">
-      <a href="/dashboard" class="hover:text-white">Panel</a>
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
       <span class="mx-1">/</span>
       <span class="text-white">Ranking</span>
     </nav>
@@ -103,7 +103,7 @@ const topScore = Math.max(1, ...rows.map((r) => r.points));
         <form method="get" action="/leaderboard" class="relative w-full sm:w-56">
           <select
             name="course"
-            class="w-full cursor-pointer appearance-none rounded-lg border border-border bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            class="w-full cursor-pointer appearance-none rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
             onchange="this.form.submit()"
           >
             {enrolledCourses.map((c) => (
@@ -118,7 +118,7 @@ const topScore = Math.max(1, ...rows.map((r) => r.points));
     </header>
 
     {rows.length > 0 ? (
-      <div class="rounded-xl border border-border bg-surface overflow-hidden">
+      <div class="rounded-xl border border-transparent bg-gray overflow-hidden">
         <ul class="divide-y divide-border">
           {rows.map((r, i) => {
             const pct = topScore ? (r.points / topScore) * 100 : 0;
@@ -126,7 +126,7 @@ const topScore = Math.max(1, ...rows.map((r) => r.points));
             return (
               <li class={`flex items-center gap-4 px-4 py-3 ${isCurrentUser ? 'border-l-4 border-l-lime bg-lime/5' : ''}`}>
                 <span class="w-8 shrink-0 text-sm font-semibold text-muted">{i + 1}</span>
-                <div class="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-border bg-surface-2">
+                <div class="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-transparent bg-surface-2">
                   {avatarImagePath(r.avatar_id) ? (
                     <img src={avatarImagePath(r.avatar_id)!} alt="" class="h-full w-full object-cover" width="40" height="40" />
                   ) : (
@@ -151,7 +151,7 @@ const topScore = Math.max(1, ...rows.map((r) => r.points));
         </ul>
       </div>
     ) : (
-      <div class="rounded-xl border border-dashed border-border bg-surface-2/60 p-8 text-center">
+      <div class="rounded-xl border border-dashed border-transparent bg-surface-2/60 p-8 text-center">
         <p class="text-sm font-medium text-white">
           {enrolledCourseIds.length === 0
             ? 'No estás inscrito en ningún curso.'
@@ -162,8 +162,11 @@ const topScore = Math.max(1, ...rows.map((r) => r.points));
             ? 'El ranking muestra a los estudiantes de tus cursos. Inscríbete en un curso para verlo.'
             : 'Los puntos aparecerán cuando alguien complete retos o asista a clases.'}
         </p>
-        <a href="/dashboard" class="mt-4 inline-block rounded-lg border border-lime bg-lime/15 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/25">
-          Volver al panel
+        <a href="/dashboard" class="mt-4 inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Volver al dashboard
         </a>
       </div>
     )}

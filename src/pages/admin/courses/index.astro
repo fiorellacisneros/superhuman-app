@@ -1,6 +1,6 @@
 ---
 import '../../../styles/global.css';
-import AdminLayout from '../../../layouts/AdminLayout.astro';
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
@@ -42,14 +42,14 @@ for (const c of coursesRows ?? []) {
 }
 ---
 
-<AdminLayout>
+<DashboardLayout>
   <section class="space-y-8">
     <header>
       <h1 class="text-2xl font-semibold tracking-tight text-white">Cursos</h1>
       <p class="mt-1 text-sm text-muted">Crear y editar cursos y sus clases.</p>
     </header>
 
-    <div class="rounded-xl border border-border bg-surface">
+    <div class="rounded-xl border border-transparent bg-surface">
       <button
         type="button"
         id="toggle-create-course"
@@ -62,7 +62,7 @@ for (const c of coursesRows ?? []) {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-      <div id="create-course-form" class="hidden border-t border-border px-5 pb-5 pt-4" role="region">
+      <div id="create-course-form" class="hidden border-t border-transparent px-5 pb-5 pt-4" role="region">
         <form method="post" action="/api/admin/courses" class="space-y-4">
           <input type="hidden" name="action" value="create" />
           <input type="hidden" name="redirect_to" value="/admin/courses" />
@@ -73,7 +73,7 @@ for (const c of coursesRows ?? []) {
               type="text"
               name="title"
               required
-              class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
               placeholder="Ej: Introducción a Webflow"
             />
           </div>
@@ -83,7 +83,7 @@ for (const c of coursesRows ?? []) {
               id="course-description"
               name="description"
               rows={3}
-              class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
               placeholder="Breve descripción del curso"
             />
           </div>
@@ -93,7 +93,7 @@ for (const c of coursesRows ?? []) {
               id="course-cover"
               type="text"
               name="cover_image"
-              class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
               placeholder="URL de la imagen (sube en Webflow y pega el enlace)"
             />
           </div>
@@ -103,16 +103,16 @@ for (const c of coursesRows ?? []) {
               id="course-zoom-link"
               type="url"
               name="zoom_link"
-              class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
               placeholder="https://zoom.us/j/..."
             />
             <p class="mt-1 text-[11px] text-muted">Se aplica a todas las clases. Puedes sobrescribirlo en cada clase si hace falta.</p>
           </div>
-          <button
-            type="submit"
-            class="rounded-lg border border-lime bg-lime px-4 py-2 text-sm font-medium text-background transition hover:bg-lime/90"
-          >
+          <button type="submit" class="btn btn-primary">
             Crear curso
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            </svg>
           </button>
         </form>
       </div>
@@ -123,9 +123,9 @@ for (const c of coursesRows ?? []) {
       {courses.length > 0 ? (
         <ul class="space-y-4">
           {courses.map((course) => (
-            <li class="rounded-xl border border-border bg-surface p-4">
+            <li class="rounded-xl border border-transparent bg-surface p-4">
               <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
-                <div class="h-20 w-32 shrink-0 overflow-hidden rounded-lg border border-border bg-surface-2">
+                <div class="h-20 w-32 shrink-0 overflow-hidden rounded-lg border border-transparent bg-surface-2">
                   {course.cover_image ? (
                     <img
                       src={course.cover_image.startsWith('http') ? course.cover_image : `/courses/${course.cover_image}`}
@@ -151,58 +151,54 @@ for (const c of coursesRows ?? []) {
                     {course.lessonsCount} clases · {course.enrolledCount} inscritos
                   </p>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                  <a
-                    href={`/admin/courses/${course.id}/edit`}
-                    class="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80"
-                  >
-                    Editar
-                  </a>
-                  <a
-                    href={`/courses/${course.slug}`}
-                    class="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80"
-                  >
+                <div class="flex flex-wrap items-center gap-2">
+                  <a href={`/courses/${course.slug}`} class="btn btn-primary">
                     Ver curso
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
                   </a>
-                  <a
-                    href={`/admin/courses/${course.id}/lessons/new`}
-                    class="rounded-lg border border-lime bg-lime/15 px-3 py-2 text-xs font-medium text-lime transition hover:bg-lime/25"
-                  >
+                  <a href={`/admin/courses/${course.id}/lessons/new`} class="btn btn-secondary">
                     Agregar clase
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
                   </a>
-                  <form
-                    method="post"
-                    action="/api/admin/courses"
-                    class="inline"
-                    id={`delete-course-form-${course.id}`}
-                  >
-                    <input type="hidden" name="action" value="delete" />
-                    <input type="hidden" name="course_id" value={course.id} />
-                    <input type="hidden" name="redirect_to" value="/admin/courses" />
-                    <button
-                      type="button"
-                      data-delete-confirm
-                      data-confirm-label={course.title}
-                      data-delete-form-id={`delete-course-form-${course.id}`}
-                      data-delete-description="Se borrarán clases, inscripciones, retos y entregas."
-                      class="rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-400 transition hover:bg-red-500/20"
-                    >
-                      Eliminar
-                    </button>
-                  </form>
+                  <span class="inline-flex items-center gap-1" aria-label="Acciones">
+                    <a href={`/admin/courses/${course.id}/edit`} class="btn btn-ghost btn-icon" title="Editar" aria-label="Editar">
+                      <i class="bi bi-pencil" aria-hidden="true"></i>
+                    </a>
+                    <form method="post" action="/api/admin/courses" class="inline" id={`delete-course-form-${course.id}`}>
+                      <input type="hidden" name="action" value="delete" />
+                      <input type="hidden" name="course_id" value={course.id} />
+                      <input type="hidden" name="redirect_to" value="/admin/courses" />
+                      <button
+                        type="button"
+                        data-delete-confirm
+                        data-confirm-label={course.title}
+                        data-delete-form-id={`delete-course-form-${course.id}`}
+                        data-delete-description="Se borrarán clases, inscripciones, retos y entregas."
+                        class="btn btn-danger btn-icon"
+                        title="Eliminar"
+                        aria-label="Eliminar"
+                      >
+                        <i class="bi bi-trash" aria-hidden="true"></i>
+                      </button>
+                    </form>
+                  </span>
                 </div>
               </div>
             </li>
           ))}
         </ul>
       ) : (
-        <p class="rounded-xl border border-dashed border-border bg-surface-2/60 p-6 text-center text-sm text-muted">
+        <p class="rounded-xl border border-dashed border-transparent bg-surface-2/60 p-6 text-center text-sm text-muted">
           Aún no hay cursos. Usa el formulario de arriba para crear el primero.
         </p>
       )}
     </div>
   </section>
-</AdminLayout>
+</DashboardLayout>
 
 <script>
   document.addEventListener('DOMContentLoaded', () => {
@@ -215,6 +211,11 @@ for (const c of coursesRows ?? []) {
       toggle.setAttribute('aria-expanded', String(!open));
       form.classList.toggle('hidden', open);
       icon.classList.toggle('rotate-180', !open);
+      if (!open) {
+        requestAnimationFrame(() => {
+          document.dispatchEvent(new CustomEvent('custom-select-reinit', { detail: { container: form } }));
+        });
+      }
     });
   });
 </script>

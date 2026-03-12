@@ -1,6 +1,6 @@
 ---
 import '../../../../styles/global.css';
-import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../../lib/supabase';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
@@ -48,9 +48,11 @@ const selectedCourseLabel = selectedCourse?.title ?? '— Sin curso —';
 const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string).toISOString().slice(0, 16) : '';
 ---
 
-<AdminLayout>
+<DashboardLayout>
   <section class="space-y-6">
     <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
+      <span class="mx-1">/</span>
       <a href="/admin/challenges" class="hover:text-white">Retos</a>
       <span class="mx-1">/</span>
       <span class="text-white">{challenge.title}</span>
@@ -63,30 +65,30 @@ const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string
       <p class="mt-1 text-sm text-muted">{challenge.title}</p>
     </header>
 
-    <form method="post" action="/api/admin/challenges" class="max-w-xl space-y-6 rounded-xl border border-border bg-surface p-6">
+    <form method="post" action="/api/admin/challenges" class="max-w-xl space-y-6 rounded-xl border border-transparent bg-surface p-6">
       <input type="hidden" name="action" value="update" />
       <input type="hidden" name="challenge_id" value={challengeId} />
       <input type="hidden" name="redirect_to" value="/admin/challenges" />
 
       <div>
         <label for="edit-title" class="block text-xs font-medium text-muted">Título</label>
-        <input id="edit-title" type="text" name="title" required value={challenge.title ?? ''} class="mt-1.5 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
+        <input id="edit-title" type="text" name="title" required value={challenge.title ?? ''} class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
       </div>
       <div>
         <label for="edit-description" class="block text-xs font-medium text-muted">Descripción</label>
-        <textarea id="edit-description" name="description" rows={4} class="mt-1.5 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime">{(challenge.description as string) ?? ''}</textarea>
+        <textarea id="edit-description" name="description" rows={4} class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime">{(challenge.description as string) ?? ''}</textarea>
       </div>
       <div class="grid gap-6 sm:grid-cols-2">
         <div>
           <label for="edit-deadline" class="block text-xs font-medium text-muted">Fecha límite</label>
           <div class="relative mt-1.5">
-            <input id="edit-deadline" type="text" name="deadline" value={deadlineLocal} readonly class="w-full cursor-pointer rounded-lg border border-border bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Elegir fecha y hora" autocomplete="off" />
+            <input id="edit-deadline" type="text" name="deadline" value={deadlineLocal} readonly class="w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Elegir fecha y hora" autocomplete="off" />
             <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
           </div>
         </div>
         <div>
           <label for="edit-points" class="block text-xs font-medium text-muted">Puntos</label>
-          <input id="edit-points" type="number" name="points_reward" min="0" value={challenge.points_reward ?? 30} class="mt-1.5 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
+          <input id="edit-points" type="number" name="points_reward" min="0" value={challenge.points_reward ?? 30} class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
         </div>
       </div>
       <div>
@@ -95,7 +97,7 @@ const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string
           <input id="edit-course" type="hidden" name="course_id" value={(challenge.course_id as string) ?? ''} />
           <button
             type="button"
-            class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
             aria-expanded="false"
           >
             <span class="custom-select-label truncate">{selectedCourseLabel}</span>
@@ -103,9 +105,9 @@ const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
             </svg>
           </button>
-          <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-2xl">
+          <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-transparent bg-surface p-2 shadow-2xl">
             <button type="button" class={`custom-select-option flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${!challenge.course_id ? 'bg-lime/10 text-lime' : 'text-white'}`} data-value="" data-label="— Sin curso —">
-              <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${!challenge.course_id ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+              <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${!challenge.course_id ? 'border-lime bg-lime text-background' : 'border-transparent bg-surface-2 text-transparent'}`}>
                 <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
               </span>
               <span class="truncate">— Sin curso —</span>
@@ -119,7 +121,7 @@ const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string
                   data-value={c.id}
                   data-label={c.title}
                 >
-                  <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${isSelected ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                  <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${isSelected ? 'border-lime bg-lime text-background' : 'border-transparent bg-surface-2 text-transparent'}`}>
                     <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
                   </span>
                   <span class="truncate">{c.title}</span>
@@ -138,7 +140,7 @@ const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string
             class="peer sr-only"
             checked={challenge.is_active ?? false}
           />
-          <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
+          <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-transparent bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
             <i class="bi bi-check-lg text-[11px] leading-none" aria-hidden="true" />
           </span>
           <span class="text-sm text-white">Activo</span>
@@ -151,23 +153,29 @@ const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string
             class="peer sr-only"
             checked={challenge.available_for_on_demand ?? false}
           />
-          <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-border bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
+          <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-transparent bg-surface-2 text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
             <i class="bi bi-check-lg text-[11px] leading-none" aria-hidden="true" />
           </span>
           <span class="text-sm text-white">Disponible para on-demand</span>
         </label>
       </div>
       <div class="flex gap-3 pt-2">
-        <button type="submit" class="rounded-lg border border-lime bg-lime px-4 py-2 text-sm font-medium text-background transition hover:bg-lime/90">
+        <button type="submit" class="btn btn-primary">
           Guardar cambios
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
         </button>
-        <a href="/admin/challenges" class="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:bg-surface-2/80">
-          Cancelar
+        <a href="/admin/challenges" class="btn btn-ghost">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Volver
         </a>
       </div>
     </form>
   </section>
-</AdminLayout>
+</DashboardLayout>
 
 <script>
   import flatpickr from 'flatpickr';

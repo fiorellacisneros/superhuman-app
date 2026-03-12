@@ -1,10 +1,10 @@
 ---
 import '../../styles/global.css';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
-import AdminLayout from '../../layouts/AdminLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import { avatarImagePath } from '../../lib/avatars';
 import BadgeIcon from '../../components/BadgeIcon.astro';
+import BadgeOutline from '../../components/BadgeOutline.astro';
 import { formatDayAndDate, formatTime } from '../../lib/format-date';
 import { isLessonCompleted } from '../../lib/lessons';
 
@@ -39,6 +39,7 @@ const role = (userRow?.role as 'admin' | 'student') ?? 'student';
 const preview = Astro.url.searchParams.get('preview') === 'true';
 
 // ---------- Admin-only data (when role === 'admin' && !preview) ----------
+type AdminCourseStats = { id: string; slug: string; title: string; studentsCount: number; totalLessons: number; avgPoints: number };
 let totalStudents = 0;
 let pendingSubmissionsCount = 0;
 let cohortAvgPoints: number | null = null;
@@ -46,9 +47,10 @@ let activeChallengesCount = 0;
 let cohortProgress: { id: string; name: string; avatarId: string | null; points: number }[] = [];
 let recentSubmissions: { id: string; studentName: string; challengeTitle: string; submitted_at: string }[] = [];
 let cohortMaxPoints = 1;
+let adminCoursesWithStats: AdminCourseStats[] = [];
 
 if (role === 'admin' && !preview) {
-  const [studentsCountRes, pendingCountRes, activeCountRes, cohortRowsRes, subRowsRes, pointsRowsRes] = await Promise.all([
+  const [studentsCountRes, pendingCountRes, activeCountRes, cohortRowsRes, subRowsRes, pointsRowsRes, coursesRes, enrollmentsRes, lessonsCountRes] = await Promise.all([
     supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
     supabase.from('submissions').select('*', { count: 'exact', head: true }).eq('reviewed', false),
     supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
@@ -59,16 +61,23 @@ if (role === 'admin' && !preview) {
       .eq('reviewed', false)
       .order('submitted_at', { ascending: false })
       .limit(5),
-    supabase.from('user_course_points').select('user_id, points'),
+    supabase.from('user_course_points').select('user_id, course_id, points'),
+    supabase.from('courses').select('id, slug, title').order('title'),
+    supabase.from('enrollments').select('course_id'),
+    supabase.from('lessons').select('course_id'),
   ]);
   totalStudents = studentsCountRes.count ?? 0;
   pendingSubmissionsCount = pendingCountRes.count ?? 0;
   activeChallengesCount = activeCountRes.count ?? 0;
 
   const pointsByUser = new Map<string, number>();
+  const pointsByCourseUser = new Map<string, Map<string, number>>(); // courseId -> (userId -> points)
   for (const row of pointsRowsRes.data ?? []) {
     const uid = row.user_id as string;
+    const cid = row.course_id as string;
     pointsByUser.set(uid, (pointsByUser.get(uid) ?? 0) + (row.points ?? 0));
+    if (!pointsByCourseUser.has(cid)) pointsByCourseUser.set(cid, new Map());
+    pointsByCourseUser.get(cid)!.set(uid, (pointsByCourseUser.get(cid)!.get(uid) ?? 0) + (row.points ?? 0));
   }
   const studentIds = (cohortRowsRes.data ?? []).map((u) => u.id);
   if (studentIds.length > 0) {
@@ -95,6 +104,37 @@ if (role === 'admin' && !preview) {
       submitted_at: s.submitted_at as string,
     };
   });
+
+  const courses = (coursesRes.data ?? []) as { id: string; slug: string | null; title: string | null }[];
+  const enrollments = (enrollmentsRes.data ?? []) as { course_id: string }[];
+  const lessonsByCourse = (lessonsCountRes.data ?? []).reduce((acc: Record<string, number>, r: { course_id: string }) => {
+    const cid = r.course_id as string;
+    acc[cid] = (acc[cid] ?? 0) + 1;
+    return acc;
+  }, {});
+  const enrollmentsByCourse = enrollments.reduce((acc: Record<string, number>, r) => {
+    acc[r.course_id] = (acc[r.course_id] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  adminCoursesWithStats = courses.map((course) => {
+    const studentsCount = enrollmentsByCourse[course.id] ?? 0;
+    const totalLessons = lessonsByCourse[course.id] ?? 0;
+    const coursePoints = pointsByCourseUser.get(course.id);
+    let avgPoints = 0;
+    if (coursePoints && studentsCount > 0) {
+      const sum = [...coursePoints.values()].reduce((a, p) => a + p, 0);
+      avgPoints = Math.round((sum / studentsCount) * 10) / 10;
+    }
+    return {
+      id: course.id,
+      slug: typeof course.slug === 'string' && course.slug.trim() ? course.slug.trim() : course.id,
+      title: course.title ?? 'Sin título',
+      studentsCount,
+      totalLessons,
+      avgPoints,
+    };
+  });
 }
 
 // ---------- Student view data (when student OR admin in preview) ----------
@@ -112,7 +152,7 @@ const iconMap: Record<string, string> = {
 };
 
 let points = 0;
-type DashboardBadge = { id: string; name: string; description: string | null; condition_type: string | null; earned: boolean; earned_at: string | null };
+type DashboardBadge = { id: string; name: string; description: string | null; condition_type: string | null; earned: boolean; earned_at: string | null; earnedCount: number };
 let dashboardBadges: DashboardBadge[] = [];
 let studentActiveChallengesCount = 0;
 let enrolledIds: string[] = [];
@@ -136,6 +176,11 @@ if (role !== 'admin' || preview) {
   const earnedRows = earnedRowsRes.data;
   const earnedSet = new Set((earnedRows ?? []).map((e) => e.badge_id));
   const earnedAtMap = new Map((earnedRows ?? []).map((e) => [e.badge_id, e.earned_at as string]));
+  const earnedCountMap = new Map<string, number>();
+  for (const row of earnedRows ?? []) {
+    const id = row.badge_id as string;
+    earnedCountMap.set(id, (earnedCountMap.get(id) ?? 0) + 1);
+  }
   dashboardBadges = (badgeRows ?? []).map((b) => ({
     id: b.id,
     name: b.name ?? 'Insignia',
@@ -143,6 +188,7 @@ if (role !== 'admin' || preview) {
     condition_type: (b.condition_type as string) ?? null,
     earned: earnedSet.has(b.id),
     earned_at: earnedAtMap.get(b.id) ?? null,
+    earnedCount: earnedCountMap.get(b.id) ?? 0,
   }));
 
   studentActiveChallengesCount = sacRes.count ?? 0;
@@ -281,149 +327,173 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
 ---
 
 {role === 'admin' && !preview ? (
-  <AdminLayout>
-    <section class="space-y-8">
+  <DashboardLayout>
+    <section class="space-y-6 lg:space-y-8">
       <header class="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-semibold tracking-tight text-white">Panel de administración</h1>
-          <p class="mt-1 text-sm text-muted">Resumen del cohort y entregas pendientes.</p>
+          <h1 class="font-manrope text-2xl font-semibold tracking-tight text-white">Dashboard de administración</h1>
+          <p class="mt-1 text-sm text-muted">Resumen general del cohort, entregas y avance por curso.</p>
         </div>
-        <a
-          href="/dashboard?preview=true"
-          class="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:border-lime/50 hover:bg-surface-2/80"
-        >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-          </svg>
+        <a href="/dashboard?preview=true" class="btn btn-primary">
           Ver como estudiante
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
         </a>
       </header>
 
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-xl border border-border bg-surface p-4">
-          <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">Estudiantes</p>
-          <p class="mt-1 text-2xl font-semibold text-white">{totalStudents}</p>
-        </div>
-        <div class="rounded-xl border border-border bg-surface p-4">
-          <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">Entregas pendientes</p>
-          <p class="mt-1 text-2xl font-semibold text-white">{pendingSubmissionsCount}</p>
-        </div>
-        <div class="rounded-xl border border-border bg-surface p-4">
-          <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">Promedio cohort (pts)</p>
-          <p class="mt-1 text-2xl font-semibold text-lime">{cohortAvgPoints ?? 0}</p>
-        </div>
-        <div class="rounded-xl border border-border bg-surface p-4">
-          <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">Desafíos activos</p>
-          <p class="mt-1 text-2xl font-semibold text-white">{activeChallengesCount}</p>
-        </div>
-      </div>
+      <div class="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div class="min-w-0 space-y-6">
+          <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="rounded-xl bg-[#012EDC] p-5">
+              <p class="font-manrope text-2xl font-semibold text-white/90">Estudiantes totales</p>
+              <p class="mt-8 font-manrope text-2xl font-semibold text-white sm:text-4xl">{totalStudents}</p>
+            </div>
+            <div class="rounded-xl bg-[#012EDC] p-5">
+              <p class="font-manrope text-2xl font-semibold text-white/90">Entregas pendientes</p>
+              <p class="mt-8 font-manrope text-2xl font-semibold text-white sm:text-4xl">{pendingSubmissionsCount}</p>
+            </div>
+            <div class="rounded-xl bg-[#FFBE00] p-5">
+              <p class="font-manrope text-2xl font-semibold text-background/80">Promedio total (pts)</p>
+              <p class="mt-8 font-manrope text-2xl font-semibold text-background sm:text-4xl">{cohortAvgPoints ?? 0}</p>
+            </div>
+            <div class="rounded-xl bg-[#FFBE00] p-5">
+              <p class="font-manrope text-2xl font-semibold text-background/80">Desafíos activos</p>
+              <p class="mt-8 font-manrope text-2xl font-semibold text-background sm:text-4xl">{activeChallengesCount}</p>
+            </div>
+          </div>
 
-      <div class="rounded-xl border border-border bg-surface p-5">
-        <h2 class="text-sm font-semibold text-white">Progreso del cohort</h2>
-        <p class="mt-0.5 text-xs text-muted">Puntos por estudiante (ordenado por puntuación).</p>
-        {cohortProgress.length > 0 ? (
-          <ul class="mt-4 space-y-3">
-            {cohortProgress.map((s) => {
-              const pct = cohortMaxPoints ? (s.points / cohortMaxPoints) * 100 : 0;
-              return (
-                <li class="flex items-center gap-3">
-                  <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-border bg-surface-2">
-                    <img
-                      src={avatarImagePath(s.avatarId) ?? '/avatars/avatar-01.png'}
-                      alt=""
-                      class="h-full w-full object-cover"
-                      width="32"
-                      height="32"
-                    />
-                  </div>
-                  <span class="min-w-[120px] truncate text-sm text-white" title={s.name}>{s.name}</span>
-                  <div class="min-w-0 flex-1">
-                    <div class="h-2 w-full overflow-hidden rounded-full bg-surface-2">
-                      <div
-                        class="h-full rounded-full bg-lime transition-all duration-300"
-                        style={`width: ${pct}%`}
-                      />
+          <div class="rounded-xl bg-surface p-6">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 class="font-manrope text-2xl font-semibold !text-white">Entregas recientes</h2>
+                <p class="mt-1 text-sm text-muted">Pendientes de revisión (todas los cursos).</p>
+              </div>
+              <a href="/admin/submissions" class="btn btn-primary">
+                Ver todas
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
+            {recentSubmissions.length > 0 ? (
+              <div class="-mx-2 mt-5 overflow-x-auto px-2 sm:mx-0 sm:px-0">
+                <table class="w-full min-w-[400px] text-left text-sm">
+                  <thead>
+                    <tr class="border-b border-white/10 text-muted">
+                      <th class="pb-3 pr-4 font-semibold">Estudiante</th>
+                      <th class="pb-3 pr-4 font-semibold">Desafío</th>
+                      <th class="pb-3 pr-4 font-semibold">Fecha</th>
+                      <th class="pb-3 font-semibold text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentSubmissions.map((sub) => (
+                      <tr class="border-b border-white/5 last:border-0">
+                        <td class="py-3 pr-4 font-medium text-white">{sub.studentName}</td>
+                        <td class="py-3 pr-4 text-white">{sub.challengeTitle}</td>
+                        <td class="py-3 pr-4 text-muted">{formatDate(sub.submitted_at)}</td>
+                        <td class="py-3 text-right">
+                          <a href={`/admin/submissions/${sub.id}?from=dashboard`} class="btn btn-primary text-sm">
+                            Revisar
+                            <i class="bi bi-eye h-4 w-4" aria-hidden="true"></i>
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p class="mt-5 text-sm text-muted">No hay entregas pendientes.</p>
+            )}
+          </div>
+
+          <div class="rounded-xl p-6" style="background-color: #D6D6D6;">
+            <h2 class="font-manrope text-2xl font-semibold text-[#1A1A1A]">Avance por curso</h2>
+            <p class="mt-1 text-sm text-[#404040]">Estudiantes y promedio de puntos por curso (como admin ves todos los cursos).</p>
+            {adminCoursesWithStats.length > 0 ? (
+              <ul class="mt-5 space-y-4">
+                {adminCoursesWithStats.map((course) => (
+                  <li class="flex flex-col gap-2 rounded-lg bg-[#fff] p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <div class="min-w-0">
+                      <h3 class="font-manrope text-lg font-semibold text-[#1A1A1A]">{course.title}</h3>
+                      <p class="mt-0.5 text-sm text-[#404040]">
+                        {course.studentsCount}{' '}{course.studentsCount === 1 ? 'estudiante' : 'estudiantes'} · {course.totalLessons} clases · Promedio {course.avgPoints} pts
+                      </p>
                     </div>
-                  </div>
-                  <span class="w-12 shrink-0 text-right text-sm font-medium text-lime">{s.points} pts</span>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p class="mt-4 text-sm text-muted">Aún no hay estudiantes en el cohort.</p>
-        )}
-      </div>
-
-      <div class="rounded-xl border border-border bg-surface p-5">
-        <div class="flex items-center justify-between gap-2">
-          <div>
-            <h2 class="text-sm font-semibold text-white">Entregas recientes</h2>
-            <p class="mt-0.5 text-xs text-muted">Pendientes de revisión.</p>
-          </div>
-          <a
-            href="/admin/submissions"
-            class="text-xs font-medium text-lime hover:underline"
-          >
-            Ver todas →
-          </a>
-        </div>
-        {recentSubmissions.length > 0 ? (
-          <div class="-mx-2 mt-4 overflow-x-auto px-2 sm:mx-0 sm:px-0">
-            <table class="w-full min-w-[400px] text-left text-sm">
-              <thead>
-                <tr class="border-b border-border text-muted">
-                  <th class="pb-2 pr-4 font-medium">Estudiante</th>
-                  <th class="pb-2 pr-4 font-medium">Desafío</th>
-                  <th class="pb-2 pr-4 font-medium">Fecha</th>
-                  <th class="pb-2 font-medium text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentSubmissions.map((sub) => (
-                  <tr class="border-b border-border/60 last:border-0">
-                    <td class="py-3 pr-4 text-white">{sub.studentName}</td>
-                    <td class="py-3 pr-4 text-white">{sub.challengeTitle}</td>
-                    <td class="py-3 pr-4 text-muted">{formatDate(sub.submitted_at)}</td>
-                    <td class="py-3 text-right">
-                      <a
-                        href={`/admin/submissions/${sub.id}?from=dashboard`}
-                        class="inline-flex items-center gap-1.5 rounded-lg border border-lime/50 bg-lime/10 px-3 py-1.5 text-xs font-medium text-lime transition hover:bg-lime/25"
-                      >
-                        <i class="bi bi-eye" aria-hidden="true"></i>
-                        Revisar
+                    <div class="flex shrink-0 gap-2">
+                      <a href={`/admin/courses/${course.id}/edit`} class="btn btn-icon inline-flex items-center justify-center rounded-lg border border-transparent bg-transparent text-[#1A1A1A] transition hover:border-black/20 hover:bg-black/10 hover:!text-[#1A1A1A]" title="Editar curso" aria-label="Editar curso">
+                        <i class="bi bi-pencil" aria-hidden="true"></i>
                       </a>
-                    </td>
-                  </tr>
+                      <a href={`/courses/${course.slug}`} class="btn text-sm border-2 border-[#1A1A1A] bg-transparent text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white">
+                        Ver curso
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
+                    </div>
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+            ) : (
+              <p class="mt-5 text-sm text-[#404040]">Aún no hay cursos. Crea uno desde Cursos.</p>
+            )}
           </div>
-        ) : (
-          <p class="mt-4 text-sm text-muted">No hay entregas pendientes.</p>
-        )}
+        </div>
+
+        <aside class="lg:sticky lg:top-24 lg:self-start">
+          <div class="rounded-xl bg-surface p-5">
+            <h2 class="font-manrope text-2xl font-semibold text-white">Progreso general</h2>
+            <p class="mt-0.5 text-[10px] text-muted">Puntos acumulados de todos los cursos.</p>
+            {cohortProgress.length > 0 ? (
+              <ul class="mt-3 max-h-[420px] space-y-1.5 overflow-y-auto pr-1">
+                {cohortProgress.map((s, i) => (
+                  <li class="flex items-center gap-2 rounded-lg bg-background px-2 py-1.5">
+                    <span class={`w-5 shrink-0 text-[10px] font-semibold ${i === 0 ? 'text-lime' : 'text-muted'}`}>{i + 1}º</span>
+                    <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-surface-2">
+                      <img src={avatarImagePath(s.avatarId) ?? '/avatars/avatar-01.png'} alt="" class="h-full w-full object-cover" width="32" height="32" />
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-[11px] font-medium text-white" title={s.name}>{s.name}</p>
+                      <p class="text-[10px] font-semibold text-lime">{s.points} pts</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div class="mt-4 flex flex-col items-center gap-2 text-center">
+                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-muted" aria-hidden="true">
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+                  </svg>
+                </div>
+                <p class="text-[11px] text-muted">Aún no hay estudiantes en el cohort.</p>
+              </div>
+            )}
+          </div>
+        </aside>
       </div>
     </section>
-  </AdminLayout>
+  </DashboardLayout>
 ) : (
   <DashboardLayout role={preview ? 'student' : role}>
     {role === 'admin' && preview && (
-      <div class="sticky top-0 z-40 -mx-4 -mt-8 mb-6 flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:gap-4 sm:px-6">
+      <div class="sticky top-0 z-40 -mx-4 -mt-6 mb-4 flex flex-wrap items-center justify-between gap-2 bg-background/95 px-4 py-3 backdrop-blur md:-mx-6 md:mb-6 md:gap-4 md:px-6">
         <span class="flex items-center gap-2 text-sm font-medium text-lime">
           <span aria-hidden="true">👁</span>
           Modo vista previa
         </span>
-        <a href="/dashboard" class="text-sm font-medium text-white underline hover:text-lime">
-          Volver al panel admin
+        <a href="/dashboard" class="inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Volver al dashboard de admin
         </a>
       </div>
     )}
     <section class="space-y-8">
       <header class="space-y-2">
-        <p class="text-xs font-semibold uppercase tracking-[0.25em] text-lime">
-          Hola, {displayName}
-        </p>
         <h1 class="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
           {enrolledIds.length > 0 ? 'Tu viaje a ser un superhuman empieza aquí.' : 'Gracias por confiar en Superhuman'}
         </h1>
@@ -435,7 +505,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
       </header>
 
       {enrolledIds.length === 0 ? (
-        <div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface-2/40 px-8 py-16 text-center">
+        <div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 bg-surface-2/40 px-8 py-16 text-center">
           <div class="flex h-20 w-20 items-center justify-center rounded-full bg-lime/20 text-lime" aria-hidden="true">
             <i class="bi bi-hourglass-split text-4xl" aria-hidden="true"></i>
           </div>
@@ -445,8 +515,8 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
           </p>
         </div>
       ) : (
-      <div class="grid gap-6 lg:grid-cols-3">
-        <section class="lg:col-span-2 space-y-4">
+      <div class="flex flex-col gap-6 lg:flex-row">
+        <section class="min-w-0 flex-1 space-y-4">
           {enrolledCourses.length > 0 && (
             <div class="space-y-3">
               <h2 class="text-sm font-semibold text-white">Mis cursos</h2>
@@ -455,7 +525,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
                   <li>
                     <a
                       href={`/courses/${course.slug}`}
-                      class="group block overflow-hidden rounded-xl border border-border bg-surface transition-shadow hover:shadow-lg"
+                      class="group block overflow-hidden rounded-xl bg-background transition-shadow hover:shadow-lg"
                     >
                       <div class="relative h-36 overflow-hidden bg-surface-2">
 {course.cover_image ? (
@@ -474,11 +544,11 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
                           </div>
                         )}
                         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" aria-hidden="true" />
-                        <p class="absolute bottom-2 left-2 right-2 text-sm font-semibold text-white drop-shadow">
+                        <p class="absolute bottom-2 left-2 right-2 line-clamp-2 font-manrope text-base font-semibold leading-tight text-white drop-shadow sm:text-[20px]">
                           {course.title}
                         </p>
                       </div>
-                      <div class="border-t border-border p-3">
+                      <div class="p-3">
                         <p class="text-xs text-muted">
                           {course.completedLessons} de {course.totalLessons} clases completadas
                         </p>
@@ -495,107 +565,37 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
               </ul>
             </div>
           )}
-          <div class="rounded-2xl border border-border bg-surface p-5">
-            <h2 class="text-sm font-semibold text-white">Progreso</h2>
+
+          <div class="rounded-2xl bg-background p-5">
+            <h2 class="text-sm font-semibold text-white">Progreso general</h2>
             <p class="mt-1 text-xs text-muted">
               Sigue tus puntos y cómo creces cada semana.
             </p>
 
-            <dl class="mt-4 grid grid-cols-2 gap-4">
-              <div class="space-y-1 rounded-xl border border-border bg-surface-2 p-3">
-                <dt class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
-                  Puntos
+            <dl class="mt-4 grid grid-cols-2 gap-3 sm:gap-4">
+              <div class="flex min-w-0 flex-col rounded-xl bg-[#012EDC] p-3 sm:p-5">
+                <dt class="font-manrope text-2xl font-semibold text-white">
+                  Desafíos
                 </dt>
-                <dd class="text-2xl font-semibold text-lime">
-                  {points}
+                <dd class="mt-8 flex items-baseline gap-0.5">
+                  <span class="font-manrope text-2xl font-semibold leading-none text-white sm:text-[48px]">{studentActiveChallengesCount}</span>
+                  <span class="font-manrope text-2xl font-semibold leading-none text-[#436AFE] sm:text-[48px]">/{studentActiveChallengesCount}</span>
                 </dd>
               </div>
-              <div class="space-y-1 rounded-xl border border-border bg-surface-2 p-3">
-                <dt class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
-                  Desafíos activos
+              <div class="flex min-w-0 flex-col rounded-xl bg-[#F5B800] p-3 sm:p-5">
+                <dt class="font-manrope text-2xl font-semibold text-[#1A1A1A]">
+                  Puntos
                 </dt>
-                <dd class="text-2xl font-semibold text-white">
-                  {studentActiveChallengesCount}
+                <dd class="mt-8 font-manrope text-2xl font-semibold leading-none text-[#1A1A1A] sm:text-[48px]">
+                  {points}
                 </dd>
               </div>
             </dl>
           </div>
 
-          <div class="rounded-2xl border border-border bg-surface p-5">
-            <div>
-              <h2 class="text-sm font-semibold text-white">Insignias</h2>
-              <p class="text-xs text-muted">
-                Las insignias aparecen aquí al completar lecciones y desafíos.
-              </p>
-            </div>
-
-            <ul class="mt-4 grid gap-4 sm:grid-cols-2">
-              {dashboardBadges.map((b) => (
-                <li
-                  class={`group rounded-xl border p-4 transition-colors ${
-                    b.earned ? 'border-border bg-surface' : 'border-border bg-surface-2/60 opacity-50'
-                  }`}
-                >
-                  <div class="flex items-start gap-4">
-                    <div class={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full p-1.5 ${b.earned ? 'bg-lime' : 'bg-surface-2'}`}>
-                      <div class={`flex h-full w-full items-center justify-center rounded-full ring-1 ring-inset ${b.earned ? 'ring-black' : 'ring-border'}`}>
-                        <BadgeIcon
-                          icon={iconMap[b.condition_type ?? ''] ?? 'manual'}
-                          class={`h-6 w-6 transition-transform duration-200 group-hover:scale-110 ${b.earned ? 'text-background/75' : 'text-muted'}`}
-                        />
-                      </div>
-                    </div>
-                    <div class="min-w-0 flex-1">
-                      <p class="font-normal text-white/90">{b.name}</p>
-                      {b.description && <p class="mt-0.5 text-[11px] text-muted/90">{b.description}</p>}
-                      {b.earned && b.earned_at ? (
-                        <p class="mt-2 text-[10px] tracking-wide text-lime/90">Obtenida {formatDate(b.earned_at)}</p>
-                      ) : (
-                        <p class="mt-2 text-[10px] tracking-wide text-muted/90">Bloqueado</p>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <aside class="space-y-4 w-full lg:max-w-[300px]">
-          <div class="rounded-xl border border-border bg-surface p-3">
-            <h2 class="text-xs font-semibold text-white">Ranking</h2>
-            <p class="mt-0.5 text-[10px] text-muted">Más puntos del cohort.</p>
-            {leaderboard.length > 0 ? (
-              <ul class="mt-3 space-y-1.5">
-                {leaderboard.map((u, i) => (
-                  <li class="flex items-center gap-2 rounded-lg border border-border bg-surface-2/60 px-2 py-1.5">
-                    <span class={`w-5 shrink-0 text-[10px] font-semibold ${i === 0 ? 'text-lime' : 'text-muted'}`}>{i + 1}º</span>
-                    <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-border bg-surface-2">
-                      <img src={avatarImagePath(u.avatarId) ?? '/avatars/avatar-01.png'} alt="" class="h-full w-full object-cover" width="32" height="32" />
-                    </div>
-                    <div class="min-w-0 flex-1">
-                      <p class="truncate text-[11px] font-medium text-white" title={u.name}>{u.name}</p>
-                      <p class="text-[10px] font-semibold text-lime">{u.points} pts</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div class="mt-4 flex flex-col items-center gap-2 text-center">
-                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-muted" aria-hidden="true">
-                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-                  </svg>
-                </div>
-                <p class="text-[11px] text-muted">
-                  {enrolledIds.length === 0 ? 'Inscríbete en un curso para ver el ranking de tu cohort.' : 'Sin puntos aún. Tú puedes lograrlo.'}
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div class="rounded-xl border border-border bg-surface p-4">
-            <h2 class="text-sm font-semibold text-white">Próximas clases</h2>
+          <div class="rounded-2xl bg-background p-5">
+            <h2 class="font-manrope text-2xl font-semibold text-white">Mi horario</h2>
+            <p class="mt-0.5 text-xs text-muted">Próximas clases de tus cursos.</p>
             {upcomingLessons.length > 0 ? (
               <div class="mt-3 max-h-[320px] overflow-y-auto space-y-4">
                 {upcomingByMonth.map(({ monthLabel, lessons }) => (
@@ -607,10 +607,10 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
                         const joinUrl = lesson.zoom_link?.trim() || null;
                         return (
                           <li
-                            class={`rounded-lg border px-3 py-2.5 ${
+                            class={`rounded-lg px-3 py-2.5 ${
                               isNext
-                                ? 'border-l-4 border-l-lime bg-lime/10 border-border'
-                                : 'border-border bg-surface-2/60'
+                                ? 'border-l-4 border-l-lime bg-lime/10'
+                                : 'bg-background'
                             }`}
                           >
                             <div class="flex items-start justify-between gap-2">
@@ -642,6 +642,62 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
             ) : (
               <p class="mt-3 text-sm text-muted">No hay clases programadas aún.</p>
             )}
+          </div>
+        </section>
+
+        <aside class="w-full shrink-0 space-y-4 lg:ml-auto lg:w-[300px]">
+          <div class="rounded-xl bg-background p-3">
+            <h2 class="font-manrope text-2xl font-semibold text-white">Ranking general</h2>
+            <p class="mt-0.5 text-[10px] text-muted">Puntos acumulados de todos tus cursos.</p>
+            {leaderboard.length > 0 ? (
+              <ul class="mt-3 space-y-1.5">
+                {leaderboard.map((u, i) => (
+                  <li class="flex items-center gap-2 rounded-lg bg-background px-2 py-1.5">
+                    <span class={`w-5 shrink-0 text-[10px] font-semibold ${i === 0 ? 'text-lime' : 'text-muted'}`}>{i + 1}º</span>
+                    <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-surface-2">
+                      <img src={avatarImagePath(u.avatarId) ?? '/avatars/avatar-01.png'} alt="" class="h-full w-full object-cover" width="32" height="32" />
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-[11px] font-medium text-white" title={u.name}>{u.name}</p>
+                      <p class="text-[10px] font-semibold text-lime">{u.points} pts</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div class="mt-4 flex flex-col items-center gap-2 text-center">
+                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-muted" aria-hidden="true">
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+                  </svg>
+                </div>
+                <p class="text-[11px] text-muted">
+                  {enrolledIds.length === 0 ? 'Inscríbete en un curso para ver el ranking de tu cohort.' : 'Sin puntos aún. Tú puedes lograrlo.'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div class="rounded-[24px] bg-background p-5">
+            <h2 class="font-manrope text-2xl font-semibold text-white">Insignias generales</h2>
+            <p class="mt-0.5 text-xs text-muted">Puedes ganar la misma insignia en distintos cursos.</p>
+            <ul class="mt-4 grid grid-cols-3 gap-3">
+              {dashboardBadges.map((b) => (
+                <li
+                  class={`group flex min-w-0 flex-col items-center rounded-xl transition-colors ${
+                    'bg-background'
+                  }`}
+                >
+                  <BadgeOutline id={b.id} variant={b.earned ? 'earned' : 'unearned'} count={b.earnedCount > 0 ? b.earnedCount : undefined}>
+                    <BadgeIcon
+                      icon={iconMap[b.condition_type ?? ''] ?? 'manual'}
+                      class={`transition-transform duration-200 group-hover:scale-110 ${b.earned ? 'text-[#012EDC]' : 'text-[#595959]'}`}
+                    />
+                  </BadgeOutline>
+                  <p class="mt-2 min-w-0 max-w-full truncate text-center font-work-sans text-xs font-normal text-white" title={b.name}>{b.name}</p>
+                </li>
+              ))}
+            </ul>
           </div>
         </aside>
       </div>

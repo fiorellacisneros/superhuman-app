@@ -70,7 +70,7 @@ for (const course of enrolledCourseRows) {
 <DashboardLayout role={role === 'admin' ? 'admin' : 'student'}>
   <section class="space-y-6">
     <nav class="text-sm text-muted">
-      <a href="/dashboard" class="hover:text-white">Panel</a>
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
       <span class="mx-1">/</span>
       <span class="text-white">Cursos</span>
     </nav>
@@ -88,7 +88,7 @@ for (const course of enrolledCourseRows) {
           <li>
             <a
               href={`/courses/${course.slug}`}
-              class="group block overflow-hidden rounded-xl border border-border bg-surface transition-shadow hover:shadow-lg"
+              class="group block overflow-hidden rounded-xl bg-surface transition-shadow hover:shadow-lg"
             >
               <div class="relative h-36 overflow-hidden bg-surface-2">
                 {course.cover_image ? (
@@ -107,11 +107,11 @@ for (const course of enrolledCourseRows) {
                   </div>
                 )}
                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" aria-hidden="true" />
-                <p class="absolute bottom-2 left-2 right-2 text-sm font-semibold text-white drop-shadow">
+                <p class="absolute bottom-2 left-2 right-2 line-clamp-2 font-manrope text-base font-semibold leading-tight text-white drop-shadow sm:text-[20px]">
                   {course.title}
                 </p>
               </div>
-              <div class="border-t border-border p-3">
+              <div class="p-3">
                 <p class="text-xs text-muted">
                   {course.completedLessons} de {course.totalLessons} clases completadas
                 </p>
@@ -127,16 +127,19 @@ for (const course of enrolledCourseRows) {
         ))}
       </ul>
     ) : (
-      <div class="rounded-xl border border-dashed border-border bg-surface-2/60 p-8 text-center">
+      <div class="rounded-xl border border-dashed border-white/20 bg-surface-2/60 p-8 text-center">
         <p class="text-sm font-medium text-white">{role === 'admin' ? 'Aún no hay cursos creados.' : 'Aún no estás inscrito en ningún curso.'}</p>
         <p class="mt-1 text-sm text-muted">
-          {role === 'admin' ? 'Crea cursos desde el panel de administración.' : 'Cuando te inscribas, tus cursos aparecerán aquí.'}
+          {role === 'admin' ? 'Crea cursos desde el dashboard de administración.' : 'Cuando te inscribas, tus cursos aparecerán aquí.'}
         </p>
         <a
           href="/dashboard"
-          class="mt-4 inline-block rounded-lg border border-lime bg-lime/15 px-4 py-2 text-sm font-medium text-lime transition hover:bg-lime/25"
+          class="mt-4 inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
         >
-          Volver al panel
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Volver al dashboard
         </a>
       </div>
     )}

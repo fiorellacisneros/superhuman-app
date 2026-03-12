@@ -3,7 +3,7 @@
  * Modal reutilizable para confirmar eliminaciones.
  * El usuario debe escribir exactamente el texto de confirmación para habilitar el botón.
  *
- * Uso: incluir en la página (AdminLayout) y añadir a los botones:
+ * Uso: incluir en el layout (DashboardLayout) y añadir a los botones:
  *   data-delete-confirm
  *   data-confirm-label="Nombre exacto a escribir"
  *   data-delete-form-id="id-del-form" (opcional si el botón está dentro del form)
@@ -28,7 +28,7 @@
     data-close-modal
     aria-hidden="true"
   ></div>
-  <div class="relative z-10 w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+  <div class="relative z-10 w-full max-w-md rounded-2xl border border-transparent bg-surface p-6 shadow-2xl">
     <h2 id="delete-modal-title" class="text-lg font-semibold text-white">
       ¿Seguro que quieres eliminar?
     </h2>
@@ -38,7 +38,7 @@
     <input
       type="text"
       id="delete-confirm-input"
-      class="mt-4 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+      class="mt-4 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
       placeholder="Escribe el nombre para confirmar"
       autocomplete="off"
       spellcheck="false"
@@ -47,7 +47,7 @@
       <button
         type="button"
         id="delete-confirm-cancel"
-        class="flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:bg-surface-2/80"
+        class="flex-1 rounded-lg border border-transparent bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:bg-surface-2/80"
       >
         Cancelar
       </button>

@@ -3,13 +3,14 @@ import '../styles/global.css';
 import { getSupabaseServiceRoleClient } from '../lib/supabase';
 import { avatarImagePath } from '../lib/avatars';
 import { SignOutButton } from '@clerk/astro/components';
+import DeleteConfirmModal from '../components/DeleteConfirmModal.astro';
 
 interface Props {
   role?: 'admin' | 'student' | null;
 }
 
 const { role: roleProp } = Astro.props;
-const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+const { isAuthenticated, userId, redirectToSignIn, sessionClaims } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
   return redirectToSignIn();
 }
@@ -17,9 +18,28 @@ if (!isAuthenticated || !userId) {
 const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase
   .from('users')
-  .select('display_name, avatar_id, role')
+  .select('display_name, avatar_id, role, email')
   .eq('id', userId)
   .maybeSingle();
+
+let userEmail: string | null = userRow?.email ?? null;
+if (!userEmail) {
+  try {
+    const currentUser = await (Astro.locals as any).currentUser?.();
+    if (currentUser?.emailAddresses?.[0]?.emailAddress) {
+      userEmail = String(currentUser.emailAddresses[0].emailAddress);
+    }
+  } catch {
+    // ignore
+  }
+}
+if (!userEmail && sessionClaims) {
+  const claims = sessionClaims as Record<string, unknown>;
+  userEmail = (claims.primary_email ?? claims.email ?? (claims as any).email_address) as string | null;
+  if (!userEmail && Array.isArray((claims as any)?.email_addresses)?.[0]) {
+    userEmail = String((claims as any).email_addresses[0].email_address ?? '') || null;
+  }
+}
 
 const displayName = userRow?.display_name ?? 'Estudiante';
 const avatarId = userRow?.avatar_id ?? null;
@@ -31,10 +51,10 @@ const currentPath = Astro.url.pathname;
 
 const studentNav = [
   { label: 'Dashboard', href: '/dashboard', icon: 'bi-grid-1x2-fill' },
-  { label: 'Cursos', href: '/courses', icon: 'bi-journal-richtext' },
+  { label: 'Mis cursos', href: '/courses', icon: 'bi-journal-richtext' },
   { label: 'Retos', href: '/challenges', icon: 'bi-lightning-charge-fill', showActiveCount: true },
   { label: 'Ranking', href: '/leaderboard', icon: 'bi-trophy-fill' },
-  { label: 'SuperHumans', href: '/superhumans', icon: 'bi-stars' },
+  { label: 'superHumans', href: '/superhumans', icon: 'bi-stars' },
 ] as const;
 
 const adminNav = [
@@ -42,6 +62,7 @@ const adminNav = [
   { label: 'Cursos', href: '/admin/courses', icon: 'bi-journal-richtext' },
   { label: 'Retos', href: '/admin/challenges', icon: 'bi-lightning-charge-fill', showActiveCount: true },
   { label: 'Asistencia', href: '/admin/attendance', icon: 'bi-calendar2-check-fill' },
+  { label: 'Kahoot', href: '/admin/kahoot', icon: 'bi-trophy-fill' },
   { label: 'Alumnos', href: '/admin/students', icon: 'bi-people-fill' },
   { label: 'Submissions', href: '/admin/submissions', icon: 'bi-inbox-fill' },
   { label: 'SuperHumans', href: '/superhumans', icon: 'bi-stars' },
@@ -101,94 +122,158 @@ function isActive(href: string): boolean {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <slot name="head" />
-    <title>Superhuman School — Panel</title>
+    <title>Superhuman School — Dashboard</title>
+    <style is:global>
+      body.sidebar-collapsed #sidebar { width: 72px; }
+      body.sidebar-collapsed #sidebar-spacer { width: 72px !important; }
+      body.sidebar-collapsed .sidebar-label { display: none; }
+      body.sidebar-collapsed .sidebar-greeting { display: none; }
+      body.sidebar-collapsed .sidebar-badge { display: none; }
+      body.sidebar-collapsed .sidebar-toggle .sidebar-chevron { transform: rotate(180deg); }
+      body.sidebar-collapsed .sidebar .nav-link { justify-content: center; padding-left: 0.75rem; padding-right: 0.75rem; }
+      body.sidebar-collapsed .sidebar-logo { justify-content: center; }
+      /* Más aire cuando la sidebar está colapsada */
+      body.sidebar-collapsed .sidebar-logo-wrap { padding-bottom: 1.5rem; padding-left: 1rem; padding-right: 1rem; }
+      body.sidebar-collapsed .sidebar-nav { padding-top: 1.25rem; padding-left: 1rem; padding-right: 1rem; }
+      body.sidebar-collapsed .sidebar-nav > * + * { margin-top: 1rem; }
+      .sidebar-logo .logo-small { display: none; }
+      .sidebar-logo .logo-large { display: block; }
+      body.sidebar-collapsed .sidebar-logo .logo-small { display: block; height: 2.5rem; width: 2.5rem; min-width: 2.5rem; }
+      body.sidebar-collapsed .sidebar-logo .logo-large { display: none; }
+      /* Panel de contenido fijo: hueco para que se vea el border-radius superior izquierdo */
+      #main-content-panel {
+        left: 0;
+        top: 87px;
+        border-top-left-radius: 30px;
+        margin-left: 0;
+      }
+      @media (max-width: 767px) {
+        #main-content-panel { top: 52px; border-top-left-radius: 16px; }
+      }
+      @media (min-width: 768px) {
+        #main-content-panel { left: 272px; margin-left: 0; } /* 260px sidebar + 12px gap */
+        body.sidebar-collapsed #main-content-panel { left: 84px; } /* 72px sidebar + 12px gap */
+      }
+    </style>
   </head>
-  <body class="min-h-screen bg-background text-white antialiased">
-    <div class="min-h-screen">
-      <header class="border-b border-border bg-surface px-4 py-4 sm:px-6">
-        <div class="relative mx-auto flex max-w-5xl items-center justify-between gap-3">
-          <a href="/dashboard" class="shrink-0">
-            <img src="/logo.png" alt="Superhuman School" class="h-5 w-auto" />
-          </a>
-
-          <div class="hidden min-w-0 flex-1 overflow-x-auto md:flex md:flex-none md:overflow-visible">
-            <nav class="flex w-max items-center gap-1 rounded-xl border border-border/80 bg-surface-2/40 p-1 sm:w-auto" aria-label="Principal">
-              {navLinks.map((item) => {
-                const active = isActive(item.href);
-                return (
-                  <a
-                    href={item.href}
-                    class={`group relative inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium transition-all sm:gap-2 sm:px-3.5 sm:text-sm ${
-                      active
-                        ? 'bg-surface text-white shadow-[inset_0_0_0_1px_rgba(163,230,53,0.25)]'
-                        : 'text-muted hover:bg-surface-2/80 hover:text-white'
-                    }`}
-                  >
-                    <i
-                      class={`bi ${item.icon} text-[13px] leading-none transition-colors ${
-                        active ? 'text-lime' : 'text-muted group-hover:text-white/90'
-                      }`}
-                      aria-hidden="true"
-                    />
-                    {item.label}
-                    {item.showActiveCount && activeRetosCount > 0 && (
-                      <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-lime/20 px-1.5 py-0.5 text-[10px] font-semibold text-lime">
-                        {activeRetosCount}
-                      </span>
-                    )}
-                    <span
-                      class={`absolute bottom-0 left-2 right-2 h-0.5 origin-center rounded-full transition-all duration-200 ${
-                        active
-                          ? 'bg-lime opacity-100 scale-x-100'
-                          : 'bg-white/35 opacity-0 scale-x-75 group-hover:opacity-100 group-hover:scale-x-100'
-                      }`}
-                      aria-hidden="true"
-                    />
-                  </a>
-                );
-              })}
-            </nav>
+  <body class="min-h-screen bg-background text-white antialiased" id="body-el">
+    <div class="flex min-h-screen flex-col md:flex-row">
+      <!-- Sidebar: fija, solo desktop, colapsable (solo iconos) -->
+      <aside
+        id="sidebar"
+        class="sidebar fixed left-0 top-0 z-30 hidden h-screen w-[260px] flex-col bg-background transition-[width] duration-200 ease-out md:flex"
+        aria-label="Navegación principal"
+      >
+        <div class="flex h-full flex-col">
+          <!-- Logo (espaciado Figma: 24px izq, 36px arriba); el toggle está en el header -->
+          <div class="sidebar-logo-wrap flex shrink-0 items-center pl-6 pr-3 pt-9 pb-0">
+            <a href="/dashboard" class="sidebar-logo flex min-w-0 shrink items-center gap-2 overflow-hidden" title="Superhuman School">
+              <svg class="logo-small h-5 w-auto shrink-0" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M128 10C193.17 10 246 62.8304 246 128C246 193.17 193.17 246 128 246C62.8304 246 10 193.17 10 128C10 62.8304 62.8304 10 128 10ZM90.5576 69C90.5475 69.0045 90.5366 69.0091 90.5264 69.0137C83.6225 69.1555 77.3443 70.4113 71.6973 72.7832C66.0618 75.1015 61.5025 78.487 58.0283 82.9395L57.3477 83.8447C53.8401 88.7038 52.0939 94.6384 52.0938 101.632C52.0938 106.256 52.8384 110.217 54.3379 113.499C55.8306 116.714 57.7624 119.435 60.1367 121.654L60.1416 121.659C62.558 123.817 65.2077 125.582 68.0879 126.951H68.0928C70.9595 128.261 73.7786 129.337 76.5459 130.177L104.783 138.718C106.809 139.34 108.657 140.092 110.323 140.971L110.823 141.221C111.948 141.805 112.942 142.474 113.808 143.221C114.771 144.307 115.704 145.379 116.599 146.412C116.898 146.905 117.164 147.423 117.395 147.968L117.396 147.975C118.092 149.501 118.443 151.264 118.443 153.27C118.443 156.74 117.452 159.75 115.473 162.309L115.064 162.813C112.854 165.437 109.908 167.476 106.222 168.925L105.525 169.18C102.024 170.408 98.2065 171.023 94.0732 171.023C86.9825 171.023 80.7864 169.13 75.4795 165.353C70.1804 161.528 66.6948 156.204 65.0254 149.367L64.9678 149.127L64.7207 149.163L48.0371 151.751L47.7656 151.792L47.8115 152.062C49.0428 159.258 51.7138 165.494 55.8252 170.756C59.9858 175.962 65.2525 179.985 71.6162 182.822L71.6191 182.825C78.0342 185.61 85.2146 187 93.1533 187C98.8393 187 104.249 186.265 109.376 184.795C114.505 183.324 119.029 181.142 122.935 178.248C126.035 175.939 128.615 173.206 130.676 170.056V187H149.488V137.737C149.488 133.441 150.461 129.883 152.303 126.972C154.328 123.938 156.88 121.665 159.963 120.125L160.014 120.103C163.135 118.452 166.485 117.626 170.083 117.626C173.681 117.626 177.032 118.452 180.152 120.103L180.178 120.114C183.358 121.749 185.902 124.106 187.82 127.209L187.836 127.234C189.695 130.153 190.678 133.719 190.678 138.042V187H209.484V137.89C209.484 130.625 207.985 124.159 204.909 118.554L204.907 118.551L204.317 117.52C201.296 112.437 197.2 108.429 192.045 105.549C186.535 102.358 180.099 100.813 172.835 100.812C167.615 100.813 162.562 101.844 157.684 103.898L157.663 103.907C154.656 105.205 151.926 106.949 149.479 109.12V69H133.903L112.977 100.86L140.117 116.2L125.644 152.78L124.776 119.74L83.1631 109.12L98.4756 69H90.5576ZM112.086 183.645C111.18 183.965 110.252 184.264 109.303 184.536L108.413 184.779C108.709 184.7 109.005 184.619 109.299 184.535C110.249 184.263 111.179 183.966 112.086 183.645ZM130.676 169.56C128.596 172.831 125.962 175.657 122.771 178.032L122.036 178.562C121.705 178.796 121.367 179.021 121.027 179.244C121.62 178.855 122.201 178.451 122.768 178.031C125.959 175.655 128.595 172.829 130.676 169.557V169.56ZM96.2949 171.23C95.5636 171.271 94.8212 171.293 94.0693 171.293C93.6519 171.293 93.2365 171.285 92.8252 171.272L94.0732 171.292C94.8238 171.292 95.5648 171.271 96.2949 171.23ZM64.7627 149.432C66.4464 156.326 69.9657 161.708 75.3223 165.573L76.3223 166.254C75.9853 166.034 75.6503 165.807 75.3203 165.572C69.9636 161.707 66.4425 156.327 64.7588 149.432H64.7627ZM71.7998 73.0322C71.6627 73.0886 71.5254 73.1464 71.3896 73.2041C71.5265 73.146 71.6646 73.0871 71.8027 73.0303C71.943 72.9713 72.0855 72.914 72.2266 72.8564C72.0844 72.9144 71.9412 72.9728 71.7998 73.0322Z" fill="#F7F7F7"/>
+              </svg>
+              <img src="/logo.png" alt="Superhuman School" class="logo-large h-auto max-h-12 w-auto shrink-0 object-contain" width="120" height="48" />
+            </a>
           </div>
+          <!-- Saludo (75px bajo logo; 87px bajo saludo hasta el menú) -->
+          <div class="sidebar-greeting shrink-0 overflow-hidden px-5 pt-[75px] pb-[87px] transition-opacity duration-200">
+            <p class="font-work-sans text-2xl font-normal text-[#CCCCCC]">Hola,</p>
+            <p class="mt-1 font-manrope text-[40px] font-semibold leading-[1.309] text-white">{displayName}</p>
+          </div>
+          <nav class="sidebar-nav flex-1 space-y-2 overflow-x-hidden px-3 py-2" aria-label="Principal">
+            {navLinks.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <a
+                  href={item.href}
+                  class={`nav-link group flex items-center justify-center gap-3 rounded-[40px] px-3 py-2.5 font-work-sans text-base font-normal transition md:justify-start ${
+                    active
+                      ? 'bg-white text-background'
+                      : 'text-white hover:bg-white/10'
+                  }`}
+                  title={item.label}
+                >
+                  <i
+                    class={`bi ${item.icon} shrink-0 text-[15px] leading-none ${
+                      active ? 'text-background' : 'text-white group-hover:text-white'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span class="sidebar-label min-w-0 truncate whitespace-nowrap">{item.label}</span>
+                  {item.showActiveCount && activeRetosCount > 0 && (
+                    <span class={`sidebar-badge ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${active ? 'bg-background/15 text-background' : 'bg-lime/20 text-lime'}`}>
+                      {activeRetosCount}
+                    </span>
+                  )}
+                </a>
+              );
+            })}
+          </nav>
+        </div>
+      </aside>
+      <!-- Espaciador para contenido (ancho de la sidebar) -->
+      <div id="sidebar-spacer" class="hidden shrink-0 transition-[width] duration-200 ease-out md:block md:w-[260px]" aria-hidden="true" data-width="260"></div>
 
-          <div class="flex shrink-0 items-center gap-2">
+      <!-- Área principal: header (negro) + bloque de contenido (gris 1A1A1A, radio solo esquina superior izquierda) -->
+      <div class="flex min-w-0 flex-1 flex-col">
+        <header class="sticky top-0 z-40 shrink-0 bg-background pl-3 pr-3 py-2.5 md:pl-0 md:pr-6 md:py-4">
+          <div class="flex items-center justify-between gap-2">
+            <a href="/dashboard" class="flex shrink-0 items-center md:hidden" aria-label="Superhuman School">
+              <img src="/logo.png" alt="Superhuman School" class="h-7 w-auto max-w-[120px] object-contain object-left" width="120" height="28" />
+            </a>
+            <button
+              type="button"
+              id="sidebar-toggle"
+              class="sidebar-toggle hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/70 transition hover:bg-white/10 hover:text-white md:flex"
+              aria-label="Contraer menú"
+              title="Contraer menú"
+            >
+              <svg class="h-5 w-5 shrink-0 transition-transform duration-200 sidebar-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="1" />
+                <path d="M9 4v16" />
+              </svg>
+            </button>
+            <div class="flex flex-1 items-center justify-end">
             <div class="relative" id="user-menu">
             <button
               type="button"
               id="user-menu-button"
               aria-expanded="false"
               aria-haspopup="true"
-              class="flex cursor-pointer items-center gap-2 rounded-lg border border-transparent py-1.5 pl-1 pr-2 transition hover:border-border hover:bg-surface-2"
+              class="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition hover:bg-surface-2"
             >
               {avatarSrc ? (
                 <img
                   src={avatarSrc}
                   alt=""
-                  class="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-border"
-                  width="32"
-                  height="32"
+                  class="h-10 w-10 shrink-0 rounded-full object-cover"
+                  width="40"
+                  height="40"
                 />
               ) : (
                 <div
-                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-lime text-sm font-semibold text-background ring-1 ring-border"
+                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgb(217,217,217)] text-sm font-semibold text-background"
                   aria-hidden="true"
                 >
                   {initialLetter}
                 </div>
               )}
-              <span class="hidden max-w-[120px] truncate text-sm text-white sm:inline">{displayName}</span>
-              <svg id="chevron-icon" class="h-4 w-4 shrink-0 text-muted transition-transform duration-200 ease-out" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M7 10l5 5 5-5z" />
+              <div class="hidden min-w-0 max-w-[180px] flex flex-col items-start text-left sm:flex">
+                <span class="block truncate font-work-sans text-base font-semibold text-white">{displayName}</span>
+                {userEmail && <span class="block truncate font-work-sans text-[14px] font-normal text-white/80">{userEmail}</span>}
+              </div>
+              <svg id="chevron-icon" class="h-[10px] w-4 shrink-0 stroke-white transition-transform duration-200 ease-out" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M0.353516 0.353516L8.35352 8.35352L15.3535 0.353516" stroke="white" stroke-width="1" />
               </svg>
             </button>
             <div
               id="user-menu-dropdown"
-              class="pointer-events-none absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border bg-surface-2 py-1 shadow-lg opacity-0 transition-[opacity,transform] duration-200 ease-out"
+              class="pointer-events-none absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-xl bg-surface-2 py-1 shadow-lg opacity-0 transition-[opacity,transform] duration-200 ease-out"
               style="transform: translateY(-8px);"
               role="menu"
               aria-hidden="true"
             >
               {role === 'admin' && (
-                <div class="flex items-center gap-2 border-b border-border px-4 py-2 text-xs font-medium text-lime/90" role="none">
+                <div class="flex items-center gap-2 px-4 py-2 text-xs font-medium text-lime/90" role="none">
                   <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 16L3 5l5.5 2.5L12 4l3.5 3.5L21 5l-2 11H5z" />
                   </svg>
@@ -202,7 +287,7 @@ function isActive(href: string): boolean {
               >
                 Ver perfil
               </a>
-              <div class="mt-1 border-t border-border pt-1">
+              <div class="mt-1 pt-1">
                 <SignOutButton
                   redirectUrl="/"
                   class="mx-1 w-[calc(100%-0.5rem)] rounded-lg px-3 py-2.5 text-left text-sm text-muted transition hover:bg-surface hover:text-lime"
@@ -212,13 +297,20 @@ function isActive(href: string): boolean {
                 </SignOutButton>
               </div>
             </div>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <main class="mx-auto max-w-5xl px-4 pb-36 pt-8 sm:px-6 md:pb-8">
-        <slot />
-      </main>
+        <!-- Panel de contenido fijo: el borde y fondo siempre visibles; solo el contenido interno hace scroll -->
+        <div
+          id="main-content-panel"
+          class="fixed right-0 bottom-0 z-10 flex flex-col overflow-hidden bg-[#1A1A1A]"
+        >
+          <main class="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:px-6 md:pt-8 md:pb-14 lg:pl-[54px] lg:pr-6 lg:pt-[54px] lg:pb-[54px]">
+            <slot />
+          </main>
+        </div>
+      </div>
     </div>
     <nav
       class="pointer-events-none fixed inset-x-0 z-[100] md:hidden overflow-visible"
@@ -226,8 +318,8 @@ function isActive(href: string): boolean {
       aria-label="Navegación inferior principal"
     >
       <div class="mx-auto w-fit max-w-[min(92vw,360px)] overflow-visible">
-        <div class="pointer-events-auto flex overflow-visible rounded-full border border-border/80 bg-surface/95 px-3 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur">
-          <div class={`flex items-end justify-center gap-1 ${navLinks.length <= 4 ? 'min-w-full justify-around' : 'min-w-max'}`}>
+        <div class="pointer-events-auto flex overflow-visible rounded-full bg-surface/95 px-2 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur">
+          <div class="flex items-center justify-center gap-0.5">
         {navLinks.map((item) => {
           const active = isActive(item.href);
           return (
@@ -235,31 +327,18 @@ function isActive(href: string): boolean {
               href={item.href}
               aria-label={item.label}
               title={item.label}
-              class={`group relative flex shrink-0 flex-col items-center justify-center gap-0.5 py-1 transition ${navLinks.length <= 4 ? 'min-w-[3.75rem]' : 'min-w-[3rem]'} ${
-                active ? 'text-lime' : 'text-muted hover:text-white'
+              class={`group relative flex shrink-0 items-center justify-center transition ${navLinks.length <= 4 ? 'min-w-[2.75rem]' : 'min-w-[2.5rem]'} ${
+                active ? 'rounded-full bg-white text-background' : 'rounded-full text-muted hover:bg-white/10 hover:text-white'
               }`}
             >
-              {active && (
-                <span
-                  class="pointer-events-none absolute -top-3 z-0 h-8 w-[4.2rem] rounded-b-[999px] bg-background shadow-[inset_0_-7px_12px_rgba(0,0,0,0.34)]"
-                  aria-hidden="true"
-                />
-              )}
-              {active ? (
-                <span class="relative z-10 -mt-7 inline-flex h-12 w-12 items-center justify-center rounded-full border border-lime/70 bg-lime ring-[3px] ring-background shadow-[0_14px_26px_rgba(198,241,53,0.30),0_8px_20px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.26)]">
-                  <i class={`bi ${item.icon} text-[17px] leading-none text-background`} aria-hidden="true" />
-                </span>
-              ) : (
-                <i class={`bi ${item.icon} text-[17px] leading-none text-muted group-hover:text-white/90`} aria-hidden="true" />
-              )}
-              <span class={`max-w-full truncate text-[10px] font-medium leading-tight ${active ? 'text-lime' : 'text-muted group-hover:text-white/90'}`}>
-                {item.label}
+              <span class="relative z-10 flex h-10 w-10 items-center justify-center rounded-full">
+                <i class={`bi ${item.icon} text-[18px] leading-none ${active ? 'text-background' : 'text-current group-hover:text-white'}`} aria-hidden="true" />
+                {item.showActiveCount && activeRetosCount > 0 && (
+                  <span class={`absolute -right-0.5 top-0 inline-flex min-w-4 items-center justify-center rounded-full px-1 py-0.5 text-[9px] font-semibold ${active ? 'bg-background/15 text-background' : 'bg-lime/20 text-lime'}`}>
+                    {activeRetosCount}
+                  </span>
+                )}
               </span>
-              {item.showActiveCount && activeRetosCount > 0 && (
-                <span class="absolute -right-0.5 top-0 inline-flex min-w-4 items-center justify-center rounded-full bg-lime/20 px-1 py-0.5 text-[9px] font-semibold text-lime">
-                  {activeRetosCount}
-                </span>
-              )}
             </a>
           );
         })}
@@ -270,6 +349,26 @@ function isActive(href: string): boolean {
     <div id="toast-root" class="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(92vw,360px)] flex-col gap-2"></div>
 
     <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const STORAGE_KEY = 'sidebarCollapsed';
+        const body = document.getElementById('body-el');
+        const sidebar = document.getElementById('sidebar');
+        const spacer = document.getElementById('sidebar-spacer');
+        const toggleBtn = document.getElementById('sidebar-toggle');
+
+        if (body && sidebar && spacer && toggleBtn) {
+          const collapsed = localStorage.getItem(STORAGE_KEY) === 'true';
+          if (collapsed) body.classList.add('sidebar-collapsed');
+
+          toggleBtn.addEventListener('click', () => {
+            const isCollapsed = body.classList.toggle('sidebar-collapsed');
+            localStorage.setItem(STORAGE_KEY, String(isCollapsed));
+            toggleBtn.setAttribute('aria-label', isCollapsed ? 'Expandir menú' : 'Contraer menú');
+            toggleBtn.setAttribute('title', isCollapsed ? 'Expandir menú' : 'Contraer menú');
+          });
+        }
+      });
+
       document.addEventListener('DOMContentLoaded', () => {
         const menu = document.getElementById('user-menu');
         const button = document.getElementById('user-menu-button');
@@ -389,6 +488,8 @@ function isActive(href: string): boolean {
           openSelect = el;
         };
         for (const select of selects) {
+          const form = select.closest('#create-course-form, #create-challenge-form');
+          if (form?.classList.contains('hidden')) continue;
           const trigger = select.querySelector('.custom-select-trigger');
           const panel = select.querySelector('.custom-select-panel');
           const hidden = select.querySelector('input[type="hidden"]');
@@ -409,7 +510,7 @@ function isActive(href: string): boolean {
                 check.classList.toggle('border-lime', isSelected);
                 check.classList.toggle('bg-lime', isSelected);
                 check.classList.toggle('text-background', isSelected);
-                check.classList.toggle('border-border', !isSelected);
+                check.classList.toggle('border-transparent', !isSelected);
                 check.classList.toggle('bg-surface-2', !isSelected);
                 check.classList.toggle('text-transparent', !isSelected);
               }
@@ -455,6 +556,59 @@ function isActive(href: string): boolean {
           closeSelect(openSelect);
           openSelect = null;
         });
+        document.addEventListener('custom-select-reinit', (e) => {
+          const container = e.detail?.container;
+          if (!container) return;
+          const toInit = Array.from(container.querySelectorAll('.custom-select')).filter((s) => !s.hasAttribute('data-custom-select-initialized'));
+          for (const select of toInit) {
+            const trigger = select.querySelector('.custom-select-trigger');
+            const panel = select.querySelector('.custom-select-panel');
+            const hidden = select.querySelector('input[type="hidden"]');
+            const label = select.querySelector('.custom-select-label');
+            const options = Array.from(select.querySelectorAll('.custom-select-option'));
+            if (!trigger || !panel || !hidden || !label || !options.length) continue;
+            select.setAttribute('data-custom-select-initialized', 'true');
+            const updateVisual = (value) => {
+              for (const option of options) {
+                const optionValue = option.dataset.value ?? '';
+                const check = option.querySelector('span');
+                const isSelected = optionValue === value;
+                option.classList.toggle('bg-lime/10', isSelected);
+                option.classList.toggle('text-lime', isSelected);
+                option.classList.toggle('text-white', !isSelected);
+                if (check) {
+                  check.classList.toggle('border-lime', isSelected);
+                  check.classList.toggle('bg-lime', isSelected);
+                  check.classList.toggle('text-background', isSelected);
+                  check.classList.toggle('border-transparent', !isSelected);
+                  check.classList.toggle('bg-surface-2', !isSelected);
+                  check.classList.toggle('text-transparent', !isSelected);
+                }
+              }
+            };
+            trigger.addEventListener('click', (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              if (openSelect === select) { closeSelect(select); openSelect = null; return; }
+              openCurrentSelect(select);
+            });
+            for (const option of options) {
+              option.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                const nextValue = option.dataset.value ?? '';
+                const nextLabel = option.dataset.label ?? '';
+                hidden.value = nextValue;
+                label.textContent = nextLabel;
+                updateVisual(nextValue);
+                closeSelect(select);
+                openSelect = null;
+                const name = select.getAttribute('data-name');
+                if (name) select.dispatchEvent(new CustomEvent('custom-select-change', { detail: { name, value: nextValue }, bubbles: true }));
+              });
+            }
+            updateVisual(hidden.value);
+          }
+        });
       });
 
       // Fallback: ensure Cerrar sesión works if Clerk script loads after the SignOutButton script
@@ -478,6 +632,7 @@ function isActive(href: string): boolean {
         }
       }, true);
     </script>
+    <DeleteConfirmModal />
   </body>
 </html>
 

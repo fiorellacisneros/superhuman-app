@@ -1,6 +1,6 @@
 ---
 import '../../../../../../styles/global.css';
-import AdminLayout from '../../../../../../layouts/AdminLayout.astro';
+import DashboardLayout from '../../../../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../../../../lib/supabase';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
@@ -19,22 +19,16 @@ if (!courseId || !lessonId) {
   return Astro.redirect('/admin/courses');
 }
 
-const { data: course } = await supabase
-  .from('courses')
-  .select('id, slug, title')
-  .eq('id', courseId)
-  .maybeSingle();
+const [{ data: course }, { data: modulesData }, detailedLesson] = await Promise.all([
+  supabase.from('courses').select('id, slug, title').eq('id', courseId).maybeSingle(),
+  supabase.from('course_modules').select('id, title, order').eq('course_id', courseId).order('order', { ascending: true }),
+  supabase.from('lessons').select('*').eq('id', lessonId).eq('course_id', courseId).maybeSingle(),
+]);
+const modules = (modulesData ?? []) as { id: string; title: string; order: number }[];
 
 if (!course) {
   return Astro.redirect('/admin/courses');
 }
-
-const detailedLesson = await supabase
-  .from('lessons')
-  .select('*')
-  .eq('id', lessonId)
-  .eq('course_id', courseId)
-  .maybeSingle();
 
 const raw = detailedLesson.data as Record<string, unknown> | null;
 const lesson =
@@ -52,6 +46,7 @@ const lesson =
         resources: raw.resources,
         scheduled_at: typeof raw.scheduled_at === 'string' ? raw.scheduled_at : null,
         order: typeof raw.order === 'number' ? raw.order : 0,
+        module_id: typeof raw.module_id === 'string' ? raw.module_id : null,
       }
     : null;
 const lessonError = detailedLesson.error;
@@ -83,9 +78,11 @@ function toDateTimeLocal(value: string | null): string {
 }
 ---
 
-<AdminLayout>
+<DashboardLayout>
   <section class="space-y-6">
     <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
+      <span class="mx-1">/</span>
       <a href="/admin/courses" class="hover:text-white">Cursos</a>
       <span class="mx-1">/</span>
       <a href={`/admin/courses/${courseId}/edit`} class="hover:text-white">{course.title}</a>
@@ -98,12 +95,25 @@ function toDateTimeLocal(value: string | null): string {
       <p class="mt-1 text-sm text-muted">Curso: {course.title}</p>
     </header>
 
-    <form method="post" action="/api/admin/lessons" class="space-y-5 rounded-xl border border-border bg-surface p-5">
+    <form method="post" action="/api/admin/lessons" class="space-y-5 rounded-xl border border-transparent bg-surface p-5">
       <input type="hidden" name="action" value="update" />
       <input type="hidden" name="course_id" value={courseId} />
       <input type="hidden" name="lesson_id" value={lessonId} />
       <input type="hidden" name="redirect_to" value={`/admin/courses/${courseId}/lessons/${lessonId}/edit`} />
 
+      <div>
+        <label for="lesson-module" class="block text-xs font-medium text-muted">Módulo</label>
+        <select
+          id="lesson-module"
+          name="module_id"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+        >
+          <option value="">Sin módulo</option>
+          {modules.map((mod) => (
+            <option value={mod.id} selected={lesson.module_id === mod.id}>{mod.title}</option>
+          ))}
+        </select>
+      </div>
       <div>
         <label for="lesson-title" class="block text-xs font-medium text-muted">Título</label>
         <input
@@ -112,7 +122,7 @@ function toDateTimeLocal(value: string | null): string {
           name="title"
           required
           value={lesson.title ?? ''}
-          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           placeholder="Ej: Sesión 1 — Introducción"
         />
       </div>
@@ -123,7 +133,7 @@ function toDateTimeLocal(value: string | null): string {
           id="lesson-notes"
           name="notes"
           rows={4}
-          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           placeholder="Descripción o notas para la clase"
         >{lesson.notes ?? ''}</textarea>
       </div>
@@ -135,7 +145,7 @@ function toDateTimeLocal(value: string | null): string {
           type="url"
           name="zoom_link"
           value={lesson.zoom_link ?? ''}
-          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           placeholder="https://zoom.us/j/..."
         />
         <p class="mt-1 text-[11px] text-muted">Si está vacío, se usa el del curso. Sobrescribe aquí solo si esta clase tiene un link distinto.</p>
@@ -148,7 +158,7 @@ function toDateTimeLocal(value: string | null): string {
           type="url"
           name="recording_url"
           value={lesson.recording_url ?? ''}
-          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           placeholder="https://..."
         />
         <p class="mt-1 text-[11px] text-muted">Link de la grabación. Puedes agregarlo después de que termine la clase.</p>
@@ -161,7 +171,7 @@ function toDateTimeLocal(value: string | null): string {
           type="text"
           name="recording_passcode"
           value={lesson.recording_passcode ?? ''}
-          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           placeholder="Código para acceder a la grabación"
           autocomplete="off"
         />
@@ -175,7 +185,7 @@ function toDateTimeLocal(value: string | null): string {
           type="url"
           name="ppt_url"
           value={lesson.ppt_url ?? ''}
-          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           placeholder="https://..."
         />
       </div>
@@ -187,7 +197,7 @@ function toDateTimeLocal(value: string | null): string {
           type="url"
           name="resources_url"
           value={lesson.resources_url ?? ''}
-          class="mt-1 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           placeholder="https://drive.google.com/..."
         />
         <p class="mt-1 text-[11px] text-muted">Carpeta Drive, PDF o material oficial de la clase.</p>
@@ -204,20 +214,20 @@ function toDateTimeLocal(value: string | null): string {
                 name={`resource_label_${i}`}
                 value={r.label}
                 placeholder="Etiqueta"
-                class="w-28 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                class="w-28 rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
               />
               <input
                 type="url"
                 name={`resource_url_${i}`}
                 value={r.url}
                 placeholder="URL"
-                class="min-w-0 flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                class="min-w-0 flex-1 rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
               />
               <div class="custom-select custom-select--single relative w-[180px]" data-name={`resource_type_${i}`}>
                 <input type="hidden" name={`resource_type_${i}`} value={r.type} />
                 <button
                   type="button"
-                  class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                  class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
                   aria-expanded="false"
                   aria-haspopup="listbox"
                 >
@@ -226,15 +236,15 @@ function toDateTimeLocal(value: string | null): string {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
                   </svg>
                 </button>
-                <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden min-w-full overflow-hidden rounded-xl border border-border bg-surface p-2 shadow-2xl" role="listbox">
+                <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden min-w-full overflow-hidden rounded-xl border border-transparent bg-surface p-2 shadow-2xl" role="listbox">
                   <button type="button" class={`custom-select-option flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${r.type === 'class' ? 'bg-lime/10 text-lime' : 'text-white'}`} data-value="class" data-label="Recurso de clase">
-                    <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${r.type === 'class' ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                    <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${r.type === 'class' ? 'border-lime bg-lime text-background' : 'border-transparent bg-surface-2 text-transparent'}`}>
                       <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
                     </span>
                     <span class="truncate">Recurso de clase</span>
                   </button>
                   <button type="button" class={`custom-select-option mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${r.type === 'shared' ? 'bg-lime/10 text-lime' : 'text-white'}`} data-value="shared" data-label="Link compartido">
-                    <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${r.type === 'shared' ? 'border-lime bg-lime text-background' : 'border-border bg-surface-2 text-transparent'}`}>
+                    <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${r.type === 'shared' ? 'border-lime bg-lime text-background' : 'border-transparent bg-surface-2 text-transparent'}`}>
                       <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
                     </span>
                     <span class="truncate">Link compartido</span>
@@ -256,7 +266,7 @@ function toDateTimeLocal(value: string | null): string {
               name="scheduled_at"
               value={toDateTimeLocal(lesson.scheduled_at)}
               readonly
-              class="w-full cursor-pointer rounded-lg border border-border bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              class="w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
               placeholder="Elegir fecha y hora"
               autocomplete="off"
             />
@@ -271,28 +281,28 @@ function toDateTimeLocal(value: string | null): string {
             name="order"
             value={lesson.order ?? 0}
             min="0"
-            class="mt-1.5 w-full rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
           />
         </div>
       </div>
 
       <div class="flex gap-3 pt-2">
-        <button
-          type="submit"
-          class="rounded-lg border border-lime bg-lime px-4 py-2 text-sm font-medium text-background transition hover:bg-lime/90"
-        >
+        <button type="submit" class="btn btn-primary">
           Guardar clase
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
         </button>
-        <a
-          href={`/admin/courses/${courseId}/edit`}
-          class="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-white transition hover:bg-surface-2/80"
-        >
+        <a href={`/admin/courses/${courseId}/edit`} class="btn btn-ghost">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
           Volver al curso
         </a>
       </div>
     </form>
   </section>
-</AdminLayout>
+</DashboardLayout>
 
 <script>
   import flatpickr from 'flatpickr';
