@@ -127,7 +127,7 @@ for (const course of enrolledCourseRows) {
         ))}
       </ul>
     ) : (
-      <div class="rounded-xl border border-dashed border-white/20 bg-surface-2/60 p-8 text-center">
+      <div class="rounded-xl border border-dashed border-white/20 bg-background p-8 text-center">
         <p class="text-sm font-medium text-white">{role === 'admin' ? 'Aún no hay cursos creados.' : 'Aún no estás inscrito en ningún curso.'}</p>
         <p class="mt-1 text-sm text-muted">
           {role === 'admin' ? 'Crea cursos desde el dashboard de administración.' : 'Cuando te inscribas, tus cursos aparecerán aquí.'}

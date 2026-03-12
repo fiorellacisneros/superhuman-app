@@ -462,13 +462,13 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
                 ))}
               </ul>
             ) : (
-              <div class="mt-4 flex flex-col items-center gap-2 text-center">
-                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-muted" aria-hidden="true">
+              <div class="mt-4 rounded-xl border border-dashed border-transparent bg-background p-6 text-center">
+                <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-muted" aria-hidden="true">
                   <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
                   </svg>
                 </div>
-                <p class="text-[11px] text-muted">Aún no hay estudiantes en el cohort.</p>
+                <p class="mt-2 text-[11px] text-muted">Aún no hay estudiantes en el cohort.</p>
               </div>
             )}
           </div>
@@ -640,7 +640,9 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
                 ))}
               </div>
             ) : (
-              <p class="mt-3 text-sm text-muted">No hay clases programadas aún.</p>
+              <div class="mt-3 rounded-xl border border-dashed border-transparent bg-background p-6 text-center">
+                <p class="text-sm text-muted">No hay clases programadas aún.</p>
+              </div>
             )}
           </div>
         </section>
