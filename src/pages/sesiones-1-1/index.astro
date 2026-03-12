@@ -119,16 +119,9 @@ function formatBookingDate(iso: string) {
   }
 }
 
-const today = new Date().toISOString().slice(0, 10);
-const firstBadgeUrl =
-  (role !== 'admin' &&
-    courses1to1.find(
-      (c) => !(c.ends_at && c.ends_at < today) && c.bookingCount < 2 && c.calendly_link_1to1
-    )?.calendly_link_1to1) ?? null;
 ---
-
 <DashboardLayout role={role === 'admin' ? 'admin' : 'student'}>
-  {firstBadgeUrl && (
+  {courses1to1.some((c) => c.calendly_link_1to1) && role !== 'admin' && (
     <Fragment slot="head">
       <link href="https://assets.calendly.com/assets/external/widget.css" rel="stylesheet" />
     </Fragment>
@@ -310,36 +303,6 @@ const firstBadgeUrl =
       })();
     </script>
   )}
-  {firstBadgeUrl && (
-    <script is:inline define:vars={{ firstBadgeUrl }}>
-      (function () {
-        var url = firstBadgeUrl;
-        var opts = {
-          url: url,
-          text: 'Reservar sesión 1:1',
-          color: '#FFBE00',
-          textColor: '#0D0D0D',
-          branding: true,
-        };
-        function initBadge() {
-          if (typeof window.Calendly !== 'undefined') {
-            window.Calendly.initBadgeWidget(opts);
-            return;
-          }
-          var s = document.createElement('script');
-          s.src = 'https://assets.calendly.com/assets/external/widget.js';
-          s.async = true;
-          s.onload = function () {
-            window.Calendly.initBadgeWidget(opts);
-          };
-          document.head.appendChild(s);
-        }
-        if (document.readyState === 'complete') initBadge();
-        else window.addEventListener('load', initBadge);
-      })();
-    </script>
-  )}
-
   {role === 'admin' && (
     <script>
       import flatpickr from 'flatpickr';
