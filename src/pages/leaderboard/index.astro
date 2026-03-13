@@ -3,6 +3,7 @@ import '../../styles/global.css';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import { avatarImagePath } from '../../lib/avatars';
+import { getPreviewContext } from '../../lib/preview';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -12,18 +13,26 @@ if (!isAuthenticated || !userId) {
 const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
 const role = (userRow?.role as string) ?? 'student';
+const { preview } = getPreviewContext(Astro);
+const isPreviewMode = role === 'admin' && preview;
 
 // Cursos inscritos (para selector y validación)
-const { data: enrollmentRows } = await supabase
-  .from('enrollments')
-  .select('course_id, courses(id, title)')
-  .eq('user_id', userId);
-const enrolledCourses = (enrollmentRows ?? [])
-  .map((r) => {
-    const c = (r as { courses?: { id: string; title: string | null } | null }).courses;
-    return c?.id ? { id: c.id, title: c.title ?? 'Curso' } : null;
-  })
-  .filter((c): c is { id: string; title: string } => Boolean(c));
+let enrolledCourses: { id: string; title: string }[] = [];
+if (isPreviewMode) {
+  const { data: allCourses } = await supabase.from('courses').select('id, title').order('title');
+  enrolledCourses = (allCourses ?? []).map((c) => ({ id: c.id, title: c.title ?? 'Curso' }));
+} else {
+  const { data: enrollmentRows } = await supabase
+    .from('enrollments')
+    .select('course_id, courses(id, title)')
+    .eq('user_id', userId);
+  enrolledCourses = (enrollmentRows ?? [])
+    .map((r) => {
+      const c = (r as { courses?: { id: string; title: string | null } | null }).courses;
+      return c?.id ? { id: c.id, title: c.title ?? 'Curso' } : null;
+    })
+    .filter((c): c is { id: string; title: string } => Boolean(c));
+}
 const enrolledCourseIds = enrolledCourses.map((c) => c.id);
 
 // Curso seleccionado: query param o el primero si solo hay uno
@@ -82,7 +91,21 @@ const rows: LeaderboardRow[] = (studentRows ?? [])
 const topScore = Math.max(1, ...rows.map((r) => r.points));
 ---
 
-<DashboardLayout role={role === 'admin' ? 'admin' : 'student'}>
+<DashboardLayout role={isPreviewMode ? 'student' : (role === 'admin' ? 'admin' : 'student')}>
+  {isPreviewMode && (
+    <div class="-mx-4 -mt-6 mb-6 flex flex-wrap items-center justify-between gap-2 bg-background/95 px-4 py-3 md:-mx-6 md:mb-8 md:gap-4 md:px-6">
+      <span class="flex items-center gap-2 text-sm font-medium text-lime">
+        <span aria-hidden="true">👁</span>
+        Vista previa como estudiante
+      </span>
+      <a href="/dashboard?exitPreview=1" class="inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Volver al dashboard de admin
+      </a>
+    </div>
+  )}
   <section class="max-w-5xl space-y-6 xl:max-w-6xl">
     <nav class="text-sm text-muted">
       <a href="/dashboard" class="hover:text-white">Dashboard</a>

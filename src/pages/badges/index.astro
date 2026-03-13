@@ -3,6 +3,7 @@ import '../../styles/global.css';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import BadgeIcon from '../../components/BadgeIcon.astro';
+import { getPreviewContext } from '../../lib/preview';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -12,6 +13,8 @@ if (!isAuthenticated || !userId) {
 const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
 const role = (userRow?.role as string) ?? 'student';
+const { preview } = getPreviewContext(Astro);
+const isPreviewMode = role === 'admin' && preview;
 
 const iconMap: Record<string, string> = {
   first_submission: 'first_submission',
@@ -50,7 +53,21 @@ function formatDate(iso: string) {
 }
 ---
 
-<DashboardLayout role={role}>
+<DashboardLayout role={isPreviewMode ? 'student' : role}>
+  {isPreviewMode && (
+    <div class="-mx-4 -mt-6 mb-6 flex flex-wrap items-center justify-between gap-2 bg-background/95 px-4 py-3 md:-mx-6 md:mb-8 md:gap-4 md:px-6">
+      <span class="flex items-center gap-2 text-sm font-medium text-lime">
+        <span aria-hidden="true">👁</span>
+        Vista previa como estudiante
+      </span>
+      <a href="/dashboard?exitPreview=1" class="inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Volver al dashboard de admin
+      </a>
+    </div>
+  )}
   <section class="max-w-5xl space-y-6 xl:max-w-6xl">
     <nav class="text-sm text-muted">
       <a href="/dashboard" class="hover:text-white">Dashboard</a>
@@ -67,7 +84,7 @@ function formatDate(iso: string) {
       <ul class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {badges.map((b) => (
           <li
-            class={`badge-tooltip-group group relative rounded-xl border p-4 transition-colors ${
+            class={`badge-tooltip-group group rounded-xl border p-4 transition-colors ${
               b.earned ? 'border-transparent bg-gray' : 'border-transparent bg-surface-2/60 opacity-50'
             }`}
           >
