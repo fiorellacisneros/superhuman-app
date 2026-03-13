@@ -406,7 +406,7 @@ function isActive(href: string): boolean {
         });
 
         document.addEventListener('click', () => {
-          if (isOpen()) close();
+          if (isOpen()) requestAnimationFrame(close);
         });
       });
 
@@ -550,8 +550,10 @@ function isActive(href: string): boolean {
           if (!openSelect) return;
           const target = e.target;
           if (!(target instanceof Node) || openSelect.contains(target)) return;
-          closeSelect(openSelect);
-          openSelect = null;
+          requestAnimationFrame(() => {
+            closeSelect(openSelect);
+            openSelect = null;
+          });
         });
         document.addEventListener('keydown', (e) => {
           if (e.key !== 'Escape' || !openSelect) return;
@@ -619,19 +621,21 @@ function isActive(href: string): boolean {
         if (!target) return;
         e.preventDefault();
         e.stopPropagation();
-        const doSignOut = () => {
-          if (window.Clerk && typeof window.Clerk.signOut === 'function') {
-            window.Clerk.signOut({ redirectUrl: '/' });
-            return true;
+        requestAnimationFrame(() => {
+          const doSignOut = () => {
+            if (window.Clerk && typeof window.Clerk.signOut === 'function') {
+              window.Clerk.signOut({ redirectUrl: '/' });
+              return true;
+            }
+            return false;
+          };
+          if (!doSignOut()) {
+            const interval = setInterval(() => {
+              if (doSignOut()) clearInterval(interval);
+            }, 100);
+            setTimeout(() => clearInterval(interval), 5000);
           }
-          return false;
-        };
-        if (!doSignOut()) {
-          const interval = setInterval(() => {
-            if (doSignOut()) clearInterval(interval);
-          }, 100);
-          setTimeout(() => clearInterval(interval), 5000);
-        }
+        });
       }, true);
     </script>
     <DeleteConfirmModal />
