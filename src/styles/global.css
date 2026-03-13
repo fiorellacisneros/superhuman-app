@@ -102,13 +102,14 @@ h1, h2, h3, h4, h5, h6 {
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%) translateY(-8px);
-  padding: 0.5rem 0.75rem;
+  padding: 0.6rem 0.875rem 0.7rem;
   background: #1A1A1A;
   color: var(--color-white);
-  font-size: 0.75rem;
-  line-height: 1.35;
+  font-size: 0.8125rem;
+  line-height: 1.5;
   border-radius: 8px;
   max-width: 220px;
+  min-width: 120px;
   text-align: center;
   opacity: 0;
   visibility: hidden;
@@ -117,6 +118,9 @@ h1, h2, h3, h4, h5, h6 {
   z-index: 50;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: visible;
+  white-space: normal;
+  word-wrap: break-word;
 }
 .badge-tooltip-group:hover .badge-tooltip {
   opacity: 1;
@@ -127,6 +131,10 @@ h1, h2, h3, h4, h5, h6 {
   bottom: auto;
   top: 100%;
   transform: translateX(-50%) translateY(8px);
+}
+/* Contenedores de badges: permitir que el tooltip se muestre sin recortarse */
+.badge-tooltip-group {
+  overflow: visible;
 }
 
 /* Ensure interactive controls always show pointer affordance */
