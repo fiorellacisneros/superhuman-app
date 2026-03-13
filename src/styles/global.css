@@ -96,6 +96,39 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-manrope);
 }
 
+/* Tooltip para badges: visible al hacer hover */
+.badge-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  padding: 0.5rem 0.75rem;
+  background: #1A1A1A;
+  color: var(--color-white);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  border-radius: 8px;
+  max-width: 220px;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  pointer-events: none;
+  z-index: 50;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.badge-tooltip-group:hover .badge-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+/* Variante: tooltip abajo (para contenedores con overflow que recortarían arriba) */
+.badge-tooltip--bottom {
+  bottom: auto;
+  top: 100%;
+  transform: translateX(-50%) translateY(8px);
+}
+
 /* Ensure interactive controls always show pointer affordance */
 button,
 input[type="button"],
