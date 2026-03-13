@@ -190,13 +190,7 @@ if (enrolledUserIds.length > 0) {
   const usersRows = (usersData ?? []) as { id: string; display_name: string | null; avatar_id: string | null }[];
   courseLeaderboard = usersRows
     .map((u) => ({ id: u.id, name: u.display_name ?? 'Sin nombre', avatarId: u.avatar_id, points: pointsByUser.get(u.id) ?? 0 }))
-    .filter((u) => u.points > 0)
     .sort((a, b) => b.points - a.points);
-  if (courseLeaderboard.length === 0) {
-    courseLeaderboard = usersRows
-      .map((u) => ({ id: u.id, name: u.display_name ?? 'Sin nombre', avatarId: u.avatar_id, points: pointsByUser.get(u.id) ?? 0 }))
-      .sort((a, b) => b.points - a.points);
-  }
 }
 
 const totalEnrolled = enrolledUserIds.length;
