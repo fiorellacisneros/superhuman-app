@@ -683,7 +683,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
           <div class="rounded-[24px] bg-background p-5">
             <h2 class="font-manrope text-2xl font-semibold text-white">Insignias generales</h2>
             <p class="mt-0.5 text-xs text-muted">Puedes ganar la misma insignia en distintos cursos.</p>
-            <ul class="mt-4 grid grid-cols-2 gap-x-5 gap-y-6 sm:grid-cols-4 sm:gap-x-6 sm:gap-y-6">
+            <ul class="mt-4 grid grid-cols-3 gap-x-5 gap-y-6 sm:gap-x-6 sm:gap-y-6">
               {dashboardBadges.map((b) => (
                 <li
                   class={`badge-tooltip-group group relative flex min-w-0 flex-col items-center rounded-xl transition-colors ${
