@@ -243,7 +243,7 @@ function formatDate(iso: string | null): string {
         {badges.length > 0 ? (
           <ul class="mt-3 space-y-2">
             {badges.map((b) => (
-              <li class="badge-tooltip-group group relative flex items-start gap-3 rounded-lg border border-transparent bg-surface-2/60 px-3 py-2">
+              <li class="badge-tooltip-group group flex items-start gap-3 rounded-lg border border-transparent bg-surface-2/60 px-3 py-2">
                 <span class="badge-tooltip" role="tooltip">{b.description ?? b.name}</span>
                 <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/15 text-lime ring-1 ring-lime/40">
                   <i class={`bi ${iconMap[b.conditionType ?? ''] ?? 'bi-star-fill'} text-sm`} aria-hidden="true" />

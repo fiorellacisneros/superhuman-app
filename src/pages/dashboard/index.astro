@@ -7,6 +7,7 @@ import BadgeIcon from '../../components/BadgeIcon.astro';
 import BadgeOutline from '../../components/BadgeOutline.astro';
 import { formatDayAndDate, formatTime } from '../../lib/format-date';
 import { isLessonCompleted } from '../../lib/lessons';
+import { getPreviewContext, setPreviewCookie, clearPreviewCookie } from '../../lib/preview';
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
 
@@ -36,7 +37,18 @@ if (userRow && (userRow.display_name == null || userRow.display_name === '')) {
 }
 
 const role = (userRow?.role as 'admin' | 'student') ?? 'student';
-const preview = Astro.url.searchParams.get('preview') === 'true';
+let { preview } = getPreviewContext(Astro);
+
+// Salir de preview: limpiar cookie y redirigir
+if (Astro.url.searchParams.get('exitPreview') === '1') {
+  clearPreviewCookie(Astro);
+  return Astro.redirect('/dashboard');
+}
+
+// Admin en preview: guardar cookie para persistir al navegar
+if (role === 'admin' && preview) {
+  setPreviewCookie(Astro);
+}
 
 // ---------- Admin-only data (when role === 'admin' && !preview) ----------
 type AdminCourseStats = { id: string; slug: string; title: string; studentsCount: number; totalLessons: number; avgPoints: number };
@@ -203,9 +215,20 @@ if (role !== 'admin' || preview) {
       .in('course_id', enrolledCourseIdsForPoints);
     points = (myPointsRows ?? []).reduce((a, r) => a + (r.points ?? 0), 0);
   }
-  const enrolledCourseRows = (enrollmentRows ?? [])
+  let enrolledCourseRows = (enrollmentRows ?? [])
     .map((row) => (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses)
     .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
+
+  // Admin en preview: ver todos los cursos (acceso completo)
+  if (role === 'admin' && preview) {
+    const { data: allCourses } = await supabase
+      .from('courses')
+      .select('id, slug, title, cover_image, description')
+      .order('title');
+    enrolledCourseRows = (allCourses ?? []).filter(
+      (c): c is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(c?.id),
+    );
+  }
 
   enrolledIds = enrolledCourseRows.map((course) => course.id);
 
@@ -479,12 +502,12 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
 ) : (
   <DashboardLayout role={preview ? 'student' : role}>
     {role === 'admin' && preview && (
-      <div class="sticky top-0 z-40 -mx-4 -mt-6 mb-4 flex flex-wrap items-center justify-between gap-2 bg-background/95 px-4 py-3 backdrop-blur md:-mx-6 md:mb-6 md:gap-4 md:px-6">
+      <div class="-mx-4 -mt-6 mb-6 flex flex-wrap items-center justify-between gap-2 bg-background/95 px-4 py-3 md:-mx-6 md:mb-8 md:gap-4 md:px-6">
         <span class="flex items-center gap-2 text-sm font-medium text-lime">
           <span aria-hidden="true">👁</span>
           Modo vista previa
         </span>
-        <a href="/dashboard" class="inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
+        <a href="/dashboard?exitPreview=1" class="inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
@@ -686,11 +709,11 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
             <ul class="mt-4 grid grid-cols-3 gap-x-5 gap-y-6 sm:gap-x-6 sm:gap-y-6">
               {dashboardBadges.map((b) => (
                 <li
-                  class={`badge-tooltip-group group relative flex min-w-0 flex-col items-center rounded-xl transition-colors ${
+                  class={`badge-tooltip-group group flex min-w-0 flex-col items-center rounded-xl transition-colors ${
                     'bg-background'
                   }`}
                 >
-                  <span class="badge-tooltip" role="tooltip">{b.description ?? b.name}</span>
+                  <span class="badge-tooltip badge-tooltip--bottom" role="tooltip">{b.description ?? b.name}</span>
                   <BadgeOutline id={b.id} variant={b.earned ? 'earned' : 'unearned'} count={b.earnedCount > 0 ? b.earnedCount : undefined}>
                     <BadgeIcon
                       icon={iconMap[b.condition_type ?? ''] ?? 'manual'}
