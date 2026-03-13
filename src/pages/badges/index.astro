@@ -64,12 +64,13 @@ function formatDate(iso: string) {
     </header>
 
     {badges.length > 0 ? (
-      <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {badges.map((b) => (
           <li
             class={`group rounded-xl border p-4 transition-colors ${
               b.earned ? 'border-transparent bg-gray' : 'border-transparent bg-surface-2/60 opacity-50'
             }`}
+            title={b.description ?? b.name}
           >
             <div class="flex items-start gap-4">
               <div class={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full p-1.5 ${b.earned ? 'bg-lime' : 'bg-surface-2'}`}>
