@@ -83,7 +83,7 @@ const topScore = Math.max(1, ...rows.map((r) => r.points));
 ---
 
 <DashboardLayout role={role === 'admin' ? 'admin' : 'student'}>
-  <section class="space-y-6">
+  <section class="max-w-5xl space-y-6 xl:max-w-6xl">
     <nav class="text-sm text-muted">
       <a href="/dashboard" class="hover:text-white">Dashboard</a>
       <span class="mx-1">/</span>
