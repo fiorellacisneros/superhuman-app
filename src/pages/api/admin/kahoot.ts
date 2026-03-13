@@ -47,12 +47,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  const { data: existing } = await db.from('kahoot_results').select('id').eq('lesson_id', lessonId).limit(1);
-  if (existing && existing.length > 0) {
-    const redirect = safeRedirectPath(formData.get('redirect_to'), '/admin/kahoot');
-    const url = withToastParams(redirect, 'Ya registraste Kahoot para esta clase. Los puntos ya fueron asignados.', 'info');
-    return new Response(null, { status: 303, headers: { Location: url } });
-  }
+  // Si ya había resultados para esta clase, revertimos esos puntos antes de recalcular.
+  const { data: existing } = await db
+    .from('kahoot_results')
+    .select('user_id, points_earned')
+    .eq('lesson_id', lessonId);
 
   const { data: enrolledRows } = await db
     .from('enrollments')
@@ -88,9 +87,41 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(null, { status: 303, headers: { Location: url } });
   }
 
+  const courseId = lesson.course_id as string;
+
+  // Si había resultados previos, restamos sus puntos del acumulado de cada alumno
+  // y borramos los registros antiguos antes de insertar los nuevos.
+  if (existing && existing.length > 0) {
+    const pointsToRemoveByUser = new Map<string, number>();
+    for (const row of existing as { user_id: string; points_earned: number | null }[]) {
+      const uid = row.user_id;
+      const pts = row.points_earned ?? 0;
+      if (!uid || !Number.isFinite(pts) || pts <= 0) continue;
+      pointsToRemoveByUser.set(uid, (pointsToRemoveByUser.get(uid) ?? 0) + pts);
+    }
+
+    for (const [uid, ptsToRemove] of pointsToRemoveByUser) {
+      const { data: currentRow } = await db
+        .from('user_course_points')
+        .select('points')
+        .eq('user_id', uid)
+        .eq('course_id', courseId)
+        .maybeSingle();
+      const current = (currentRow?.points as number | undefined) ?? 0;
+      const next = Math.max(0, current - ptsToRemove);
+      await db
+        .from('user_course_points')
+        .upsert(
+          { user_id: uid, course_id: courseId, points: next, updated_at: new Date().toISOString() },
+          { onConflict: ['user_id', 'course_id'] }
+        );
+    }
+
+    await db.from('kahoot_results').delete().eq('lesson_id', lessonId);
+  }
+
   await db.from('kahoot_results').insert(results);
 
-  const courseId = lesson.course_id as string;
   for (const r of results) {
     await addPointsForCourse(r.user_id, courseId, r.points_earned, db);
   }

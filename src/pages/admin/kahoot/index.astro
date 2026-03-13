@@ -44,6 +44,8 @@ const selectedLesson = allLessons.find((l) => l.id === selectedLessonId) ?? null
 
 let students: { id: string; name: string; avatarId: string | null }[] = [];
 let alreadyRegistered = false;
+let existingPositions: Record<number, string | null> = { 1: null, 2: null, 3: null, 4: null, 5: null };
+let existingParticipants = new Set<string>();
 if (selectedLesson) {
   const { data: enrollmentRows } = await supabase
     .from('enrollments')
@@ -52,10 +54,18 @@ if (selectedLesson) {
 
   const { data: kahootRows } = await supabase
     .from('kahoot_results')
-    .select('id')
-    .eq('lesson_id', selectedLesson.id)
-    .limit(1);
+    .select('user_id, position')
+    .eq('lesson_id', selectedLesson.id);
   alreadyRegistered = (kahootRows ?? []).length > 0;
+  for (const row of kahootRows ?? []) {
+    const uid = row.user_id as string;
+    const pos = row.position as number | null;
+    if (pos && pos >= 1 && pos <= 5 && !existingPositions[pos]) {
+      existingPositions[pos] = uid;
+    } else if (!pos) {
+      existingParticipants.add(uid);
+    }
+  }
 
   students = (enrollmentRows ?? [])
     .filter((row) => (row.access_type as string) !== 'on_demand')
@@ -207,30 +217,36 @@ function formatDateTime(iso: string | null): string {
           <p class="text-xs text-muted">{formatDateTime(selectedLesson.scheduledAt)}</p>
         </div>
 
-        {alreadyRegistered ? (
-          <div class="rounded-lg border border-lime/40 bg-lime/10 p-4">
-            <p class="text-sm font-medium text-lime">Ya registraste Kahoot para esta clase. Los puntos ya fueron asignados.</p>
+        {alreadyRegistered && (
+          <div class="mb-4 rounded-lg border border-lime/40 bg-lime/10 p-4">
+            <p class="text-sm font-medium text-lime">
+              Ya registraste Kahoot para esta clase. Si vuelves a guardar, se recalcularán los puntos para esta clase.
+            </p>
           </div>
-        ) : (
-          <form id="kahoot-form" method="post" action="/api/admin/kahoot" class="space-y-6">
-            <input type="hidden" name="lesson_id" value={selectedLesson.id} />
-            <input type="hidden" name="redirect_to" value={`/admin/kahoot?course=${selectedLesson.courseId}&lesson=${selectedLesson.id}`} />
+        )}
+
+        <form id="kahoot-form" method="post" action="/api/admin/kahoot" class="space-y-6">
+          <input type="hidden" name="lesson_id" value={selectedLesson.id} />
+          <input type="hidden" name="redirect_to" value={`/admin/kahoot?course=${selectedLesson.courseId}&lesson=${selectedLesson.id}`} />
 
             <div class="grid gap-6 lg:grid-cols-3">
               <div class="space-y-4 lg:col-span-2">
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                  {[1, 2, 3, 4, 5].map((pos) => (
+                  {[1, 2, 3, 4, 5].map((pos) => {
+                    const preUserId = existingPositions[pos] ?? null;
+                    const preUser = preUserId ? students.find((s) => s.id === preUserId) : null;
+                    return (
                     <div>
                       <label for={`position_${pos}`} class="block text-xs font-medium text-muted">{pos}º lugar</label>
                       <div class="custom-select custom-select--single relative mt-1" data-name={`position_${pos}`}>
-                        <input type="hidden" id={`position_${pos}`} name={`position_${pos}`} value="" />
+                        <input type="hidden" id={`position_${pos}`} name={`position_${pos}`} value={preUserId ?? ''} />
                         <button
                           type="button"
                           class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
                           aria-expanded="false"
                           aria-haspopup="listbox"
                         >
-                          <span class="custom-select-label truncate">—</span>
+                          <span class="custom-select-label truncate">{preUser ? preUser.name : '—'}</span>
                           <svg class="h-4 w-4 shrink-0 text-muted transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
                           </svg>
@@ -258,29 +274,33 @@ function formatDateTime(iso: string | null): string {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
 
                 <p class="text-xs text-muted">Referencia: cruza los nombres de Kahoot con la lista de abajo.</p>
 
                 <div class="rounded-lg border border-transparent bg-surface-2/40 p-3">
-              <p class="mb-2 text-xs font-medium text-muted">Participaron (5 pts cada uno) — marca a quienes jugaron; no aplica a los que ya tienen puntos por puesto</p>
-              <div id="kahoot-participants" class="flex flex-wrap gap-2">
-                {students.map((s) => (
-                  <label class="kahoot-participant flex cursor-pointer items-center gap-2 rounded-lg border border-transparent bg-surface-2/60 px-2.5 py-1.5 transition hover:border-lime/50 has-[:checked]:border-lime/50 has-[:checked]:bg-lime/10" data-user-id={s.id}>
-                    <input type="checkbox" name="participant_ids" value={s.id} class="peer sr-only" />
-                    <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-transparent bg-surface text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background">
-                      <i class="bi bi-check-lg text-[10px] leading-none" aria-hidden="true" />
-                    </span>
-                    {avatarImagePath(s.avatarId) ? (
-                      <img src={avatarImagePath(s.avatarId)!} alt="" class="h-5 w-5 shrink-0 rounded-full object-cover" width="20" height="20" />
-                    ) : (
-                      <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface text-[9px] font-semibold text-muted">{s.name.charAt(0).toUpperCase()}</span>
-                    )}
-                    <span class="text-xs text-white">{s.name}</span>
-                  </label>
-                ))}
-              </div>
+                  <p class="mb-2 text-xs font-medium text-muted">
+                    Participaron (5 pts cada uno) — marca a quienes jugaron; no aplica a los que ya tienen puntos por puesto
+                  </p>
+                  <div id="kahoot-participants" class="flex flex-wrap gap-2">
+                    {students.map((s) => {
+                      const checked = existingParticipants.has(s.id);
+                      return (
+                      <label class="kahoot-participant flex cursor-pointer items-center gap-2 rounded-lg border border-transparent bg-surface-2/60 px-2.5 py-1.5 transition hover:border-lime/50 has-[:checked]:border-lime/50 has-[:checked]:bg-lime/10" data-user-id={s.id}>
+                        <input type="checkbox" name="participant_ids" value={s.id} class="peer sr-only" checked={checked} />
+                        <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-transparent bg-surface text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background">
+                          <i class="bi bi-check-lg text-[10px] leading-none" aria-hidden="true" />
+                        </span>
+                        {avatarImagePath(s.avatarId) ? (
+                          <img src={avatarImagePath(s.avatarId)!} alt="" class="h-5 w-5 shrink-0 rounded-full object-cover" width="20" height="20" />
+                        ) : (
+                          <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface text-[9px] font-semibold text-muted">{s.name.charAt(0).toUpperCase()}</span>
+                        )}
+                        <span class="text-xs text-white">{s.name}</span>
+                      </label>
+                    )})}
+                  </div>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-4">
