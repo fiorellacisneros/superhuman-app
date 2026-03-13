@@ -59,23 +59,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .eq('course_id', lesson.course_id as string);
   const enrolledSet = new Set((enrolledRows ?? []).map((r) => r.user_id as string));
 
-  const top5Raw = [pos1, pos2, pos3, pos4, pos5].filter((id) => id && enrolledSet.has(id));
-  const seen = new Set<string>();
-  const top5: string[] = [];
-  for (const id of top5Raw) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    top5.push(id);
+  // Respetar la posición exacta del formulario: 1º lugar vacío = vacío, 2º = Junior, 3º = Emi, etc.
+  const positionAssignments: { pos: 1 | 2 | 3 | 4 | 5; user_id: string }[] = [];
+  const raw = [pos1, pos2, pos3, pos4, pos5] as const;
+  const seenInTop5 = new Set<string>();
+  for (let i = 0; i < 5; i++) {
+    const uid = raw[i]?.trim() ?? '';
+    if (!uid || !enrolledSet.has(uid)) continue;
+    if (seenInTop5.has(uid)) continue; // evita duplicados: mismo alumno en dos puestos
+    seenInTop5.add(uid);
+    positionAssignments.push({ pos: (i + 1) as 1 | 2 | 3 | 4 | 5, user_id: uid });
   }
-  const top5Set = new Set(top5);
+  const top5Set = new Set(seenInTop5);
   const restIds = Array.from(participantSet).filter((id) => enrolledSet.has(id) && !top5Set.has(id));
 
   const results: { lesson_id: string; user_id: string; position: number | null; points_earned: number }[] = [];
 
-  for (let i = 0; i < top5.length; i++) {
-    const pos = (i + 1) as 1 | 2 | 3 | 4 | 5;
+  for (const { pos, user_id } of positionAssignments) {
     const pts = KAHOOT_POINTS[pos];
-    results.push({ lesson_id: lessonId, user_id: top5[i], position: pos, points_earned: pts });
+    results.push({ lesson_id: lessonId, user_id, position: pos, points_earned: pts });
   }
   for (const uid of restIds) {
     results.push({ lesson_id: lessonId, user_id: uid, position: null, points_earned: KAHOOT_POINTS.participation });
@@ -129,7 +131,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   await recordAdminAudit(db, userId, 'kahoot.register', {
     lessonId,
     count: results.length,
-    top5: top5.length,
+    top5: positionAssignments.length,
     participants: restIds.length,
   });
 

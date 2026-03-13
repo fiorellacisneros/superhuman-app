@@ -2,6 +2,7 @@
 import '../../../../styles/global.css';
 import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../../lib/supabase';
+import { formatDayAndDate, formatTime } from '../../../../lib/format-date';
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -14,7 +15,7 @@ if (!courseSlug || !lessonId) {
 }
 
 const supabase = getSupabaseServiceRoleClient();
-const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+const { data: userRow } = await supabase.from('users').select('role, timezone').eq('id', userId).maybeSingle();
 const roleFromClaims = (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role;
 const isAdmin = roleFromClaims === 'admin' || (userRow?.role as string) === 'admin';
 
@@ -55,7 +56,7 @@ if (!isAdmin) {
 
 const { data: lesson, error: lessonError } = await supabase
   .from('lessons')
-  .select('id, title, notes, ppt_url, recording_url, recording_passcode, resources_url, resources')
+  .select('id, title, notes, scheduled_at, ppt_url, recording_url, recording_passcode, resources_url, resources')
   .eq('id', lessonId)
   .eq('course_id', course.id)
   .maybeSingle();
@@ -78,6 +79,7 @@ const sharedResources = rawResources.filter((r) => r.type === 'shared');
 const hasResourcesUrl = Boolean(lesson.resources_url && String(lesson.resources_url).trim());
 const hasClassResources = hasResourcesUrl || classResources.length > 0;
 const hasSharedResources = sharedResources.length > 0;
+const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone ?? null;
 ---
 
 <DashboardLayout>
@@ -91,7 +93,13 @@ const hasSharedResources = sharedResources.length > 0;
     </nav>
 
     <div class="rounded-xl bg-surface p-4 sm:p-5">
-      <h1 class="text-xl font-semibold text-white">{lesson.title}</h1>
+      <p class="text-xs font-semibold uppercase tracking-[0.16em] text-muted">{course.title}</p>
+      <h1 class="mt-1 text-xl font-semibold text-white">{lesson.title}</h1>
+      {lesson.scheduled_at && (
+        <p class="mt-0.5 text-xs text-muted">
+          {formatDayAndDate(lesson.scheduled_at as string, userTimezone)} {formatTime(lesson.scheduled_at as string, userTimezone)}
+        </p>
+      )}
       {lesson.notes && (
         <div class="mt-3 text-sm text-muted whitespace-pre-wrap">{lesson.notes}</div>
       )}

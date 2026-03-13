@@ -236,8 +236,8 @@ function formatDateTime(iso: string | null): string {
                     const preUserId = existingPositions[pos] ?? null;
                     const preUser = preUserId ? students.find((s) => s.id === preUserId) : null;
                     return (
-                    <div>
-                      <label for={`position_${pos}`} class="block text-xs font-medium text-muted">{pos}º lugar</label>
+                      <div>
+                        <label for={`position_${pos}`} class="block text-xs font-medium text-muted">{pos}º lugar</label>
                       <div class="custom-select custom-select--single relative mt-1" data-name={`position_${pos}`}>
                         <input type="hidden" id={`position_${pos}`} name={`position_${pos}`} value={preUserId ?? ''} />
                         <button
@@ -273,8 +273,9 @@ function formatDateTime(iso: string | null): string {
                           ))}
                         </div>
                       </div>
-                    </div>
-                  )})}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <p class="text-xs text-muted">Referencia: cruza los nombres de Kahoot con la lista de abajo.</p>
@@ -287,7 +288,7 @@ function formatDateTime(iso: string | null): string {
                     {students.map((s) => {
                       const checked = existingParticipants.has(s.id);
                       return (
-                      <label class="kahoot-participant flex cursor-pointer items-center gap-2 rounded-lg border border-transparent bg-surface-2/60 px-2.5 py-1.5 transition hover:border-lime/50 has-[:checked]:border-lime/50 has-[:checked]:bg-lime/10" data-user-id={s.id}>
+                        <label class="kahoot-participant flex cursor-pointer items-center gap-2 rounded-lg border border-transparent bg-surface-2/60 px-2.5 py-1.5 transition hover:border-lime/50 has-[:checked]:border-lime/50 has-[:checked]:bg-lime/10" data-user-id={s.id}>
                         <input type="checkbox" name="participant_ids" value={s.id} class="peer sr-only" checked={checked} />
                         <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-transparent bg-surface text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background">
                           <i class="bi bi-check-lg text-[10px] leading-none" aria-hidden="true" />
@@ -298,8 +299,9 @@ function formatDateTime(iso: string | null): string {
                           <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface text-[9px] font-semibold text-muted">{s.name.charAt(0).toUpperCase()}</span>
                         )}
                         <span class="text-xs text-white">{s.name}</span>
-                      </label>
-                    )})}
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 
