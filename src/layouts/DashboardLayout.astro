@@ -477,6 +477,11 @@ function isActive(href: string): boolean {
           panel.classList.add('hidden');
           trigger.setAttribute('aria-expanded', 'false');
           icon.classList.remove('rotate-180');
+          panel.style.position = '';
+          panel.style.left = '';
+          panel.style.top = '';
+          panel.style.minWidth = '';
+          panel.style.right = '';
         };
         const openCurrentSelect = (el) => {
           if (openSelect && openSelect !== el) closeSelect(openSelect);
@@ -487,6 +492,22 @@ function isActive(href: string): boolean {
           panel.classList.remove('hidden');
           trigger.setAttribute('aria-expanded', 'true');
           icon.classList.add('rotate-180');
+          // Si el select está dentro del panel de asignar cursos, posicionar dropdown con fixed para que no se recorte por overflow
+          const pickerPanel = el.closest('.course-picker-panel');
+          if (pickerPanel) {
+            const tr = trigger.getBoundingClientRect();
+            panel.style.position = 'fixed';
+            panel.style.left = `${tr.right - panel.offsetWidth}px`;
+            panel.style.top = `${tr.bottom + 4}px`;
+            panel.style.minWidth = `${tr.width}px`;
+            panel.style.right = 'auto';
+          } else {
+            panel.style.position = '';
+            panel.style.left = '';
+            panel.style.top = '';
+            panel.style.minWidth = '';
+            panel.style.right = '';
+          }
           openSelect = el;
         };
         for (const select of selects) {

@@ -16,6 +16,18 @@ const role = (userRow?.role as string) ?? 'student';
 const { preview } = getPreviewContext(Astro);
 const isPreviewMode = role === 'admin' && preview;
 
+// Estudiantes solo on-demand no ven insignias: redirigir al dashboard
+if (role === 'student' && !isPreviewMode) {
+  const { data: enrollments } = await supabase
+    .from('enrollments')
+    .select('access_type')
+    .eq('user_id', userId);
+  const hasLiveEnrollment = (enrollments ?? []).some((e) => (e.access_type as string) !== 'on_demand');
+  if (!hasLiveEnrollment) {
+    return Astro.redirect('/dashboard');
+  }
+}
+
 const iconMap: Record<string, string> = {
   first_submission: 'first_submission',
   on_time: 'on_time',

@@ -181,7 +181,7 @@ if (role !== 'admin' || preview) {
     supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
     supabase
       .from('enrollments')
-      .select('course_id, courses(id, slug, title, cover_image, description)')
+      .select('course_id, access_type, courses(id, slug, title, cover_image, description)')
       .eq('user_id', userId),
   ]);
   const badgeRows = badgeRowsRes.data;
@@ -206,6 +206,7 @@ if (role !== 'admin' || preview) {
   studentActiveChallengesCount = sacRes.count ?? 0;
 
   const enrollmentRows = enrollmentRowsRes.data;
+  const hasLiveEnrollment = (enrollmentRows ?? []).some((r) => (r.access_type as string) !== 'on_demand');
   const enrolledCourseIdsForPoints = [...new Set((enrollmentRows ?? []).map((r) => r.course_id as string).filter(Boolean))];
   if (enrolledCourseIdsForPoints.length > 0) {
     const { data: myPointsRows } = await supabase
@@ -522,7 +523,9 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
         </h1>
         <p class="text-sm text-muted">
           {enrolledIds.length > 0
-            ? 'Completa desafíos, asiste a sesiones en vivo y colecciona insignias mientras subes de nivel.'
+            ? (hasLiveEnrollment
+              ? 'Completa desafíos, asiste a sesiones en vivo y colecciona insignias mientras subes de nivel.'
+              : 'Completa desafíos y avanza en las lecciones a tu ritmo.')
             : 'En breve serás asignado a un curso. Cuando esté listo, verás tus contenidos aquí.'}
         </p>
       </header>
@@ -592,33 +595,32 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
           <div class="rounded-2xl bg-background p-5">
             <h2 class="text-sm font-semibold text-white">Progreso general</h2>
             <p class="mt-1 text-xs text-muted">
-              Sigue tus puntos y cómo creces cada semana.
+              Desafíos activos para completar.
             </p>
 
-            <dl class="mt-4 grid grid-cols-2 gap-3 sm:gap-4">
-              <div class="flex min-w-0 flex-col rounded-xl bg-[#012EDC] p-3 sm:p-5">
-                <dt class="font-manrope text-2xl font-semibold text-white">
-                  Desafíos
-                </dt>
-                <dd class="mt-8 flex items-baseline gap-0.5">
+            <div class="mt-4">
+              <div class="flex min-w-0 flex-col rounded-xl bg-[#012EDC] p-3 sm:p-5 max-w-[240px]">
+                <span class="font-manrope text-2xl font-semibold text-white">Desafíos</span>
+                <div class="mt-8 flex items-baseline gap-0.5">
                   <span class="font-manrope text-2xl font-semibold leading-none text-white sm:text-[48px]">{studentActiveChallengesCount}</span>
                   <span class="font-manrope text-2xl font-semibold leading-none text-[#436AFE] sm:text-[48px]">/{studentActiveChallengesCount}</span>
-                </dd>
+                </div>
               </div>
-              <div class="flex min-w-0 flex-col rounded-xl bg-[#F5B800] p-3 sm:p-5">
-                <dt class="font-manrope text-2xl font-semibold text-[#1A1A1A]">
-                  Puntos
-                </dt>
-                <dd class="mt-8 font-manrope text-2xl font-semibold leading-none text-[#1A1A1A] sm:text-[48px]">
-                  {points}
-                </dd>
-              </div>
-            </dl>
+            </div>
           </div>
 
           <div class="rounded-2xl bg-background p-5">
-            <h2 class="font-manrope text-2xl font-semibold text-white">Mi horario</h2>
-            <p class="mt-0.5 text-xs text-muted">Próximas clases de tus cursos.</p>
+            {hasLiveEnrollment ? (
+              <>
+                <h2 class="font-manrope text-2xl font-semibold text-white">Mi horario</h2>
+                <p class="mt-0.5 text-xs text-muted">Próximas clases de tus cursos.</p>
+              </>
+            ) : (
+              <>
+                <h2 class="font-manrope text-2xl font-semibold text-white">Tu contenido</h2>
+                <p class="mt-0.5 text-xs text-muted">Accede a las lecciones y materiales cuando quieras.</p>
+              </>
+            )}
             {upcomingLessons.length > 0 ? (
               <div class="mt-3 max-h-[320px] overflow-y-auto space-y-4">
                 {upcomingByMonth.map(({ monthLabel, lessons }) => (
@@ -664,7 +666,11 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
               </div>
             ) : (
               <div class="mt-3 rounded-xl border border-dashed border-transparent bg-background p-6 text-center">
-                <p class="text-sm text-muted">No hay clases programadas aún.</p>
+                {hasLiveEnrollment ? (
+                  <p class="text-sm text-muted">No hay clases programadas aún.</p>
+                ) : (
+                  <p class="text-sm text-muted">Ve a Mis cursos para ver el contenido disponible.</p>
+                )}
               </div>
             )}
           </div>
@@ -703,6 +709,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
             )}
           </div>
 
+          {hasLiveEnrollment && (
           <div class="rounded-[24px] bg-background p-5">
             <h2 class="font-manrope text-2xl font-semibold text-white">Insignias generales</h2>
             <p class="mt-0.5 text-xs text-muted">Puedes ganar la misma insignia en distintos cursos.</p>
@@ -725,6 +732,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
               ))}
             </ul>
           </div>
+          )}
         </aside>
       </div>
       )}
