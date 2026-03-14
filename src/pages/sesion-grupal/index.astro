@@ -26,22 +26,36 @@ if (!hasOnlyOnDemand) {
   return Astro.redirect('/sesiones-1-1');
 }
 
-const { data: sesionRow } = await supabase
-  .from('sesion_grupal')
-  .select('title, link_url, fecha_label')
-  .eq('id', 1)
-  .maybeSingle();
-
-const sesionGrupalTitle = sesionRow?.title ?? null;
-const sesionGrupalLink = sesionRow?.link_url ?? null;
-const sesionGrupalFecha = sesionRow?.fecha_label ?? null;
-
-const { count: asistenciasCount } = await supabase
-  .from('sesion_grupal_asistencias')
-  .select('*', { count: 'exact', head: true })
-  .eq('user_id', userId);
-const sesionesUsadas = asistenciasCount ?? 0;
+let sesionGrupalTitle: string | null = null;
+let sesionGrupalLink: string | null = null;
+let sesionGrupalFecha: string | null = null;
+let sesionesUsadas = 0;
 const MAX_SESIONES_GRUPAL = 2;
+
+try {
+  const resSesion = await supabase
+    .from('sesion_grupal')
+    .select('title, link_url, fecha_label')
+    .eq('id', 1)
+    .maybeSingle();
+  if (!resSesion.error && resSesion.data) {
+    sesionGrupalTitle = resSesion.data.title ?? null;
+    sesionGrupalLink = resSesion.data.link_url ?? null;
+    sesionGrupalFecha = resSesion.data.fecha_label ?? null;
+  }
+} catch {
+  // Tabla sesion_grupal puede no existir si no se corrió la migración
+}
+
+try {
+  const resAsistencias = await supabase
+    .from('sesion_grupal_asistencias')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId);
+  if (!resAsistencias.error) sesionesUsadas = resAsistencias.count ?? 0;
+} catch {
+  // Tabla sesion_grupal_asistencias puede no existir si no se corrió la migración
+}
 ---
 
 <DashboardLayout role="student">

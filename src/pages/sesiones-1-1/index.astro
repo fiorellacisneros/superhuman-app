@@ -87,11 +87,15 @@ if (role === 'admin') {
   let onDemandStudents: { id: string; display_name: string; asistenciasCount: number }[] = [];
   if (onDemandOnlyUserIds.length > 0) {
     const { data: studentRows } = await supabase.from('users').select('id, display_name').in('id', onDemandOnlyUserIds).eq('role', 'student');
-    const { data: asistenciasRows } = await supabase.from('sesion_grupal_asistencias').select('user_id').in('user_id', onDemandOnlyUserIds);
     const countByUser = new Map<string, number>();
-    for (const r of asistenciasRows ?? []) {
-      const uid = r.user_id as string;
-      countByUser.set(uid, (countByUser.get(uid) ?? 0) + 1);
+    try {
+      const { data: asistenciasRows } = await supabase.from('sesion_grupal_asistencias').select('user_id').in('user_id', onDemandOnlyUserIds);
+      for (const r of asistenciasRows ?? []) {
+        const uid = r.user_id as string;
+        countByUser.set(uid, (countByUser.get(uid) ?? 0) + 1);
+      }
+    } catch {
+      // Tabla puede no existir si no se corrió la migración
     }
     onDemandStudents = (studentRows ?? []).map((u) => ({
       id: u.id,
