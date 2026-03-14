@@ -182,10 +182,15 @@ const nextMonthLabel =
       })()
     : '';
 
-// Ranking del curso: inscritos con sus puntos en este curso
+// Ranking del curso: solo inscritos live (excluir on-demand) con sus puntos en este curso
 let courseLeaderboard: { id: string; name: string; avatarId: string | null; points: number }[] = [];
-const { data: enrollmentsData } = await supabase.from('enrollments').select('user_id').eq('course_id', course.id);
-const enrolledUserIds = [...new Set((enrollmentsData ?? []).map((r) => (r as { user_id: string }).user_id).filter(Boolean))];
+const { data: enrollmentsData } = await supabase.from('enrollments').select('user_id, access_type').eq('course_id', course.id);
+const enrolledUserIds = [...new Set(
+  (enrollmentsData ?? [])
+    .filter((r) => (r as { access_type?: string }).access_type !== 'on_demand')
+    .map((r) => (r as { user_id: string }).user_id)
+    .filter(Boolean)
+)];
 if (enrolledUserIds.length > 0) {
   const [{ data: pointsData }, { data: usersData }] = await Promise.all([
     supabase.from('user_course_points').select('user_id, points').eq('course_id', course.id).in('user_id', enrolledUserIds),
@@ -385,6 +390,7 @@ courseBadges = (badgeRows ?? []).map((b) => ({
             )}
           </div>
 
+          {!isOnDemand && (
           <div class="relative flex h-[350px] min-w-0 flex-col rounded-[24px] bg-background p-5">
             <h2 class="font-manrope text-xl font-semibold text-white sm:text-2xl">Badges</h2>
             <p class="mt-0.5 text-xs text-muted">Completa lecciones y desafíos.</p>
@@ -407,6 +413,7 @@ courseBadges = (badgeRows ?? []).map((b) => ({
               <p class="mt-3 text-sm text-muted">No hay insignias definidas aún.</p>
             )}
           </div>
+          )}
         </div>
         ) : (
           <div class="flex h-[350px] min-w-0 flex-col rounded-xl p-4 sm:p-5" style="background-color: #D6D6D6;">

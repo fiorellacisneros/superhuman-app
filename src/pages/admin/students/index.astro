@@ -225,7 +225,7 @@ for (const u of studentRows ?? []) {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
                                   </svg>
                                 </button>
-                                <div class="custom-select-panel absolute right-0 z-50 mt-1 hidden min-w-full overflow-hidden rounded-lg border border-transparent bg-surface py-1 shadow-2xl" role="listbox">
+                                <div class="custom-select-panel absolute right-0 z-[10002] mt-1 hidden min-w-full overflow-hidden rounded-lg border border-transparent bg-surface py-1 shadow-2xl" role="listbox">
                                   <button type="button" class={`custom-select-option flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left text-[11px] transition hover:bg-surface-2 ${s.accessTypeByCourse[c.id] !== 'on_demand' ? 'bg-lime/10 text-lime' : 'text-white'}`} data-value="live" data-label="Live">
                                     <span class={`flex h-3 w-3 items-center justify-center rounded-[3px] border transition ${s.accessTypeByCourse[c.id] !== 'on_demand' ? 'border-lime bg-lime text-background' : 'border-transparent bg-surface-2 text-transparent'}`}>
                                       <i class="bi bi-check2 text-[8px] leading-none" aria-hidden="true" />

@@ -43,15 +43,19 @@ const selectedCourseId =
     : enrolledCourses[0]?.id ?? null;
 const selectedCourse = enrolledCourses.find((c) => c.id === selectedCourseId);
 
-// Ranking por curso: solo estudiantes del curso seleccionado, puntos de ese curso
+// Ranking por curso: solo estudiantes con inscripción live (excluir on-demand), puntos de ese curso
 let studentRows: { id: string; display_name: string | null; avatar_id: string | null }[] | null = [];
 let pointsByUser = new Map<string, number>();
 if (selectedCourseId) {
-  const { data: cohortUserIds } = await supabase
+  const { data: cohortEnrollments } = await supabase
     .from('enrollments')
-    .select('user_id')
+    .select('user_id, access_type')
     .eq('course_id', selectedCourseId);
-  const uniqueIds = [...new Set((cohortUserIds ?? []).map((r) => r.user_id as string))];
+  const uniqueIds = [...new Set(
+    (cohortEnrollments ?? [])
+      .filter((r) => (r.access_type as string) !== 'on_demand')
+      .map((r) => r.user_id as string)
+  )];
   if (uniqueIds.length > 0) {
     const [userDataRes, pointsRes] = await Promise.all([
       supabase.from('users').select('id, display_name, avatar_id').in('id', uniqueIds).eq('role', 'student'),
