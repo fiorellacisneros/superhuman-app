@@ -26,25 +26,47 @@ if (!hasOnlyOnDemand) {
   return Astro.redirect('/sesiones-1-1');
 }
 
-let sesionGrupalTitle: string | null = null;
-let sesionGrupalLink: string | null = null;
-let sesionGrupalFecha: string | null = null;
+type SesionGrupalItem = { id: number; title: string | null; link_url: string; fecha_label: string | null };
+let sesionesListado: SesionGrupalItem[] = [];
 let sesionesUsadas = 0;
 const MAX_SESIONES_GRUPAL = 2;
 
 try {
-  const resSesion = await supabase
-    .from('sesion_grupal')
-    .select('title, link_url, fecha_label')
-    .eq('id', 1)
-    .maybeSingle();
-  if (!resSesion.error && resSesion.data) {
-    sesionGrupalTitle = resSesion.data.title ?? null;
-    sesionGrupalLink = resSesion.data.link_url ?? null;
-    sesionGrupalFecha = resSesion.data.fecha_label ?? null;
+  const resListado = await supabase
+    .from('sesion_grupal_sesiones')
+    .select('id, title, link_url, fecha_label')
+    .order('order_index', { ascending: true })
+    .order('id', { ascending: true });
+  if (!resListado.error && resListado.data?.length) {
+    sesionesListado = resListado.data.map((r) => ({
+      id: r.id,
+      title: r.title ?? null,
+      link_url: r.link_url ?? '',
+      fecha_label: r.fecha_label ?? null,
+    }));
   }
 } catch {
-  // Tabla sesion_grupal puede no existir si no se corrió la migración
+  // Tabla sesion_grupal_sesiones puede no existir
+}
+
+if (sesionesListado.length === 0) {
+  try {
+    const resSesion = await supabase
+      .from('sesion_grupal')
+      .select('title, link_url, fecha_label')
+      .eq('id', 1)
+      .maybeSingle();
+    if (!resSesion.error && resSesion.data?.link_url) {
+      sesionesListado = [{
+        id: 1,
+        title: resSesion.data.title ?? null,
+        link_url: resSesion.data.link_url,
+        fecha_label: resSesion.data.fecha_label ?? null,
+      }];
+    }
+  } catch {
+    // Fallback: tabla sesion_grupal
+  }
 }
 
 try {
@@ -69,42 +91,43 @@ try {
     <header>
       <h1 class="text-2xl font-semibold tracking-tight text-white">Sesión grupal</h1>
       <p class="mt-1 text-sm text-muted">
-        Accede a la sesión grupal con el enlace directo (fecha y hora indicadas).
+        Listado de sesiones grupales. Entra con el enlace en la fecha y hora indicadas.
       </p>
     </header>
 
-    {sesionGrupalLink ? (
-      <div class="rounded-xl border border-transparent bg-surface p-6">
-        <p class="mb-4 text-sm text-white">
-          Sesiones grupales usadas: <span class="font-semibold text-lime">{sesionesUsadas}/{MAX_SESIONES_GRUPAL}</span>
-        </p>
-        {sesionGrupalTitle && (
-          <p class="mb-2 text-sm font-semibold text-white">{sesionGrupalTitle}</p>
-        )}
-        {sesionGrupalFecha && (
-          <p class="mb-4 text-sm font-medium text-white">
-            Fecha y hora: <span class="text-lime">{sesionGrupalFecha}</span>
-          </p>
-        )}
-        <a
-          href={sesionGrupalLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn btn-primary inline-flex items-center gap-2"
-        >
-          Entrar a la sesión grupal
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-        </a>
-        <p class="mt-3 text-xs text-muted">
-          Se abrirá en una nueva pestaña. Únete a la hora indicada.
-        </p>
-      </div>
+    <p class="text-sm text-white">
+      Sesiones grupales usadas: <span class="font-semibold text-lime">{sesionesUsadas}/{MAX_SESIONES_GRUPAL}</span>
+    </p>
+
+    {sesionesListado.length > 0 ? (
+      <ul class="space-y-4">
+        {sesionesListado.map((sesion) => (
+          <li class="rounded-xl border border-transparent bg-surface p-5">
+            {sesion.title && <p class="mb-1 text-sm font-semibold text-white">{sesion.title}</p>}
+            {sesion.fecha_label && (
+              <p class="mb-3 text-sm text-white">
+                Fecha y hora: <span class="text-lime">{sesion.fecha_label}</span>
+              </p>
+            )}
+            <a
+              href={sesion.link_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-primary inline-flex items-center gap-2"
+            >
+              Entrar a esta sesión
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+            <p class="mt-2 text-xs text-muted">Se abrirá en una nueva pestaña.</p>
+          </li>
+        ))}
+      </ul>
     ) : (
       <div class="rounded-xl border border-transparent bg-surface p-6">
         <p class="text-sm text-muted">
-          El enlace de la sesión grupal aún no está configurado. Cuando esté disponible, lo verás aquí con la fecha y hora.
+          Aún no hay sesiones grupales programadas. Cuando estén disponibles, verás aquí el listado con fechas y enlaces.
         </p>
         <p class="mt-2 text-xs text-muted">
           Si tienes dudas, contacta al equipo.

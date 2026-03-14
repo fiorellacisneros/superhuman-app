@@ -165,6 +165,7 @@ const iconMap: Record<string, string> = {
 };
 
 let points = 0;
+let hasLiveEnrollment = false;
 type DashboardBadge = { id: string; name: string; description: string | null; condition_type: string | null; earned: boolean; earned_at: string | null; earnedCount: number };
 let dashboardBadges: DashboardBadge[] = [];
 let studentActiveChallengesCount = 0;
@@ -176,164 +177,167 @@ let upcomingLessons: UpcomingLesson[] = [];
 let upcomingByMonth: { monthLabel: string; lessons: UpcomingLesson[] }[] = [];
 
 if (role !== 'admin' || preview) {
-  const [badgeRowsRes, earnedRowsRes, sacRes, enrollmentRowsRes] = await Promise.all([
-    supabase.from('badges').select('id, name, description, condition_type').order('name'),
-    supabase.from('user_badges').select('badge_id, earned_at').eq('user_id', userId),
-    supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
-    supabase
-      .from('enrollments')
-      .select('course_id, access_type, courses(id, slug, title, cover_image, description)')
-      .eq('user_id', userId),
-  ]);
-  const badgeRows = badgeRowsRes.data;
-  const earnedRows = earnedRowsRes.data;
-  const earnedSet = new Set((earnedRows ?? []).map((e) => e.badge_id));
-  const earnedAtMap = new Map((earnedRows ?? []).map((e) => [e.badge_id, e.earned_at as string]));
-  const earnedCountMap = new Map<string, number>();
-  for (const row of earnedRows ?? []) {
-    const id = row.badge_id as string;
-    earnedCountMap.set(id, (earnedCountMap.get(id) ?? 0) + 1);
-  }
-  const allDashboardBadges = (badgeRows ?? []).map((b) => ({
-    id: b.id,
-    name: b.name ?? 'Insignia',
-    description: (b.description as string) ?? null,
-    condition_type: (b.condition_type as string) ?? null,
-    earned: earnedSet.has(b.id),
-    earned_at: earnedAtMap.get(b.id) ?? null,
-    earnedCount: earnedCountMap.get(b.id) ?? 0,
-  }));
-  const enrollmentRows = enrollmentRowsRes.data;
-  const hasLiveEnrollment = (enrollmentRows ?? []).some((r) => (r.access_type as string) !== 'on_demand');
-  dashboardBadges = hasLiveEnrollment
-    ? allDashboardBadges
-    : allDashboardBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete' | 'manual'));
+  try {
+    const [badgeRowsRes, earnedRowsRes, sacRes, enrollmentRowsRes] = await Promise.all([
+      supabase.from('badges').select('id, name, description, condition_type').order('name'),
+      supabase.from('user_badges').select('badge_id, earned_at').eq('user_id', userId),
+      supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
+      supabase
+        .from('enrollments')
+        .select('course_id, access_type, courses(id, slug, title, cover_image, description)')
+        .eq('user_id', userId),
+    ]);
+    const badgeRows = badgeRowsRes.data ?? null;
+    const earnedRows = earnedRowsRes.data ?? null;
+    const earnedSet = new Set((earnedRows ?? []).map((e) => e.badge_id));
+    const earnedAtMap = new Map((earnedRows ?? []).map((e) => [e.badge_id, e.earned_at as string]));
+    const earnedCountMap = new Map<string, number>();
+    for (const row of earnedRows ?? []) {
+      const id = row.badge_id as string;
+      earnedCountMap.set(id, (earnedCountMap.get(id) ?? 0) + 1);
+    }
+    const allDashboardBadges = (badgeRows ?? []).map((b) => ({
+      id: b.id,
+      name: b.name ?? 'Insignia',
+      description: (b.description as string) ?? null,
+      condition_type: (b.condition_type as string) ?? null,
+      earned: earnedSet.has(b.id),
+      earned_at: earnedAtMap.get(b.id) ?? null,
+      earnedCount: earnedCountMap.get(b.id) ?? 0,
+    }));
+    const enrollmentRows = enrollmentRowsRes.data ?? null;
+    hasLiveEnrollment = (enrollmentRows ?? []).some((r) => (r.access_type as string) !== 'on_demand');
+    dashboardBadges = hasLiveEnrollment
+      ? allDashboardBadges
+      : allDashboardBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete' | 'manual'));
 
-  studentActiveChallengesCount = sacRes.count ?? 0;
-  const enrolledCourseIdsForPoints = [...new Set((enrollmentRows ?? []).map((r) => r.course_id as string).filter(Boolean))];
-  if (enrolledCourseIdsForPoints.length > 0) {
-    const { data: myPointsRows } = await supabase
-      .from('user_course_points')
-      .select('points')
-      .eq('user_id', userId)
-      .in('course_id', enrolledCourseIdsForPoints);
-    points = (myPointsRows ?? []).reduce((a, r) => a + (r.points ?? 0), 0);
-  }
-  let enrolledCourseRows = (enrollmentRows ?? [])
-    .map((row) => (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses)
-    .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
+    studentActiveChallengesCount = sacRes.count ?? 0;
+    const enrolledCourseIdsForPoints = [...new Set((enrollmentRows ?? []).map((r) => r.course_id as string).filter(Boolean))];
+    if (enrolledCourseIdsForPoints.length > 0) {
+      const { data: myPointsRows } = await supabase
+        .from('user_course_points')
+        .select('points')
+        .eq('user_id', userId)
+        .in('course_id', enrolledCourseIdsForPoints);
+      points = (myPointsRows ?? []).reduce((a, r) => a + (r.points ?? 0), 0);
+    }
+    let enrolledCourseRows = (enrollmentRows ?? [])
+      .map((row) => (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses)
+      .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
 
-  // Admin en preview: ver todos los cursos (acceso completo)
-  if (role === 'admin' && preview) {
-    const { data: allCourses } = await supabase
-      .from('courses')
-      .select('id, slug, title, cover_image, description')
-      .order('title');
-    enrolledCourseRows = (allCourses ?? []).filter(
-      (c): c is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(c?.id),
-    );
-  }
+    if (role === 'admin' && preview) {
+      const { data: allCourses } = await supabase
+        .from('courses')
+        .select('id, slug, title, cover_image, description')
+        .order('title');
+      enrolledCourseRows = (allCourses ?? []).filter(
+        (c): c is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(c?.id),
+      );
+    }
 
-  enrolledIds = enrolledCourseRows.map((course) => course.id);
+    enrolledIds = enrolledCourseRows.map((course) => course.id);
 
-  // Ranking: solo estudiantes inscritos en los mismos cursos, puntos por cohorte
-  let leaderboardRowsRes: { data: { id: string; display_name: string | null; avatar_id: string | null }[] | null } = { data: [] };
-  let leaderboardPointsByUser = new Map<string, number>();
-  if (enrolledIds.length > 0) {
-    const { data: cohortUserIds } = await supabase
-      .from('enrollments')
-      .select('user_id')
-      .in('course_id', enrolledIds);
-    const uniqueIds = [...new Set((cohortUserIds ?? []).map((r) => r.user_id as string))];
-    if (uniqueIds.length > 0) {
-      const [userRes, pointsRes] = await Promise.all([
-        supabase.from('users').select('id, display_name, avatar_id').in('id', uniqueIds).eq('role', 'student'),
-        supabase.from('user_course_points').select('user_id, points').in('user_id', uniqueIds).in('course_id', enrolledIds),
-      ]);
-      leaderboardRowsRes = userRes;
-      for (const row of pointsRes.data ?? []) {
-        const uid = row.user_id as string;
-        leaderboardPointsByUser.set(uid, (leaderboardPointsByUser.get(uid) ?? 0) + (row.points ?? 0));
+    let leaderboardRowsRes: { data: { id: string; display_name: string | null; avatar_id: string | null }[] | null } = { data: [] };
+    const leaderboardPointsByUser = new Map<string, number>();
+    if (enrolledIds.length > 0) {
+      const { data: cohortUserIds } = await supabase
+        .from('enrollments')
+        .select('user_id')
+        .in('course_id', enrolledIds);
+      const uniqueIds = [...new Set((cohortUserIds ?? []).map((r) => r.user_id as string))];
+      if (uniqueIds.length > 0) {
+        const [userRes, pointsRes] = await Promise.all([
+          supabase.from('users').select('id, display_name, avatar_id').in('id', uniqueIds).eq('role', 'student'),
+          supabase.from('user_course_points').select('user_id, points').in('user_id', uniqueIds).in('course_id', enrolledIds),
+        ]);
+        leaderboardRowsRes = userRes;
+        for (const row of pointsRes.data ?? []) {
+          const uid = row.user_id as string;
+          leaderboardPointsByUser.set(uid, (leaderboardPointsByUser.get(uid) ?? 0) + (row.points ?? 0));
+        }
       }
     }
-  }
 
-  let lessonsByCourse = new Map<string, { total: number; completed: number }>();
-  if (enrolledIds.length > 0) {
-    const { data: lessonRows } = await supabase
-      .from('lessons')
-      .select('course_id, scheduled_at')
-      .in('course_id', enrolledIds);
+    let lessonsByCourse = new Map<string, { total: number; completed: number }>();
+    if (enrolledIds.length > 0) {
+      const { data: lessonRows } = await supabase
+        .from('lessons')
+        .select('course_id, scheduled_at')
+        .in('course_id', enrolledIds);
 
-    const nowMs = Date.now();
-    for (const lesson of lessonRows ?? []) {
-      const courseId = lesson.course_id as string;
-      const current = lessonsByCourse.get(courseId) ?? { total: 0, completed: 0 };
-      current.total += 1;
-      if (lesson.scheduled_at && isLessonCompleted(lesson.scheduled_at as string, nowMs)) {
-        current.completed += 1;
+      const nowMs = Date.now();
+      for (const lesson of lessonRows ?? []) {
+        const courseId = lesson.course_id as string;
+        const current = lessonsByCourse.get(courseId) ?? { total: 0, completed: 0 };
+        current.total += 1;
+        if (lesson.scheduled_at && isLessonCompleted(lesson.scheduled_at as string, nowMs)) {
+          current.completed += 1;
+        }
+        lessonsByCourse.set(courseId, current);
       }
-      lessonsByCourse.set(courseId, current);
     }
-  }
 
-  for (const course of enrolledCourseRows) {
-    const stats = lessonsByCourse.get(course.id) ?? { total: 0, completed: 0 };
-    enrolledCourses.push({
-      id: course.id,
-      slug: typeof course.slug === 'string' && course.slug.trim() ? course.slug.trim() : course.id,
-      title: course.title ?? 'Curso',
-      cover_image: course.cover_image ?? null,
-      description: course.description ?? null,
-      totalLessons: stats.total,
-      completedLessons: stats.completed,
-    });
-  }
-
-  if (enrolledIds.length > 0) {
-    const now = new Date().toISOString();
-    const { data: lessonRows } = await supabase
-      .from('lessons')
-      .select('id, title, scheduled_at, zoom_link, course_id, courses(title, slug, zoom_link)')
-      .in('course_id', enrolledIds)
-      .not('scheduled_at', 'is', null)
-      .gt('scheduled_at', now)
-      .order('scheduled_at', { ascending: true })
-      .limit(6);
-    upcomingLessons = (lessonRows ?? []).map((l) => {
-      const course = l.courses as { title: string | null; slug: string | null; zoom_link?: string | null } | null;
-      const zoomUrl = (l.zoom_link?.trim() || course?.zoom_link?.trim() || null) ?? null;
-      return {
-        id: l.id,
-        title: l.title ?? 'Clase',
-        scheduled_at: l.scheduled_at as string,
-        zoom_link: zoomUrl,
-        courseTitle: course?.title ?? 'Curso',
-        courseSlug: (course?.slug ?? l.course_id) as string,
-      };
-    });
-    const monthMap = new Map<string, UpcomingLesson[]>();
-    for (const lesson of upcomingLessons) {
-      const d = new Date(lesson.scheduled_at);
-      const key = d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
-      const label = key.charAt(0).toUpperCase() + key.slice(1);
-      if (!monthMap.has(label)) monthMap.set(label, []);
-      monthMap.get(label)!.push(lesson);
+    for (const course of enrolledCourseRows) {
+      const stats = lessonsByCourse.get(course.id) ?? { total: 0, completed: 0 };
+      enrolledCourses.push({
+        id: course.id,
+        slug: typeof course.slug === 'string' && course.slug.trim() ? course.slug.trim() : course.id,
+        title: course.title ?? 'Curso',
+        cover_image: course.cover_image ?? null,
+        description: course.description ?? null,
+        totalLessons: stats.total,
+        completedLessons: stats.completed,
+      });
     }
-    upcomingByMonth = Array.from(monthMap.entries()).map(([monthLabel, lessons]) => ({ monthLabel, lessons }));
-  }
 
-  const leaderboardRows = leaderboardRowsRes.data;
-  leaderboard = (leaderboardRows ?? [])
-    .map((u) => ({
-      id: u.id,
-      name: u.display_name ?? 'Estudiante',
-      avatarId: u.avatar_id ?? null,
-      points: leaderboardPointsByUser.get(u.id) ?? 0,
-    }))
-    .filter((u) => u.points > 0)
-    .sort((a, b) => b.points - a.points)
-    .slice(0, 5);
+    if (enrolledIds.length > 0) {
+      const now = new Date().toISOString();
+      const { data: lessonRows } = await supabase
+        .from('lessons')
+        .select('id, title, scheduled_at, zoom_link, course_id, courses(title, slug, zoom_link)')
+        .in('course_id', enrolledIds)
+        .not('scheduled_at', 'is', null)
+        .gt('scheduled_at', now)
+        .order('scheduled_at', { ascending: true })
+        .limit(6);
+      upcomingLessons = (lessonRows ?? []).map((l) => {
+        const course = l.courses as { title: string | null; slug: string | null; zoom_link?: string | null } | null;
+        const zoomUrl = (l.zoom_link?.trim() || course?.zoom_link?.trim() || null) ?? null;
+        return {
+          id: l.id,
+          title: l.title ?? 'Clase',
+          scheduled_at: l.scheduled_at as string,
+          zoom_link: zoomUrl,
+          courseTitle: course?.title ?? 'Curso',
+          courseSlug: (course?.slug ?? l.course_id) as string,
+        };
+      });
+      const monthMap = new Map<string, UpcomingLesson[]>();
+      for (const lesson of upcomingLessons) {
+        const d = new Date(lesson.scheduled_at);
+        const key = d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
+        const label = key.charAt(0).toUpperCase() + key.slice(1);
+        if (!monthMap.has(label)) monthMap.set(label, []);
+        monthMap.get(label)!.push(lesson);
+      }
+      upcomingByMonth = Array.from(monthMap.entries()).map(([monthLabel, lessons]) => ({ monthLabel, lessons }));
+    }
+
+    const leaderboardRows = leaderboardRowsRes.data;
+    leaderboard = (leaderboardRows ?? [])
+      .map((u) => ({
+        id: u.id,
+        name: u.display_name ?? 'Estudiante',
+        avatarId: u.avatar_id ?? null,
+        points: leaderboardPointsByUser.get(u.id) ?? 0,
+      }))
+      .filter((u) => u.points > 0)
+      .sort((a, b) => b.points - a.points)
+      .slice(0, 5);
+  } catch (err) {
+    console.error('[dashboard] student data error', err);
+    // Mantener valores por defecto (vacíos) para que la página cargue
+  }
 }
 
 const displayName =
@@ -680,6 +684,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
         </section>
 
         <aside class="w-full shrink-0 space-y-4 lg:ml-auto lg:w-[300px]">
+          {hasLiveEnrollment && (
           <div class="rounded-xl bg-background p-3">
             <h2 class="font-manrope text-2xl font-semibold text-white">Ranking general</h2>
             <p class="mt-0.5 text-[10px] text-muted">Puntos acumulados de todos tus cursos.</p>
@@ -711,6 +716,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
               </div>
             )}
           </div>
+          )}
 
           {(dashboardBadges.length > 0) && (
           <div class="rounded-[24px] bg-background p-5">
