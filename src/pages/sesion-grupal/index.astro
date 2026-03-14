@@ -1,0 +1,101 @@
+---
+import '../../styles/global.css';
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+const role = (userRow?.role as string) ?? 'student';
+
+if (role === 'admin') {
+  return Astro.redirect('/sesiones-1-1');
+}
+
+const { data: enrollments } = await supabase
+  .from('enrollments')
+  .select('access_type')
+  .eq('user_id', userId);
+const hasOnlyOnDemand = (enrollments ?? []).length > 0 && (enrollments ?? []).every((e) => (e.access_type as string) === 'on_demand');
+
+if (!hasOnlyOnDemand) {
+  return Astro.redirect('/sesiones-1-1');
+}
+
+const { data: sesionRow } = await supabase
+  .from('sesion_grupal')
+  .select('title, link_url, fecha_label')
+  .eq('id', 1)
+  .maybeSingle();
+
+const sesionGrupalTitle = sesionRow?.title ?? null;
+const sesionGrupalLink = sesionRow?.link_url ?? null;
+const sesionGrupalFecha = sesionRow?.fecha_label ?? null;
+
+const { count: asistenciasCount } = await supabase
+  .from('sesion_grupal_asistencias')
+  .select('*', { count: 'exact', head: true })
+  .eq('user_id', userId);
+const sesionesUsadas = asistenciasCount ?? 0;
+const MAX_SESIONES_GRUPAL = 2;
+---
+
+<DashboardLayout role="student">
+  <section class="max-w-5xl space-y-6 xl:max-w-6xl">
+    <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
+      <span class="mx-1">/</span>
+      <span class="text-white">Sesión grupal</span>
+    </nav>
+
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Sesión grupal</h1>
+      <p class="mt-1 text-sm text-muted">
+        Accede a la sesión grupal con el enlace directo (fecha y hora indicadas).
+      </p>
+    </header>
+
+    {sesionGrupalLink ? (
+      <div class="rounded-xl border border-transparent bg-surface p-6">
+        <p class="mb-4 text-sm text-white">
+          Sesiones grupales usadas: <span class="font-semibold text-lime">{sesionesUsadas}/{MAX_SESIONES_GRUPAL}</span>
+        </p>
+        {sesionGrupalTitle && (
+          <p class="mb-2 text-sm font-semibold text-white">{sesionGrupalTitle}</p>
+        )}
+        {sesionGrupalFecha && (
+          <p class="mb-4 text-sm font-medium text-white">
+            Fecha y hora: <span class="text-lime">{sesionGrupalFecha}</span>
+          </p>
+        )}
+        <a
+          href={sesionGrupalLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-primary inline-flex items-center gap-2"
+        >
+          Entrar a la sesión grupal
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </a>
+        <p class="mt-3 text-xs text-muted">
+          Se abrirá en una nueva pestaña. Únete a la hora indicada.
+        </p>
+      </div>
+    ) : (
+      <div class="rounded-xl border border-transparent bg-surface p-6">
+        <p class="text-sm text-muted">
+          El enlace de la sesión grupal aún no está configurado. Cuando esté disponible, lo verás aquí con la fecha y hora.
+        </p>
+        <p class="mt-2 text-xs text-muted">
+          Si tienes dudas, contacta al equipo.
+        </p>
+      </div>
+    )}
+  </section>
+</DashboardLayout>

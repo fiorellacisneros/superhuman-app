@@ -16,6 +16,15 @@ export type BadgeConditionType =
   | 'course_complete'
   | 'early_bird';
 
+/** Insignias que pueden ganar estudiantes on-demand (no asisten en vivo ni ganan puntos). */
+export const ON_DEMAND_BADGE_CONDITION_TYPES: BadgeConditionType[] = [
+  'first_submission',
+  'early_bird',
+  'module_complete',
+  'course_complete',
+  'manual',
+];
+
 export interface BadgeDefinition {
   slug: BadgeSlug;
   name: string;

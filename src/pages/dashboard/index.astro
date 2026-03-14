@@ -8,6 +8,7 @@ import BadgeOutline from '../../components/BadgeOutline.astro';
 import { formatDayAndDate, formatTime } from '../../lib/format-date';
 import { isLessonCompleted } from '../../lib/lessons';
 import { getPreviewContext, setPreviewCookie, clearPreviewCookie } from '../../lib/preview';
+import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
 
@@ -193,7 +194,7 @@ if (role !== 'admin' || preview) {
     const id = row.badge_id as string;
     earnedCountMap.set(id, (earnedCountMap.get(id) ?? 0) + 1);
   }
-  dashboardBadges = (badgeRows ?? []).map((b) => ({
+  const allDashboardBadges = (badgeRows ?? []).map((b) => ({
     id: b.id,
     name: b.name ?? 'Insignia',
     description: (b.description as string) ?? null,
@@ -202,11 +203,13 @@ if (role !== 'admin' || preview) {
     earned_at: earnedAtMap.get(b.id) ?? null,
     earnedCount: earnedCountMap.get(b.id) ?? 0,
   }));
-
-  studentActiveChallengesCount = sacRes.count ?? 0;
-
   const enrollmentRows = enrollmentRowsRes.data;
   const hasLiveEnrollment = (enrollmentRows ?? []).some((r) => (r.access_type as string) !== 'on_demand');
+  dashboardBadges = hasLiveEnrollment
+    ? allDashboardBadges
+    : allDashboardBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete' | 'manual'));
+
+  studentActiveChallengesCount = sacRes.count ?? 0;
   const enrolledCourseIdsForPoints = [...new Set((enrollmentRows ?? []).map((r) => r.course_id as string).filter(Boolean))];
   if (enrolledCourseIdsForPoints.length > 0) {
     const { data: myPointsRows } = await supabase
@@ -709,10 +712,10 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
             )}
           </div>
 
-          {hasLiveEnrollment && (
+          {(dashboardBadges.length > 0) && (
           <div class="rounded-[24px] bg-background p-5">
             <h2 class="font-manrope text-2xl font-semibold text-white">Insignias generales</h2>
-            <p class="mt-0.5 text-xs text-muted">Puedes ganar la misma insignia en distintos cursos.</p>
+            <p class="mt-0.5 text-xs text-muted">{hasLiveEnrollment ? 'Puedes ganar la misma insignia en distintos cursos.' : 'Insignias que puedes desbloquear (sin puntos ni sesiones en vivo).'}</p>
             <ul class="mt-4 grid grid-cols-3 gap-x-5 gap-y-6 sm:gap-x-6 sm:gap-y-6">
               {dashboardBadges.map((b) => (
                 <li
