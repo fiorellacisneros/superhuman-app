@@ -14,7 +14,7 @@ if (!isAuthenticated || !userId) {
 const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
 const role = (userRow?.role as string) ?? 'student';
-const { preview } = getPreviewContext(Astro);
+const { preview, previewAs } = getPreviewContext(Astro);
 const isPreviewMode = role === 'admin' && preview;
 
 let hasLiveEnrollment = true;
@@ -27,6 +27,9 @@ if (role === 'student' && !isPreviewMode) {
   if (!hasLiveEnrollment) {
     return Astro.redirect('/dashboard');
   }
+}
+if (isPreviewMode && previewAs === 'on_demand') {
+  return Astro.redirect('/dashboard');
 }
 
 const iconMap: Record<string, string> = {

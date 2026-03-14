@@ -4,12 +4,14 @@ import { getSupabaseServiceRoleClient } from '../lib/supabase';
 import { avatarImagePath } from '../lib/avatars';
 import { SignOutButton } from '@clerk/astro/components';
 import DeleteConfirmModal from '../components/DeleteConfirmModal.astro';
+import { getPreviewContext } from '../lib/preview';
 
 interface Props {
   role?: 'admin' | 'student' | null;
 }
 
 const { role: roleProp } = Astro.props;
+const { preview, previewAs } = getPreviewContext(Astro);
 const { isAuthenticated, userId, redirectToSignIn, sessionClaims } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
   return redirectToSignIn();
@@ -81,7 +83,15 @@ const adminNav = [
 let hasOnlyOnDemand = false;
 let navLinks = role === 'admin' ? adminNav : studentNavLive;
 let activeRetosCount = 0;
-if (role === 'admin') {
+if (preview) {
+  hasOnlyOnDemand = previewAs === 'on_demand';
+  navLinks = hasOnlyOnDemand ? studentNavOnDemand : studentNavLive;
+  const { count: activeChallengesCount } = await supabase
+    .from('challenges')
+    .select('*', { count: 'exact', head: true })
+    .eq('is_active', true);
+  activeRetosCount = activeChallengesCount ?? 0;
+} else if (role === 'admin') {
   const { count: activeChallengesCount } = await supabase
     .from('challenges')
     .select('*', { count: 'exact', head: true })

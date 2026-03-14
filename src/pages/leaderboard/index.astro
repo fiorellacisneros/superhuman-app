@@ -13,7 +13,7 @@ if (!isAuthenticated || !userId) {
 const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
 const role = (userRow?.role as string) ?? 'student';
-const { preview } = getPreviewContext(Astro);
+const { preview, previewAs } = getPreviewContext(Astro);
 const isPreviewMode = role === 'admin' && preview;
 
 if (role === 'student' && !isPreviewMode) {
@@ -25,6 +25,9 @@ if (role === 'student' && !isPreviewMode) {
   if (hasOnlyOnDemand) {
     return Astro.redirect('/dashboard');
   }
+}
+if (isPreviewMode && previewAs === 'on_demand') {
+  return Astro.redirect('/dashboard');
 }
 
 // Cursos inscritos (para selector y validación)

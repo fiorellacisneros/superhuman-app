@@ -38,7 +38,7 @@ if (userRow && (userRow.display_name == null || userRow.display_name === '')) {
 }
 
 const role = (userRow?.role as 'admin' | 'student') ?? 'student';
-let { preview } = getPreviewContext(Astro);
+let { preview, previewAs } = getPreviewContext(Astro);
 
 // Salir de preview: limpiar cookie y redirigir
 if (Astro.url.searchParams.get('exitPreview') === '1') {
@@ -46,9 +46,9 @@ if (Astro.url.searchParams.get('exitPreview') === '1') {
   return Astro.redirect('/dashboard');
 }
 
-// Admin en preview: guardar cookie para persistir al navegar
+// Admin en preview: guardar cookie con el tipo elegido para persistir al navegar
 if (role === 'admin' && preview) {
-  setPreviewCookie(Astro);
+  setPreviewCookie(Astro, previewAs);
 }
 
 // ---------- Admin-only data (when role === 'admin' && !preview) ----------
@@ -206,7 +206,8 @@ if (role !== 'admin' || preview) {
       earnedCount: earnedCountMap.get(b.id) ?? 0,
     }));
     const enrollmentRows = enrollmentRowsRes.data ?? null;
-    hasLiveEnrollment = (enrollmentRows ?? []).some((r) => (r.access_type as string) !== 'on_demand');
+    const fromEnrollments = (enrollmentRows ?? []).some((r) => (r.access_type as string) !== 'on_demand');
+    hasLiveEnrollment = role === 'admin' && preview ? previewAs === 'live' : fromEnrollments;
     dashboardBadges = hasLiveEnrollment
       ? allDashboardBadges
       : allDashboardBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete' | 'manual'));
@@ -393,12 +394,21 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
           <h1 class="font-manrope text-2xl font-semibold tracking-tight text-white">Dashboard de administración</h1>
           <p class="mt-1 text-sm text-muted">Resumen general del cohort, entregas y avance por curso.</p>
         </div>
-        <a href="/dashboard?preview=true" class="btn btn-primary">
-          Ver como estudiante
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-        </a>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-sm text-muted">Ver como estudiante:</span>
+          <a href="/dashboard?preview=true&as=live" class="btn btn-primary">
+            En vivo
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+          <a href="/dashboard?preview=true&as=on_demand" class="btn btn-secondary">
+            On-demand
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        </div>
       </header>
 
       <div class="grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -541,14 +551,28 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
       <div class="-mx-4 -mt-6 mb-6 flex flex-wrap items-center justify-between gap-2 bg-background/95 px-4 py-3 md:-mx-6 md:mb-8 md:gap-4 md:px-6">
         <span class="flex items-center gap-2 text-sm font-medium text-lime">
           <span aria-hidden="true">👁</span>
-          Modo vista previa
+          Vista previa: Estudiante {previewAs === 'on_demand' ? 'on-demand' : 'en vivo'}
         </span>
-        <a href="/dashboard?exitPreview=1" class="inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-          Volver al dashboard de admin
-        </a>
+        <div class="flex flex-wrap items-center gap-2">
+          <a
+            href={previewAs === 'live' ? '#' : `${Astro.url.pathname}?preview=true&as=live`}
+            class={`inline-flex items-center gap-1.5 rounded-[40px] border px-3 py-1.5 text-sm font-medium transition ${previewAs === 'live' ? 'border-lime bg-lime/15 text-lime' : 'border-white bg-transparent text-white hover:bg-white/10'}`}
+          >
+            En vivo
+          </a>
+          <a
+            href={previewAs === 'on_demand' ? '#' : `${Astro.url.pathname}?preview=true&as=on_demand`}
+            class={`inline-flex items-center gap-1.5 rounded-[40px] border px-3 py-1.5 text-sm font-medium transition ${previewAs === 'on_demand' ? 'border-lime bg-lime/15 text-lime' : 'border-white bg-transparent text-white hover:bg-white/10'}`}
+          >
+            On-demand
+          </a>
+          <a href="/dashboard?exitPreview=1" class="inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Volver al dashboard de admin
+          </a>
+        </div>
       </div>
     )}
     <section class="max-w-5xl space-y-8 xl:max-w-6xl">
