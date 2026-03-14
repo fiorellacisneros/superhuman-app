@@ -16,6 +16,17 @@ const role = (userRow?.role as string) ?? 'student';
 const { preview } = getPreviewContext(Astro);
 const isPreviewMode = role === 'admin' && preview;
 
+if (role === 'student' && !isPreviewMode) {
+  const { data: enrollments } = await supabase
+    .from('enrollments')
+    .select('access_type')
+    .eq('user_id', userId);
+  const hasOnlyOnDemand = (enrollments ?? []).length > 0 && (enrollments ?? []).every((e) => (e.access_type as string) === 'on_demand');
+  if (hasOnlyOnDemand) {
+    return Astro.redirect('/dashboard');
+  }
+}
+
 // Cursos inscritos (para selector y validación)
 let enrolledCourses: { id: string; title: string }[] = [];
 if (isPreviewMode) {

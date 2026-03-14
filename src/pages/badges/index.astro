@@ -4,6 +4,7 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import BadgeIcon from '../../components/BadgeIcon.astro';
 import { getPreviewContext } from '../../lib/preview';
+import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -16,13 +17,13 @@ const role = (userRow?.role as string) ?? 'student';
 const { preview } = getPreviewContext(Astro);
 const isPreviewMode = role === 'admin' && preview;
 
-// Estudiantes solo on-demand no ven insignias: redirigir al dashboard
+let hasLiveEnrollment = true;
 if (role === 'student' && !isPreviewMode) {
   const { data: enrollments } = await supabase
     .from('enrollments')
     .select('access_type')
     .eq('user_id', userId);
-  const hasLiveEnrollment = (enrollments ?? []).some((e) => (e.access_type as string) !== 'on_demand');
+  hasLiveEnrollment = (enrollments ?? []).some((e) => (e.access_type as string) !== 'on_demand');
   if (!hasLiveEnrollment) {
     return Astro.redirect('/dashboard');
   }
@@ -46,7 +47,7 @@ const { data: earnedRows } = await supabase.from('user_badges').select('badge_id
 const earnedSet = new Set((earnedRows ?? []).map((e) => e.badge_id));
 const earnedAtMap = new Map((earnedRows ?? []).map((e) => [e.badge_id, e.earned_at as string]));
 
-const badges = (badgeRows ?? []).map((b) => ({
+const allBadges = (badgeRows ?? []).map((b) => ({
   id: b.id,
   name: b.name ?? 'Insignia',
   description: (b.description as string) ?? null,
@@ -55,6 +56,9 @@ const badges = (badgeRows ?? []).map((b) => ({
   earned: earnedSet.has(b.id),
   earned_at: earnedAtMap.get(b.id) ?? null,
 }));
+const badges = hasLiveEnrollment
+  ? allBadges
+  : allBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete' | 'manual'));
 
 function formatDate(iso: string) {
   try {
@@ -89,7 +93,7 @@ function formatDate(iso: string) {
 
     <header>
       <h1 class="text-2xl font-semibold tracking-tight text-white">Insignias</h1>
-      <p class="mt-1 text-sm text-muted">Colección de logros desbloqueados.</p>
+      <p class="mt-1 text-sm text-muted">{hasLiveEnrollment ? 'Colección de logros desbloqueados.' : 'Insignias que puedes desbloquear (sin puntos ni sesiones en vivo).'}</p>
     </header>
 
     {badges.length > 0 ? (
