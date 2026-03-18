@@ -157,6 +157,78 @@ const attendance = (attendanceRows ?? []).map((a) => {
   };
 });
 
+// Desglose de puntos por curso (asistencia 10 c/u, entregas 30 a tiempo / 15 tarde, Kahoot variable)
+type PointsBreakdownItem = { label: string; pts: number };
+type CourseBreakdown = { courseId: string; courseTitle: string; items: PointsBreakdownItem[]; totalStored: number };
+const pointsBreakdownByCourse: CourseBreakdown[] = [];
+const { data: pointsByCourseRows } = await supabase
+  .from('user_course_points')
+  .select('course_id, points')
+  .eq('user_id', studentId);
+const courseIdsWithPoints = new Set((pointsByCourseRows ?? []).map((r) => (r as { course_id: string }).course_id));
+const courseIds = [...new Set([...courseIdsWithPoints, ...enrolledCourses.map((c) => c.id)])];
+if (courseIds.length > 0) {
+  const [{ data: allLessons }, { data: allAttendance }, { data: allSubs }, { data: allKahoot }, { data: coursesList }] = await Promise.all([
+    supabase.from('lessons').select('id, course_id, title').in('course_id', courseIds),
+    supabase.from('attendance').select('lesson_id, lessons(course_id, title)').eq('user_id', studentId),
+    supabase.from('submissions').select('submitted_at, challenge_id, challenges(course_id, deadline, title)').eq('user_id', studentId).eq('approved', true),
+    supabase.from('kahoot_results').select('lesson_id, points_earned, lessons(course_id, title)').eq('user_id', studentId),
+    supabase.from('courses').select('id, title').in('id', courseIds),
+  ]);
+  const courseTitles = new Map((coursesList ?? []).map((c) => [c.id, (c as { title: string | null }).title ?? 'Curso']));
+  const pointsStoredByCourse = new Map((pointsByCourseRows ?? []).map((r) => [r.course_id as string, (r as { points: number }).points ?? 0]));
+  const lessonsByCourse = new Map<string, { id: string; title: string }[]>();
+  for (const l of allLessons ?? []) {
+    const row = l as { id: string; course_id: string; title: string | null };
+    if (!lessonsByCourse.has(row.course_id)) lessonsByCourse.set(row.course_id, []);
+    lessonsByCourse.get(row.course_id)!.push({ id: row.id, title: row.title ?? 'Clase' });
+  }
+  const attendanceByCourse = new Map<string, number>();
+  for (const a of allAttendance ?? []) {
+    const lesson = (a as { lessons?: { course_id?: string } | null }).lessons;
+    const cid = lesson?.course_id;
+    if (cid) attendanceByCourse.set(cid, (attendanceByCourse.get(cid) ?? 0) + 1);
+  }
+  const PTS_ATT = 10;
+  const PTS_ON_TIME = 30;
+  const PTS_LATE = 15;
+  for (const cid of courseIds) {
+    const items: PointsBreakdownItem[] = [];
+    const attCount = attendanceByCourse.get(cid) ?? 0;
+    if (attCount > 0) {
+      items.push({ label: `Asistencia (${attCount} clase${attCount !== 1 ? 's' : ''})`, pts: attCount * PTS_ATT });
+    }
+    for (const s of allSubs ?? []) {
+      const ch = (s as { challenges?: { course_id?: string; deadline?: string; title?: string } | null }).challenges;
+      if (ch?.course_id !== cid) continue;
+      const deadline = ch.deadline ? new Date(ch.deadline).getTime() : null;
+      const submittedAt = new Date((s as { submitted_at: string }).submitted_at).getTime();
+      const pts = deadline != null && submittedAt <= deadline ? PTS_ON_TIME : PTS_LATE;
+      const onTime = pts === PTS_ON_TIME;
+      items.push({
+        label: `Reto "${ch.title ?? 'Desafío'}" (${onTime ? 'a tiempo' : 'tarde'})`,
+        pts,
+      });
+    }
+    const lessonIdsC = new Set((lessonsByCourse.get(cid) ?? []).map((l) => l.id));
+    for (const k of allKahoot ?? []) {
+      const lesson = (k as { lessons?: { course_id?: string; title?: string } | null }).lessons;
+      if (lesson?.course_id !== cid) continue;
+      const pts = (k as { points_earned?: number }).points_earned ?? 0;
+      const title = lesson?.title ?? 'Clase';
+      items.push({ label: `Kahoot: ${title}`, pts });
+    }
+    const totalStored = pointsStoredByCourse.get(cid) ?? 0;
+    pointsBreakdownByCourse.push({
+      courseId: cid,
+      courseTitle: courseTitles.get(cid) ?? 'Curso',
+      items,
+      totalStored,
+    });
+  }
+  pointsBreakdownByCourse.sort((a, b) => a.courseTitle.localeCompare(b.courseTitle));
+}
+
 ---
 
 <DashboardLayout>
@@ -208,6 +280,45 @@ const attendance = (attendanceRows ?? []).map((a) => {
         <p class="mt-8 font-manrope text-2xl font-semibold text-white sm:text-4xl">{approvedSubmissionsCount ?? 0}</p>
       </div>
     </div>
+
+    <section class="rounded-xl border border-transparent bg-surface p-5">
+      <h2 class="text-sm font-semibold text-white">Desglose de puntos</h2>
+      <p class="mt-1 text-xs text-muted">De dónde salen los puntos: asistencia (10 por clase), entregas aprobadas (30 a tiempo / 15 tarde), Kahoot (50/40/30/20/15 por puesto o 5 participación).</p>
+      {pointsBreakdownByCourse.length > 0 ? (
+        <div class="mt-4 space-y-6">
+          {pointsBreakdownByCourse.map((course) => {
+            const sumFromItems = course.items.reduce((a, i) => a + i.pts, 0);
+            return (
+              <div class="rounded-lg border border-transparent bg-surface-2/40 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <h3 class="text-sm font-medium text-white">{course.courseTitle}</h3>
+                  <span class="text-sm font-semibold text-lime">{course.totalStored} pts totales</span>
+                </div>
+                {course.items.length > 0 ? (
+                  <ul class="mt-3 space-y-1.5">
+                    {course.items.map((item) => (
+                      <li class="flex items-center justify-between gap-2 text-sm">
+                        <span class="text-muted">{item.label}</span>
+                        <span class="font-medium text-lime">+{item.pts}</span>
+                      </li>
+                    ))}
+                    {sumFromItems !== course.totalStored && (
+                      <li class="mt-2 border-t border-transparent pt-2 text-xs text-amber-400">
+                        Suma del desglose: {sumFromItems} pts (en BD: {course.totalStored})
+                      </li>
+                    )}
+                  </ul>
+                ) : (
+                  <p class="mt-2 text-sm text-muted">Sin ítems registrados para este curso (puntos pueden venir de datos anteriores).</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p class="mt-3 text-sm text-muted">No hay cursos con puntos para este alumno.</p>
+      )}
+    </section>
 
     <div class="grid gap-4 lg:grid-cols-2">
       <section class="rounded-xl border border-transparent bg-surface p-5">
