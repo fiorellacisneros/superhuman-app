@@ -21,7 +21,7 @@ if (!courseId) {
 }
 
 const [{ data: course }, { data: modulesData }] = await Promise.all([
-  supabase.from('courses').select('id, title, description, cover_image, zoom_link, ends_at, calendly_link_1to1').eq('id', courseId).maybeSingle(),
+  supabase.from('courses').select('id, title, description, cover_image, zoom_link, ends_at, calendly_link_1to1, expected_challenges_count').eq('id', courseId).maybeSingle(),
   supabase.from('course_modules').select('id, title, order').eq('course_id', courseId).order('order', { ascending: true }),
 ]);
 const modules = (modulesData ?? []) as { id: string; title: string; order: number }[];
@@ -143,6 +143,20 @@ if (!course) {
           placeholder="https://calendly.com/tu-usuario/1to1"
         />
         <p class="mt-1 text-[11px] text-muted">Cuando un alumno reserve en Calendly, regístralo manualmente en la página Sesiones 1:1 para que cuente en su cuota.</p>
+      </div>
+      <div>
+        <label for="edit-expected-challenges" class="block text-xs font-medium text-muted">Número de retos previstos</label>
+        <input
+          id="edit-expected-challenges"
+          type="number"
+          name="expected_challenges_count"
+          min="0"
+          max="999"
+          value={course.expected_challenges_count ?? 1}
+          class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+          placeholder="Ej: 5"
+        />
+        <p class="mt-1 text-[11px] text-muted">Cantidad de retos que tendrá el curso. En el dashboard del estudiante se mostrará ej. 1/5.</p>
       </div>
       <div class="flex gap-3">
         <button type="submit" class="btn btn-primary">

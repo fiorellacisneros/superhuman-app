@@ -109,6 +109,20 @@ for (const c of coursesRows ?? []) {
             />
             <p class="mt-1 text-[11px] text-muted">Se aplica a todas las clases. Puedes sobrescribirlo en cada clase si hace falta.</p>
           </div>
+          <div>
+            <label for="course-expected-challenges" class="block text-xs font-medium text-muted">Número de retos previstos</label>
+            <input
+              id="course-expected-challenges"
+              type="number"
+              name="expected_challenges_count"
+              min="0"
+              max="999"
+              value="5"
+              class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              placeholder="Ej: 5"
+            />
+            <p class="mt-1 text-[11px] text-muted">Cantidad de retos que tendrá el curso. En el dashboard del estudiante se mostrará ej. 1/5.</p>
+          </div>
           <button type="submit" class="btn btn-primary">
             Crear curso
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">

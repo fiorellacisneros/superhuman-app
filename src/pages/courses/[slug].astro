@@ -38,21 +38,28 @@ const { data: userRow } = await supabase.from('users').select('role, timezone').
 const roleFromClaims = (sessionClaims as { metadata?: { role?: string } } | null)?.metadata?.role;
 const isAdmin = roleFromClaims === 'admin' || (userRow?.role as string) === 'admin';
 
-let course: { id: string; slug: string | null; title: string; description: string | null; cover_image: string | null } | null = null;
+let course: {
+  id: string;
+  slug: string | null;
+  title: string;
+  description: string | null;
+  cover_image: string | null;
+  expected_challenges_count?: number | null;
+} | null = null;
 const { data: bySlug } = await supabase
   .from('courses')
-  .select('id, slug, title, description, cover_image')
+  .select('id, slug, title, description, cover_image, expected_challenges_count')
   .eq('slug', courseSlug)
   .maybeSingle();
 if (bySlug) {
-  course = bySlug;
+  course = bySlug as typeof course;
 } else {
   const { data: byId } = await supabase
     .from('courses')
-    .select('id, slug, title, description, cover_image')
+    .select('id, slug, title, description, cover_image, expected_challenges_count')
     .eq('id', courseSlug)
     .maybeSingle();
-  course = byId;
+  course = byId as typeof course;
 }
 if (!course) {
   return Astro.redirect('/dashboard');
@@ -96,28 +103,28 @@ const [{ data: modulesData }, { data: lessons }] = await Promise.all([
 ]);
 const modules = (modulesData ?? []) as { id: string; title: string; order: number }[];
 
-// Desafíos y puntos por curso
+// Desafíos y puntos por curso (total = retos previstos del curso; completados = al menos una entrega, como en el dashboard)
 let courseChallengesCompleted = 0;
-let courseChallengesTotal = 0;
+let courseChallengesTotal = 1;
 let coursePoints = 0;
 
-const { data: courseChallenges } = await supabase
-  .from('challenges')
-  .select('id')
-  .eq('course_id', course.id)
-  .eq('is_active', true);
+const { data: courseChallenges } = await supabase.from('challenges').select('id').eq('course_id', course.id);
 const challengeIds = (courseChallenges ?? []).map((c) => (c as { id: string }).id);
-courseChallengesTotal = challengeIds.length;
+const rawExpected = course.expected_challenges_count;
+const expectedN = Number(rawExpected);
+if (rawExpected != null && rawExpected !== '' && Number.isFinite(expectedN) && expectedN >= 0) {
+  courseChallengesTotal = expectedN < 1 ? Math.max(challengeIds.length, 1) : expectedN;
+} else {
+  courseChallengesTotal = Math.max(challengeIds.length, 1);
+}
 
 if (challengeIds.length > 0) {
   const { data: mySubs } = await supabase
     .from('submissions')
-    .select('challenge_id, user_id, approved')
+    .select('challenge_id')
     .eq('user_id', userId)
-    .eq('approved', true)
     .in('challenge_id', challengeIds);
-  const completedSet = new Set((mySubs ?? []).map((s) => (s as { challenge_id: string }).challenge_id));
-  courseChallengesCompleted = completedSet.size;
+  courseChallengesCompleted = new Set((mySubs ?? []).map((s) => (s as { challenge_id: string }).challenge_id)).size;
 }
 
 // Puntos específicos de este curso para el usuario actual
@@ -316,7 +323,15 @@ courseBadges = isOnDemand
           </div>
         </div>
         {showAdminView ? (
-          <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+          <div class="space-y-3">
+            <div>
+              <h2 class="font-manrope text-xl font-semibold text-white sm:text-2xl">Progreso general</h2>
+              <p class="mt-1 text-xs text-muted">
+                Vista de administrador: inscritos y puntos del cohort. Para ver <strong class="text-white/90">tus</strong> retos y puntos como alumno, abre el curso con{' '}
+                <a href="/dashboard?preview=true&as=live" class="text-lime underline hover:no-underline">vista previa estudiante</a>.
+              </p>
+            </div>
+            <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
             <div class="flex min-w-0 flex-col rounded-xl bg-[#012EDC] p-3 sm:p-5">
               <dt class="font-manrope text-2xl font-semibold text-white">Alumnos inscritos</dt>
               <dd class="mt-6 font-manrope text-3xl font-semibold leading-none text-white sm:text-[40px]">
@@ -333,20 +348,23 @@ courseBadges = isOnDemand
               <p class="mt-2 text-xs text-[#4A3B00]">Basado en el ranking actual de este curso.</p>
             </div>
           </dl>
+          </div>
         ) : (
-          <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-            <div class="flex min-w-0 flex-col rounded-xl bg-[#012EDC] p-3 sm:p-5">
-              <dt class="font-manrope text-2xl font-semibold text-white">Desafíos</dt>
-              <dd class="mt-8 flex items-baseline gap-0.5">
-                <span class="font-manrope text-2xl font-semibold leading-none text-white sm:text-[48px]">{courseChallengesCompleted}</span>
-                <span class="font-manrope text-2xl font-semibold leading-none text-[#436AFE] sm:text-[48px]">/{courseChallengesTotal}</span>
-              </dd>
-            </div>
-            <div class="flex min-w-0 flex-col rounded-xl bg-[#F5B800] p-3 sm:p-5">
-              <dt class="font-manrope text-2xl font-semibold text-[#1A1A1A]">Puntos</dt>
-              <dd class="mt-8 font-manrope text-2xl font-semibold leading-none text-[#1A1A1A] sm:text-[48px]">{coursePoints}</dd>
-            </div>
-          </dl>
+          <div class="space-y-3">
+            <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+              <div class="flex min-w-0 flex-col rounded-xl bg-[#012EDC] p-3 sm:p-5">
+                <dt class="font-manrope text-2xl font-semibold text-white">Desafíos</dt>
+                <dd class="mt-8 flex items-baseline gap-0.5">
+                  <span class="font-manrope text-2xl font-semibold leading-none text-white sm:text-[48px]">{courseChallengesCompleted}</span>
+                  <span class="font-manrope text-2xl font-semibold leading-none text-[#436AFE] sm:text-[48px]">/{courseChallengesTotal}</span>
+                </dd>
+              </div>
+              <div class="flex min-w-0 flex-col rounded-xl bg-[#F5B800] p-3 sm:p-5">
+                <dt class="font-manrope text-2xl font-semibold text-[#1A1A1A]">Puntos</dt>
+                <dd class="mt-8 font-manrope text-2xl font-semibold leading-none text-[#1A1A1A] sm:text-[48px]">{coursePoints}</dd>
+              </div>
+            </dl>
+          </div>
         )}
 
         {!showAdminView ? (
@@ -473,7 +491,7 @@ courseBadges = isOnDemand
             <ul class="mt-3 space-y-1.5">
               {courseLeaderboard.map((u, i) => (
                 <li class="flex items-center gap-2 rounded-lg bg-background px-2 py-1.5">
-                  <span class={`w-5 shrink-0 text-[10px] font-semibold ${i === 0 ? 'text-lime' : 'text-muted'}`}>{i + 1}º</span>
+                  <span class={`w-5 shrink-0 text-[10px] font-semibold ${i < 5 ? 'text-lime' : 'text-muted'}`}>{i + 1}º</span>
                   <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-surface-2">
                     <img src={avatarImagePath(u.avatarId) ?? '/avatars/avatar-01.png'} alt="" class="h-full w-full object-cover" width="32" height="32" />
                   </div>
