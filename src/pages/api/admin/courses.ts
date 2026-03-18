@@ -48,6 +48,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const ends_at_raw = formData.get('ends_at');
   const ends_at = typeof ends_at_raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ends_at_raw.trim()) ? ends_at_raw.trim() : null;
   const calendly_link_1to1 = sanitizeHttpUrl(formData.get('calendly_link_1to1'));
+  const expectedChallengesRaw = formData.get('expected_challenges_count');
+  const expected_challenges_count = (() => {
+    if (expectedChallengesRaw == null) return 1;
+    const n = typeof expectedChallengesRaw === 'string' ? parseInt(expectedChallengesRaw, 10) : Number(expectedChallengesRaw);
+    return Number.isFinite(n) && n >= 0 ? Math.min(Math.max(n, 0), 999) : 1;
+  })();
 
   if (action === 'create') {
     if (!title) {
@@ -85,6 +91,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         description,
         cover_image,
         zoom_link,
+        expected_challenges_count,
         created_by: userId,
       });
     if (error) {
@@ -142,16 +149,27 @@ export const POST: APIRoute = async ({ request, locals }) => {
       zoom_link: string | null;
       ends_at?: string | null;
       calendly_link_1to1?: string | null;
+      expected_challenges_count?: number;
     } = {
       description,
       cover_image,
       zoom_link,
       ends_at: ends_at ?? null,
       calendly_link_1to1: calendly_link_1to1 ?? null,
+      expected_challenges_count,
     };
     if (title) update.title = title;
-    await db.from('courses').update(update).eq('id', course_id.trim());
-    await recordAdminAudit(db, userId, 'course.update', { courseId: course_id.trim() });
+    const cid = course_id.trim();
+    const { error: updateErr } = await db.from('courses').update(update).eq('id', cid);
+    if (updateErr) {
+      const hint =
+        /expected_challenges|column/i.test(updateErr.message) ?
+          ' Falta la columna en Supabase: ejecuta docs/supabase-course-expected-challenges.sql'
+        : '';
+      const errUrl = withToastParams(`/admin/courses/${cid}/edit`, `${updateErr.message.slice(0, 120)}${hint}`, 'error');
+      return new Response(null, { status: 303, headers: { Location: errUrl } });
+    }
+    await recordAdminAudit(db, userId, 'course.update', { courseId: cid });
   }
 
   const redirect = safeRedirectPath(formData.get('redirect_to'), '/admin/courses');

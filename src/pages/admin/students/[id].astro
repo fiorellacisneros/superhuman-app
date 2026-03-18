@@ -3,7 +3,10 @@ import '../../../styles/global.css';
 import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 import { avatarImagePath } from '../../../lib/avatars';
+import { formatDateTime } from '../../../lib/format-date';
 import { createClerkClient } from '@clerk/backend';
+
+const ADMIN_TZ = 'America/Lima';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -152,14 +155,6 @@ const attendance = (attendanceRows ?? []).map((a) => {
   };
 });
 
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' });
-  } catch {
-    return iso;
-  }
-}
 ---
 
 <DashboardLayout>
@@ -189,7 +184,7 @@ function formatDate(iso: string | null): string {
             <p class="text-sm text-muted">{studentEmail ?? 'Sin email'}</p>
           </div>
         </div>
-        <p class="text-xs text-muted">Miembro desde {formatDate(student.created_at as string | null)}</p>
+        <p class="text-xs text-muted">Miembro desde {formatDateTime(student.created_at as string | null, ADMIN_TZ)}</p>
       </div>
     </header>
 
@@ -227,7 +222,7 @@ function formatDate(iso: string | null): string {
                     <span class={`rounded px-1.5 py-0.5 text-[10px] font-medium ${c.accessType === 'on_demand' ? 'bg-amber-500/15 text-amber-400' : 'bg-lime/15 text-lime'}`}>
                       {c.accessType === 'on_demand' ? 'On-demand' : 'Live'}
                     </span>
-                    <span class="text-[11px] text-muted">{formatDate(c.enrolledAt)}</span>
+                    <span class="text-[11px] text-muted">{formatDateTime(c.enrolledAt, ADMIN_TZ)}</span>
                   </div>
                 </div>
               </li>
@@ -252,7 +247,7 @@ function formatDate(iso: string | null): string {
                   <p class="text-sm font-medium text-white">{b.name}</p>
                   {b.description && <p class="text-xs text-muted">{b.description}</p>}
                 </div>
-                <span class="shrink-0 text-[11px] text-muted">{formatDate(b.earnedAt)}</span>
+                <span class="shrink-0 text-[11px] text-muted">{formatDateTime(b.earnedAt, ADMIN_TZ)}</span>
               </li>
             ))}
           </ul>
@@ -280,7 +275,7 @@ function formatDate(iso: string | null): string {
               {submissions.map((s) => (
                 <tr class="border-b border-transparent/60 transition-colors hover:bg-surface-2/30 last:border-0">
                   <td class="px-4 py-3 text-white">{s.challengeTitle}</td>
-                  <td class="px-4 py-3 text-muted">{formatDate(s.submittedAt)}</td>
+                  <td class="px-4 py-3 text-muted">{formatDateTime(s.submittedAt, ADMIN_TZ)}</td>
                   <td class="px-4 py-3 text-center">
                     {s.reviewed ? (
                       <span class={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ${s.approved ? 'bg-lime/15 text-lime' : 'bg-red-500/15 text-red-300'}`}>
@@ -316,7 +311,7 @@ function formatDate(iso: string | null): string {
                 <p class="truncate text-sm font-medium text-white">{a.lessonTitle}</p>
                 <p class="truncate text-xs text-muted">{a.courseTitle}</p>
               </div>
-              <span class="shrink-0 text-[11px] text-muted">{formatDate(a.confirmedAt)}</span>
+              <span class="shrink-0 text-[11px] text-muted">{formatDateTime(a.confirmedAt, ADMIN_TZ)}</span>
             </li>
           ))}
         </ul>

@@ -3,6 +3,9 @@ import '../../../styles/global.css';
 import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 import { avatarImagePath } from '../../../lib/avatars';
+import { formatDateTime } from '../../../lib/format-date';
+
+const ADMIN_TZ = 'America/Lima';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -38,15 +41,6 @@ const link = (sub.link as string) ?? '';
 const feedback = (sub.feedback as string | null) ?? '';
 const reviewed = sub.reviewed ?? false;
 const approved = sub.approved ?? false;
-
-function formatDate(iso: string | null) {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return iso;
-  }
-}
 
 const redirectTo = Astro.url.searchParams.get('from') === 'dashboard' ? '/dashboard' : '/admin/submissions';
 ---
@@ -107,7 +101,7 @@ const redirectTo = Astro.url.searchParams.get('from') === 'dashboard' ? '/dashbo
             </div>
             <div>
               <p class="font-medium text-white">{displayName}</p>
-              <p class="text-xs text-muted">{challengeTitle} · {formatDate(sub.submitted_at as string)}</p>
+              <p class="text-xs text-muted">{challengeTitle} · {formatDateTime(sub.submitted_at as string, ADMIN_TZ)}</p>
             </div>
           </div>
         </div>

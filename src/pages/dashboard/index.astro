@@ -5,7 +5,7 @@ import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import { avatarImagePath } from '../../lib/avatars';
 import BadgeIcon from '../../components/BadgeIcon.astro';
 import BadgeOutline from '../../components/BadgeOutline.astro';
-import { formatDayAndDate, formatTime } from '../../lib/format-date';
+import { formatDayAndDate, formatTime, formatDateTime } from '../../lib/format-date';
 import { isLessonCompleted } from '../../lib/lessons';
 import { getPreviewContext, setPreviewCookie, clearPreviewCookie } from '../../lib/preview';
 import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
@@ -168,7 +168,8 @@ let points = 0;
 let hasLiveEnrollment = false;
 type DashboardBadge = { id: string; name: string; description: string | null; condition_type: string | null; earned: boolean; earned_at: string | null; earnedCount: number };
 let dashboardBadges: DashboardBadge[] = [];
-let studentActiveChallengesCount = 0;
+let studentTotalExpectedChallenges = 0;
+let studentChallengesCompleted = 0;
 let enrolledIds: string[] = [];
 let enrolledCourses: { id: string; slug: string; title: string; cover_image: string | null; description: string | null; totalLessons: number; completedLessons: number }[] = [];
 let leaderboard: { id: string; name: string; avatarId: string | null; points: number }[] = [];
@@ -178,13 +179,12 @@ let upcomingByMonth: { monthLabel: string; lessons: UpcomingLesson[] }[] = [];
 
 if (role !== 'admin' || preview) {
   try {
-    const [badgeRowsRes, earnedRowsRes, sacRes, enrollmentRowsRes] = await Promise.all([
+    const [badgeRowsRes, earnedRowsRes, enrollmentRowsRes] = await Promise.all([
       supabase.from('badges').select('id, name, description, condition_type').order('name'),
       supabase.from('user_badges').select('badge_id, earned_at').eq('user_id', userId),
-      supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
       supabase
         .from('enrollments')
-        .select('course_id, access_type, courses(id, slug, title, cover_image, description)')
+        .select('course_id, access_type, courses(id, slug, title, cover_image, description, expected_challenges_count)')
         .eq('user_id', userId),
     ]);
     const badgeRows = badgeRowsRes.data ?? null;
@@ -212,7 +212,6 @@ if (role !== 'admin' || preview) {
       ? allDashboardBadges
       : allDashboardBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete' | 'manual'));
 
-    studentActiveChallengesCount = sacRes.count ?? 0;
     const enrolledCourseIdsForPoints = [...new Set((enrollmentRows ?? []).map((r) => r.course_id as string).filter(Boolean))];
     if (enrolledCourseIdsForPoints.length > 0) {
       const { data: myPointsRows } = await supabase
@@ -222,21 +221,54 @@ if (role !== 'admin' || preview) {
         .in('course_id', enrolledCourseIdsForPoints);
       points = (myPointsRows ?? []).reduce((a, r) => a + (r.points ?? 0), 0);
     }
+    type EnrolledCourseRow = { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null; expected_challenges_count?: number | null };
     let enrolledCourseRows = (enrollmentRows ?? [])
-      .map((row) => (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses)
-      .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
+      .map((row) => (row as { courses: EnrolledCourseRow | null }).courses)
+      .filter((course): course is EnrolledCourseRow => Boolean(course?.id));
 
     if (role === 'admin' && preview) {
       const { data: allCourses } = await supabase
         .from('courses')
-        .select('id, slug, title, cover_image, description')
+        .select('id, slug, title, cover_image, description, expected_challenges_count')
         .order('title');
       enrolledCourseRows = (allCourses ?? []).filter(
-        (c): c is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(c?.id),
+        (c): c is EnrolledCourseRow => Boolean(c?.id),
       );
     }
 
     enrolledIds = enrolledCourseRows.map((course) => course.id);
+
+    // Total retos previstos por curso inscrito (o todos en vista previa admin). null/omitido cuenta como 1 (Number(null) sería 0 y rompía el total).
+    const uniqueCourseIds = [...new Set(enrolledIds.filter(Boolean))];
+    if (uniqueCourseIds.length > 0) {
+      const { data: courseTotals } = await supabase.from('courses').select('id, expected_challenges_count').in('id', uniqueCourseIds);
+      const byId = new Map((courseTotals ?? []).map((r) => [r.id as string, (r as { expected_challenges_count?: unknown }).expected_challenges_count]));
+      studentTotalExpectedChallenges = uniqueCourseIds.reduce((sum, cid) => {
+        const raw = byId.get(cid);
+        if (raw === null || raw === undefined || raw === '') return sum + 1;
+        const n = Number(raw);
+        return sum + (Number.isFinite(n) && n >= 0 ? n : 1);
+      }, 0);
+    } else {
+      studentTotalExpectedChallenges = 0;
+    }
+
+    // Retos con al menos una entrega: del curso inscrito O retos globales (sin curso), como en /challenges
+    if (enrolledIds.length > 0) {
+      const [{ data: chByCourse }, { data: chGlobal }] = await Promise.all([
+        supabase.from('challenges').select('id').in('course_id', enrolledIds),
+        supabase.from('challenges').select('id').is('course_id', null).eq('is_active', true),
+      ]);
+      const enrolledChallengeIds = [
+        ...new Set(
+          [...(chByCourse ?? []), ...(chGlobal ?? [])].map((c) => c.id as string).filter(Boolean),
+        ),
+      ];
+      if (enrolledChallengeIds.length > 0) {
+        const { data: subRows } = await supabase.from('submissions').select('challenge_id').eq('user_id', userId).in('challenge_id', enrolledChallengeIds);
+        studentChallengesCompleted = new Set((subRows ?? []).map((s) => s.challenge_id)).size;
+      }
+    }
 
     let leaderboardRowsRes: { data: { id: string; display_name: string | null; avatar_id: string | null }[] | null } = { data: [] };
     const leaderboardPointsByUser = new Map<string, number>();
@@ -375,14 +407,6 @@ const displayName =
   (sessionClaims as any)?.name ??
   (role === 'admin' ? 'Admin' : 'Estudiante');
 
-function formatDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' });
-  } catch {
-    return iso;
-  }
-}
-
 const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone ?? null;
 ---
 
@@ -461,7 +485,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
                       <tr class="border-b border-white/5 last:border-0">
                         <td class="py-3 pr-4 font-medium text-white">{sub.studentName}</td>
                         <td class="py-3 pr-4 text-white">{sub.challengeTitle}</td>
-                        <td class="py-3 pr-4 text-muted">{formatDate(sub.submitted_at)}</td>
+                        <td class="py-3 pr-4 text-muted">{formatDateTime(sub.submitted_at, 'America/Lima')}</td>
                         <td class="py-3 text-right">
                           <a href={`/admin/submissions/${sub.id}?from=dashboard`} class="btn btn-primary text-sm">
                             Revisar
@@ -519,7 +543,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
               <ul class="mt-3 max-h-[420px] space-y-1.5 overflow-y-auto pr-1">
                 {cohortProgress.map((s, i) => (
                   <li class="flex items-center gap-2 rounded-lg bg-background px-2 py-1.5">
-                    <span class={`w-5 shrink-0 text-[10px] font-semibold ${i === 0 ? 'text-lime' : 'text-muted'}`}>{i + 1}º</span>
+                    <span class={`w-5 shrink-0 text-[10px] font-semibold ${i < 5 ? 'text-lime' : 'text-muted'}`}>{i + 1}º</span>
                     <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-surface-2">
                       <img src={avatarImagePath(s.avatarId) ?? '/avatars/avatar-01.png'} alt="" class="h-full w-full object-cover" width="32" height="32" />
                     </div>
@@ -654,16 +678,20 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
           <div class="rounded-2xl bg-background p-5">
             <h2 class="text-sm font-semibold text-white">Progreso general</h2>
             <p class="mt-1 text-xs text-muted">
-              Desafíos activos para completar.
+              Sigue tus puntos y cómo creces cada semana.
             </p>
 
-            <div class="mt-4">
-              <div class="flex min-w-0 flex-col rounded-xl bg-[#012EDC] p-3 sm:p-5 max-w-[240px]">
+            <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+              <div class="flex min-w-0 flex-col rounded-xl bg-[#012EDC] p-3 sm:p-5">
                 <span class="font-manrope text-2xl font-semibold text-white">Desafíos</span>
                 <div class="mt-8 flex items-baseline gap-0.5">
-                  <span class="font-manrope text-2xl font-semibold leading-none text-white sm:text-[48px]">{studentActiveChallengesCount}</span>
-                  <span class="font-manrope text-2xl font-semibold leading-none text-[#436AFE] sm:text-[48px]">/{studentActiveChallengesCount}</span>
+                  <span class="font-manrope text-2xl font-semibold leading-none text-white sm:text-[48px]">{studentChallengesCompleted}</span>
+                  <span class="font-manrope text-2xl font-semibold leading-none text-[#436AFE] sm:text-[48px]">/{studentTotalExpectedChallenges > 0 ? studentTotalExpectedChallenges : 1}</span>
                 </div>
+              </div>
+              <div class="flex min-w-0 flex-col rounded-xl bg-[#F5B800] p-3 sm:p-5">
+                <span class="font-manrope text-2xl font-semibold text-[#1A1A1A]">Puntos</span>
+                <div class="mt-8 font-manrope text-2xl font-semibold leading-none text-[#1A1A1A] sm:text-[48px]">{points}</div>
               </div>
             </div>
           </div>
@@ -754,7 +782,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
               <ul class="mt-3 space-y-1.5">
                 {leaderboard.map((u, i) => (
                   <li class="flex items-center gap-2 rounded-lg bg-background px-2 py-1.5">
-                    <span class={`w-5 shrink-0 text-[10px] font-semibold ${i === 0 ? 'text-lime' : 'text-muted'}`}>{i + 1}º</span>
+                    <span class={`w-5 shrink-0 text-[10px] font-semibold ${i < 5 ? 'text-lime' : 'text-muted'}`}>{i + 1}º</span>
                     <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-surface-2">
                       <img src={avatarImagePath(u.avatarId) ?? '/avatars/avatar-01.png'} alt="" class="h-full w-full object-cover" width="32" height="32" />
                     </div>
