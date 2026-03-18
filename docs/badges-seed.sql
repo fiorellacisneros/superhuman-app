@@ -6,7 +6,7 @@
 INSERT INTO badges (id, name, description, image_url, condition_type)
 VALUES
   ('a0000001-0000-0000-0000-000000000001', 'Primera entrega', 'Submitted first challenge', NULL, 'first_submission'),
-  ('a0000002-0000-0000-0000-000000000002', 'En racha', 'Attended 3 lessons in a row', NULL, 'streak_3'),
+  ('a0000002-0000-0000-0000-000000000002', 'En racha', '3 entregas aprobadas en retos distintos', NULL, 'streak_3'),
   ('a0000003-0000-0000-0000-000000000003', 'Early bird', 'First student to submit a challenge', NULL, 'early_bird'),
   ('a0000004-0000-0000-0000-000000000004', 'Módulo completo', 'Completed all lessons in a module', NULL, 'module_complete'),
   ('a0000005-0000-0000-0000-000000000005', 'Puntual', 'Submitted before deadline', NULL, 'manual'),

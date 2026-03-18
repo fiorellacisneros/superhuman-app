@@ -42,7 +42,7 @@ export const BADGES: BadgeDefinition[] = [
   {
     slug: 'en-racha',
     name: 'En racha',
-    description: '3 entregas aprobadas seguidas (retos distintos, cada una en menos de 21 días de la anterior)',
+    description: '3 entregas aprobadas en retos distintos',
     conditionType: 'streak_3',
   },
   {
@@ -106,24 +106,12 @@ export async function checkBadgesAfterApproval(
 
   const { data: approvedSubs } = await supabase
     .from('submissions')
-    .select('challenge_id, reviewed_at')
+    .select('challenge_id')
     .eq('user_id', userId)
-    .eq('approved', true)
-    .not('reviewed_at', 'is', null)
-    .order('reviewed_at', { ascending: true });
-  const rows = (approvedSubs ?? []) as { challenge_id: string; reviewed_at: string }[];
-  const MS_21D = 21 * 24 * 60 * 60 * 1000;
-  let hasSubmissionStreak3 = false;
-  if (rows.length >= 3) {
-    const last3 = rows.slice(-3);
-    const chIds = new Set(last3.map((r) => r.challenge_id));
-    if (chIds.size === 3) {
-      const t0 = new Date(last3[0].reviewed_at).getTime();
-      const t1 = new Date(last3[1].reviewed_at).getTime();
-      const t2 = new Date(last3[2].reviewed_at).getTime();
-      if (t1 - t0 <= MS_21D && t2 - t1 <= MS_21D) hasSubmissionStreak3 = true;
-    }
-  }
+    .eq('approved', true);
+  const rows = (approvedSubs ?? []) as { challenge_id: string }[];
+  const distinctChallenges = new Set(rows.map((r) => r.challenge_id)).size;
+  const hasSubmissionStreak3 = rows.length >= 3 && distinctChallenges >= 3;
 
   for (const badge of badgeRows as { id: string; condition_type: string }[]) {
     const cond = badge.condition_type as BadgeConditionType;
