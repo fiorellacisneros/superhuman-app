@@ -2,6 +2,7 @@
 import '../../../styles/global.css';
 import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+import { renderMarkdown } from '../../../lib/markdown';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -142,6 +143,7 @@ function tabUrl(nextView: string): string {
           <div>
             <label for="challenge-description" class="block text-xs font-medium text-muted">Descripción</label>
             <textarea id="challenge-description" name="description" rows={4} class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Instrucciones del reto"></textarea>
+            <p class="mt-1 text-[11px] text-muted/80">Puedes usar Markdown: <strong>**negrita**</strong>, <em>*cursiva*</em>, [texto del enlace](url)</p>
           </div>
           <div class="grid gap-6 sm:grid-cols-2">
             <div>
@@ -330,7 +332,7 @@ function tabUrl(nextView: string): string {
                     </span>
                   </div>
                   {ch.description && (
-                    <p class="line-clamp-2 max-w-2xl text-sm text-muted">{ch.description}</p>
+                    <div class="line-clamp-2 max-w-2xl text-sm text-muted challenge-description" set:html={renderMarkdown(ch.description)} />
                   )}
                   <div class="flex flex-wrap items-center gap-2 text-xs">
                     <span class="rounded-md border border-transparent bg-surface-2 px-2 py-1 text-muted">
