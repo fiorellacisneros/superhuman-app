@@ -5,12 +5,12 @@
 
 INSERT INTO badges (id, name, description, image_url, condition_type)
 VALUES
-  ('a0000001-0000-0000-0000-000000000001', 'Primera entrega', 'Submitted first challenge', NULL, 'first_submission'),
-  ('a0000002-0000-0000-0000-000000000002', 'En racha', '3 entregas aprobadas en retos distintos', NULL, 'streak_3'),
-  ('a0000003-0000-0000-0000-000000000003', 'Early bird', 'First student to submit a challenge', NULL, 'early_bird'),
-  ('a0000004-0000-0000-0000-000000000004', 'Módulo completo', 'Completed all lessons in a module', NULL, 'module_complete'),
-  ('a0000005-0000-0000-0000-000000000005', 'Puntual', 'Submitted before deadline', NULL, 'manual'),
-  ('a0000006-0000-0000-0000-000000000006', 'Curso completo', 'Finished entire course', NULL, 'course_complete')
+  ('a0000001-0000-0000-0000-000000000001', 'Primera entrega', 'Completaste tu primer desafío con entrega aprobada.', NULL, 'first_submission'),
+  ('a0000002-0000-0000-0000-000000000002', 'En racha', 'Tres entregas aprobadas en retos distintos.', NULL, 'streak_3'),
+  ('a0000003-0000-0000-0000-000000000003', 'Madrugador', 'Fuiste la primera persona en entregar ese desafío.', NULL, 'early_bird'),
+  ('a0000004-0000-0000-0000-000000000004', 'Módulo completo', 'Completaste todas las lecciones del módulo.', NULL, 'module_complete'),
+  ('a0000005-0000-0000-0000-000000000005', 'Puntual', 'Entregaste antes del plazo.', NULL, 'manual'),
+  ('a0000006-0000-0000-0000-000000000006', 'Curso completo', 'Terminaste todo el curso.', NULL, 'course_complete')
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,

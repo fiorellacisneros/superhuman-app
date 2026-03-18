@@ -8,7 +8,8 @@ import BadgeOutline from '../../components/BadgeOutline.astro';
 import { formatDayAndDate, formatTime, formatDateTime } from '../../lib/format-date';
 import { isLessonCompleted } from '../../lib/lessons';
 import { getPreviewContext, setPreviewCookie, clearPreviewCookie } from '../../lib/preview';
-import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
+import { isStudentVisibleBadgeCondition, ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
+import { badgeDisplayDescription, badgeDisplayName } from '../../lib/badge-display';
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
 
@@ -70,10 +71,10 @@ if (role === 'admin' && !preview) {
     supabase.from('users').select('id, display_name, avatar_id').eq('role', 'student'),
     supabase
       .from('submissions')
-      .select('id, submitted_at, users(display_name), challenges(title)')
+      .select('id, user_id, challenge_id, submitted_at, users(display_name), challenges(title)')
       .eq('reviewed', false)
       .order('submitted_at', { ascending: false })
-      .limit(5),
+      .limit(40),
     supabase.from('user_course_points').select('user_id, course_id, points'),
     supabase.from('courses').select('id, slug, title').order('title'),
     supabase.from('enrollments').select('course_id'),
@@ -106,17 +107,25 @@ if (role === 'admin' && !preview) {
     points: pointsByUser.get(u.id) ?? 0,
   })).sort((a, b) => b.points - a.points);
   cohortMaxPoints = Math.max(1, ...cohortProgress.map((u) => u.points));
-  const subRows = subRowsRes.data;
-  recentSubmissions = (subRows ?? []).map((s) => {
+  const subRows = subRowsRes.data ?? [];
+  const seenPair = new Set<string>();
+  recentSubmissions = [];
+  for (const s of subRows) {
+    const uid = s.user_id as string;
+    const cid = s.challenge_id as string;
+    const key = `${uid}:${cid}`;
+    if (seenPair.has(key)) continue;
+    seenPair.add(key);
     const u = s.users as { display_name: string | null } | null;
     const c = s.challenges as { title: string | null } | null;
-    return {
+    recentSubmissions.push({
       id: s.id,
       studentName: u?.display_name ?? 'Estudiante',
       challengeTitle: c?.title ?? 'Desafío',
       submitted_at: s.submitted_at as string,
-    };
-  });
+    });
+    if (recentSubmissions.length >= 5) break;
+  }
 
   const courses = (coursesRes.data ?? []) as { id: string; slug: string | null; title: string | null }[];
   const enrollments = (enrollmentsRes.data ?? []) as { course_id: string }[];
@@ -196,20 +205,25 @@ if (role !== 'admin' || preview) {
       const id = row.badge_id as string;
       earnedCountMap.set(id, (earnedCountMap.get(id) ?? 0) + 1);
     }
-    const allDashboardBadges = (badgeRows ?? []).map((b) => ({
+    const allDashboardBadges = (badgeRows ?? []).map((b) => {
+      const ct = (b.condition_type as string) ?? null;
+      const rawName = (b.name as string) ?? null;
+      const rawDesc = (b.description as string) ?? null;
+      return {
       id: b.id,
-      name: b.name ?? 'Insignia',
-      description: (b.description as string) ?? null,
-      condition_type: (b.condition_type as string) ?? null,
+      name: badgeDisplayName(ct, rawName),
+      description: badgeDisplayDescription(ct, rawDesc, rawName),
+      condition_type: ct,
       earned: earnedSet.has(b.id),
       earned_at: earnedAtMap.get(b.id) ?? null,
       earnedCount: earnedCountMap.get(b.id) ?? 0,
-    }));
+    };
+    });
     const enrollmentRows = enrollmentRowsRes.data ?? null;
     const fromEnrollments = (enrollmentRows ?? []).some((r) => (r.access_type as string) !== 'on_demand');
     hasLiveEnrollment = role === 'admin' && preview ? previewAs === 'live' : fromEnrollments;
     dashboardBadges = hasLiveEnrollment
-      ? allDashboardBadges
+      ? allDashboardBadges.filter((b) => isStudentVisibleBadgeCondition(b.condition_type))
       : allDashboardBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete' | 'manual'));
 
     const enrolledCourseIdsForPoints = [...new Set((enrollmentRows ?? []).map((r) => r.course_id as string).filter(Boolean))];
