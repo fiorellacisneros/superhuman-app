@@ -42,7 +42,7 @@ export const BADGES: BadgeDefinition[] = [
   {
     slug: 'en-racha',
     name: 'En racha',
-    description: 'Attended 3 lessons in a row',
+    description: '3 entregas aprobadas seguidas (retos distintos, cada una en menos de 21 días de la anterior)',
     conditionType: 'streak_3',
   },
   {
@@ -104,11 +104,33 @@ export async function checkBadgesAfterApproval(
     .maybeSingle();
   const isEarlyBird = firstSubmitted?.user_id === userId;
 
+  const { data: approvedSubs } = await supabase
+    .from('submissions')
+    .select('challenge_id, reviewed_at')
+    .eq('user_id', userId)
+    .eq('approved', true)
+    .not('reviewed_at', 'is', null)
+    .order('reviewed_at', { ascending: true });
+  const rows = (approvedSubs ?? []) as { challenge_id: string; reviewed_at: string }[];
+  const MS_21D = 21 * 24 * 60 * 60 * 1000;
+  let hasSubmissionStreak3 = false;
+  if (rows.length >= 3) {
+    const last3 = rows.slice(-3);
+    const chIds = new Set(last3.map((r) => r.challenge_id));
+    if (chIds.size === 3) {
+      const t0 = new Date(last3[0].reviewed_at).getTime();
+      const t1 = new Date(last3[1].reviewed_at).getTime();
+      const t2 = new Date(last3[2].reviewed_at).getTime();
+      if (t1 - t0 <= MS_21D && t2 - t1 <= MS_21D) hasSubmissionStreak3 = true;
+    }
+  }
+
   for (const badge of badgeRows as { id: string; condition_type: string }[]) {
     const cond = badge.condition_type as BadgeConditionType;
     let shouldAward = false;
     if (cond === 'first_submission' && isFirstSubmission) shouldAward = true;
     if (cond === 'early_bird' && isEarlyBird) shouldAward = true;
+    if (cond === 'streak_3' && hasSubmissionStreak3) shouldAward = true;
     if (!shouldAward) continue;
     const { data: existing } = await supabase.from('user_badges').select('user_id').eq('user_id', userId).eq('badge_id', badge.id).maybeSingle();
     if (!existing) {
@@ -140,7 +162,7 @@ export async function checkBadgesAfterAttendance(
     let shouldAward = false;
 
     if (cond === 'first_attendance' && isFirstAttendance) shouldAward = true;
-    if ((cond === 'attendance_streak_3' || cond === 'streak_3') && hasAttendanceStreak3) shouldAward = true;
+    if (cond === 'attendance_streak_3' && hasAttendanceStreak3) shouldAward = true;
 
     if (!shouldAward) continue;
     const { data: existing } = await supabase

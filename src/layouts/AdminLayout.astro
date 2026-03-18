@@ -162,7 +162,13 @@ function isActive(href: string): boolean {
         </div>
       </header>
 
-      <main class="mx-auto max-w-5xl px-4 pb-36 pt-8 sm:px-6 md:pb-8">
+      <div
+        id="user-menu-backdrop"
+        class="fixed inset-0 z-[38] hidden cursor-default bg-black/50"
+        aria-hidden="true"
+      ></div>
+
+      <main id="admin-layout-main" class="mx-auto max-w-5xl px-4 pb-36 pt-8 sm:px-6 md:pb-8">
         <slot />
       </main>
     </div>
@@ -221,6 +227,7 @@ function isActive(href: string): boolean {
         const button = document.getElementById('user-menu-button');
         const dropdown = document.getElementById('user-menu-dropdown');
         const chevron = document.getElementById('chevron-icon');
+        const backdrop = document.getElementById('user-menu-backdrop');
         if (!menu || !button || !dropdown || !chevron) return;
         function open() {
           dropdown.classList.remove('pointer-events-none', 'opacity-0');
@@ -228,6 +235,7 @@ function isActive(href: string): boolean {
           dropdown.setAttribute('aria-hidden', 'false');
           chevron.classList.add('rotate-180');
           button.setAttribute('aria-expanded', 'true');
+          if (backdrop) backdrop.classList.remove('hidden');
         }
         function close() {
           dropdown.classList.add('pointer-events-none', 'opacity-0');
@@ -235,18 +243,41 @@ function isActive(href: string): boolean {
           dropdown.setAttribute('aria-hidden', 'true');
           chevron.classList.remove('rotate-180');
           button.setAttribute('aria-expanded', 'false');
+          if (backdrop) backdrop.classList.add('hidden');
         }
         function isOpen() {
           return button.getAttribute('aria-expanded') === 'true';
         }
+        close();
         button.addEventListener('click', (e) => {
           e.stopPropagation();
           if (isOpen()) close();
           else open();
         });
-        document.addEventListener('click', () => {
-          if (isOpen()) requestAnimationFrame(close);
+        backdrop?.addEventListener('click', () => {
+          if (isOpen()) close();
         });
+        document.addEventListener('click', (e) => {
+          if (!isOpen()) return;
+          const t = e.target;
+          if (!(t instanceof Node)) return;
+          if (menu.contains(t)) return;
+          if (backdrop && (t === backdrop || backdrop.contains(t))) return;
+          requestAnimationFrame(close);
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && isOpen()) {
+            e.preventDefault();
+            close();
+          }
+        });
+        document.getElementById('admin-layout-main')?.addEventListener(
+          'scroll',
+          () => {
+            if (isOpen()) close();
+          },
+          { passive: true },
+        );
       });
 
       document.addEventListener('DOMContentLoaded', () => {
@@ -315,6 +346,15 @@ function isActive(href: string): boolean {
           panel.classList.add('hidden');
           trigger.setAttribute('aria-expanded', 'false');
           icon.classList.remove('rotate-180');
+          panel.style.position = '';
+          panel.style.left = '';
+          panel.style.top = '';
+          panel.style.minWidth = '';
+          panel.style.width = '';
+          panel.style.maxHeight = '';
+          panel.style.overflowY = '';
+          panel.style.zIndex = '';
+          panel.style.right = '';
         };
         const openCurrentSelect = (el) => {
           if (openSelect && openSelect !== el) closeSelect(openSelect);
@@ -325,6 +365,26 @@ function isActive(href: string): boolean {
           panel.classList.remove('hidden');
           trigger.setAttribute('aria-expanded', 'true');
           icon.classList.add('rotate-180');
+          const tr = trigger.getBoundingClientRect();
+          const margin = 8;
+          const maxPanelH = 256;
+          const spaceBelow = window.innerHeight - tr.bottom - margin;
+          const spaceAbove = tr.top - margin;
+          let top = tr.bottom + 4;
+          let maxH = Math.min(maxPanelH, spaceBelow - 4);
+          if (maxH < 100 && spaceAbove > spaceBelow) {
+            maxH = Math.min(maxPanelH, spaceAbove - 4);
+            top = Math.max(margin, tr.top - 4 - maxH);
+          }
+          const left = Math.max(margin, Math.min(tr.left, window.innerWidth - tr.width - margin));
+          panel.style.position = 'fixed';
+          panel.style.left = `${left}px`;
+          panel.style.width = `${tr.width}px`;
+          panel.style.top = `${top}px`;
+          panel.style.maxHeight = `${Math.max(100, maxH)}px`;
+          panel.style.overflowY = 'auto';
+          panel.style.zIndex = '85';
+          panel.style.right = 'auto';
           openSelect = el;
         };
         for (const select of selects) {
