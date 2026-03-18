@@ -3,6 +3,7 @@ import '../../../styles/global.css';
 import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 import { avatarImagePath } from '../../../lib/avatars';
+import { badgeDisplayDescription, badgeDisplayName } from '../../../lib/badge-display';
 import { formatDateTime } from '../../../lib/format-date';
 import { createClerkClient } from '@clerk/backend';
 
@@ -111,10 +112,11 @@ const iconMap: Record<string, string> = {
 
 const badges = (userBadgeRows ?? []).map((r) => {
   const b = r.badges as { name: string | null; description: string | null; condition_type: string | null } | null;
+  const ct = b?.condition_type ?? null;
   return {
-    name: b?.name ?? 'Insignia',
-    description: b?.description ?? null,
-    conditionType: b?.condition_type ?? null,
+    name: badgeDisplayName(ct, b?.name ?? null),
+    description: badgeDisplayDescription(ct, b?.description ?? null, b?.name ?? null),
+    conditionType: ct,
     earnedAt: r.earned_at as string | null,
   };
 });

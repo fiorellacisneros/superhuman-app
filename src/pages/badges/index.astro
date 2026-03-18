@@ -4,7 +4,8 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import BadgeIcon from '../../components/BadgeIcon.astro';
 import { getPreviewContext } from '../../lib/preview';
-import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
+import { isStudentVisibleBadgeCondition, ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
+import { badgeDisplayDescription, badgeDisplayName } from '../../lib/badge-display';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -50,17 +51,22 @@ const { data: earnedRows } = await supabase.from('user_badges').select('badge_id
 const earnedSet = new Set((earnedRows ?? []).map((e) => e.badge_id));
 const earnedAtMap = new Map((earnedRows ?? []).map((e) => [e.badge_id, e.earned_at as string]));
 
-const allBadges = (badgeRows ?? []).map((b) => ({
+const allBadges = (badgeRows ?? []).map((b) => {
+  const ct = (b.condition_type as string) ?? null;
+  const rawName = (b.name as string) ?? null;
+  const rawDesc = (b.description as string) ?? null;
+  return {
   id: b.id,
-  name: b.name ?? 'Insignia',
-  description: (b.description as string) ?? null,
+  name: badgeDisplayName(ct, rawName),
+  description: badgeDisplayDescription(ct, rawDesc, rawName),
   image_url: (b.image_url as string) ?? null,
-  condition_type: (b.condition_type as string) ?? null,
+  condition_type: ct,
   earned: earnedSet.has(b.id),
   earned_at: earnedAtMap.get(b.id) ?? null,
-}));
+};
+});
 const badges = hasLiveEnrollment
-  ? allBadges
+  ? allBadges.filter((b) => isStudentVisibleBadgeCondition(b.condition_type))
   : allBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete' | 'manual'));
 
 function formatDate(iso: string) {
