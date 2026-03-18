@@ -5,7 +5,6 @@ import { SignOutButton } from '@clerk/astro/components';
 import { getSupabaseServiceRoleClient } from '../lib/supabase';
 import { avatarImagePath } from '../lib/avatars';
 import { badgeDisplayName } from '../lib/badge-display';
-import { isStudentVisibleBadgeCondition } from '../lib/badges';
 import { TIMEZONE_OPTIONS } from '../lib/timezones';
 
 const { isAuthenticated, userId, redirectToSignIn, sessionClaims } = Astro.locals.auth();
@@ -128,7 +127,7 @@ try {
   earnedBadges = (userBadges ?? [])
     .map((ub: { badges?: { name?: string; image_url?: string | null; condition_type?: string | null } | null }) => {
       const b = ub?.badges;
-      if (!b?.name || !isStudentVisibleBadgeCondition(b.condition_type ?? null)) return null;
+      if (!b?.name) return null;
       return {
         name: badgeDisplayName(b.condition_type ?? null, b.name),
         image_url: b.image_url ?? null,

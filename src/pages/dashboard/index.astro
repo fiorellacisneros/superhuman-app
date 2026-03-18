@@ -8,7 +8,7 @@ import BadgeOutline from '../../components/BadgeOutline.astro';
 import { formatDayAndDate, formatTime, formatDateTime } from '../../lib/format-date';
 import { isLessonCompleted } from '../../lib/lessons';
 import { getPreviewContext, setPreviewCookie, clearPreviewCookie } from '../../lib/preview';
-import { isStudentVisibleBadgeCondition, ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
+import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
 import { badgeDisplayDescription, badgeDisplayName } from '../../lib/badge-display';
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
@@ -223,8 +223,8 @@ if (role !== 'admin' || preview) {
     const fromEnrollments = (enrollmentRows ?? []).some((r) => (r.access_type as string) !== 'on_demand');
     hasLiveEnrollment = role === 'admin' && preview ? previewAs === 'live' : fromEnrollments;
     dashboardBadges = hasLiveEnrollment
-      ? allDashboardBadges.filter((b) => isStudentVisibleBadgeCondition(b.condition_type))
-      : allDashboardBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete' | 'manual'));
+      ? allDashboardBadges
+      : allDashboardBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete'));
 
     const enrolledCourseIdsForPoints = [...new Set((enrollmentRows ?? []).map((r) => r.course_id as string).filter(Boolean))];
     if (enrolledCourseIdsForPoints.length > 0) {
