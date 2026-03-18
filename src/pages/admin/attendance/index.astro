@@ -229,13 +229,14 @@ function formatDateTime(iso: string | null): string {
             <ul class="space-y-2" id="attendance-student-list">
               {students.map((s, idx) => (
                 <li class="rounded-lg border border-transparent bg-surface-2/60 px-3 py-2.5" data-index={idx}>
-                  <label class="flex cursor-pointer items-center gap-3 attendance-row">
+                  <label class="relative flex cursor-pointer items-center gap-3 attendance-row">
                     <input
                       type="checkbox"
                       name="user_ids"
                       value={s.id}
                       checked={s.alreadyPresent}
-                      class="peer sr-only"
+                      class="peer absolute inset-0 z-[1] h-full w-full cursor-pointer opacity-0"
+                      aria-label={`Asistencia: ${s.name}`}
                     />
                     <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-transparent bg-surface text-transparent transition peer-checked:border-lime peer-checked:bg-lime peer-checked:text-background peer-checked:shadow-[0_0_0_1px_var(--color-lime)]">
                       <i class="bi bi-check-lg text-[11px] leading-none" aria-hidden="true" />
@@ -279,8 +280,37 @@ function formatDateTime(iso: string | null): string {
               const selectAll = document.getElementById('select-all-attendance');
               const deselectAll = document.getElementById('deselect-all-attendance');
               const countEl = document.getElementById('attendance-count');
+              const mainEl = document.querySelector('#main-content-panel main');
 
               let lastClickedIndex = -1;
+              let savedMainScroll = 0;
+              let restoreScrollAfterFocus = false;
+
+              if (form && mainEl) {
+                form.addEventListener(
+                  'pointerdown',
+                  (e) => {
+                    const el = e.target;
+                    if (!(el instanceof Element)) return;
+                    if (!el.closest('.attendance-row')) return;
+                    savedMainScroll = mainEl.scrollTop;
+                    restoreScrollAfterFocus = true;
+                  },
+                  true,
+                );
+                form.addEventListener('focusin', (e) => {
+                  const t = e.target;
+                  if (!(t instanceof HTMLInputElement) || t.name !== 'user_ids' || !restoreScrollAfterFocus) return;
+                  restoreScrollAfterFocus = false;
+                  const y = savedMainScroll;
+                  const restore = () => {
+                    mainEl.scrollTop = y;
+                  };
+                  restore();
+                  requestAnimationFrame(restore);
+                  requestAnimationFrame(() => requestAnimationFrame(restore));
+                });
+              }
 
               const updateCount = () => {
                 const checked = form?.querySelectorAll('input[name="user_ids"]:checked')?.length ?? 0;
@@ -302,6 +332,7 @@ function formatDateTime(iso: string | null): string {
                 row.addEventListener('click', (e) => {
                   if (e.shiftKey) {
                     e.preventDefault();
+                    restoreScrollAfterFocus = false;
                     if (lastClickedIndex === -1) {
                       (cb as HTMLInputElement).checked = true;
                       lastClickedIndex = idx;
@@ -336,6 +367,34 @@ function formatDateTime(iso: string | null): string {
         Elige un curso y haz clic en Cargar clases para ver la lista de clases.
       </div>
     )}
+
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const closeAllSelectPanels = () => {
+          document.querySelectorAll('.custom-select-panel').forEach((p) => {
+            p.classList.add('hidden');
+            const el = p as HTMLElement;
+            el.style.position = '';
+            el.style.left = '';
+            el.style.top = '';
+            el.style.right = '';
+            el.style.minWidth = '';
+            el.style.width = '';
+            el.style.maxHeight = '';
+            el.style.overflowY = '';
+            el.style.zIndex = '';
+            el.style.display = '';
+            el.style.visibility = '';
+          });
+        };
+        closeAllSelectPanels();
+        if (document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+        const form = document.getElementById('attendance-form');
+        form?.addEventListener('submit', () => {
+          closeAllSelectPanels();
+        });
+      });
+    </script>
   </section>
 </DashboardLayout>
 
