@@ -2,6 +2,7 @@
 import '../../../../styles/global.css';
 import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../../lib/supabase';
+import { renderMarkdown } from '../../../../lib/markdown';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -77,6 +78,7 @@ const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string
       <div>
         <label for="edit-description" class="block text-xs font-medium text-muted">Descripción</label>
         <textarea id="edit-description" name="description" rows={4} class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime">{(challenge.description as string) ?? ''}</textarea>
+        <p class="mt-1 text-[11px] text-muted/80">Puedes usar Markdown: <strong>**negrita**</strong>, <em>*cursiva*</em>, [texto del enlace](url)</p>
       </div>
       <div class="grid gap-6 sm:grid-cols-2">
         <div>

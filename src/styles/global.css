@@ -137,6 +137,27 @@ h1, h2, h3, h4, h5, h6 {
   overflow: visible;
 }
 
+/* Descripción de retos: Markdown renderizado (enlaces, negrita, listas) */
+.challenge-description p {
+  margin-bottom: 0.5em;
+}
+.challenge-description p:last-child {
+  margin-bottom: 0;
+}
+.challenge-description a {
+  color: var(--color-yellow);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.challenge-description a:hover {
+  color: rgba(255, 190, 0, 0.85);
+}
+.challenge-description ul,
+.challenge-description ol {
+  margin: 0.5em 0;
+  padding-left: 1.25em;
+}
+
 /* Ensure interactive controls always show pointer affordance */
 button,
 input[type="button"],
