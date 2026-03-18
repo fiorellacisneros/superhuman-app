@@ -3,7 +3,6 @@ export type BadgeSlug =
   | 'en-racha'
   | 'early-bird'
   | 'modulo-completo'
-  | 'puntual'
   | 'curso-completo';
 
 export type BadgeConditionType =
@@ -22,25 +21,7 @@ export const ON_DEMAND_BADGE_CONDITION_TYPES: BadgeConditionType[] = [
   'early_bird',
   'module_complete',
   'course_complete',
-  'manual',
 ];
-
-/** Solo estas se muestran en dashboard/curso/colección alumno (seed base; el resto en BD no se lista). */
-export const STUDENT_VISIBLE_BADGE_CONDITIONS = [
-  'first_submission',
-  'streak_3',
-  'early_bird',
-  'module_complete',
-  'course_complete',
-  'manual',
-] as const;
-
-export function isStudentVisibleBadgeCondition(conditionType: string | null | undefined): boolean {
-  return Boolean(
-    conditionType &&
-      (STUDENT_VISIBLE_BADGE_CONDITIONS as readonly string[]).includes(conditionType),
-  );
-}
 
 export interface BadgeDefinition {
   slug: BadgeSlug;
@@ -52,7 +33,7 @@ export interface BadgeDefinition {
 export const BADGES: BadgeDefinition[] = [
   {
     slug: 'primera-entrega',
-    name: 'Primera entrega',
+    name: 'First Submission',
     description: 'Completaste tu primer desafío con entrega aprobada.',
     conditionType: 'first_submission',
   },
@@ -73,12 +54,6 @@ export const BADGES: BadgeDefinition[] = [
     name: 'Módulo completo',
     description: 'Completaste todas las lecciones del módulo.',
     conditionType: 'module_complete',
-  },
-  {
-    slug: 'puntual',
-    name: 'Puntual',
-    description: 'Entregaste antes del plazo.',
-    conditionType: 'manual',
   },
   {
     slug: 'curso-completo',

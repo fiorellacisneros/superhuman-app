@@ -8,7 +8,7 @@ import BadgeOutline from '../../components/BadgeOutline.astro';
 import { formatDayAndDate, formatTime } from '../../lib/format-date';
 import { isLessonCompleted } from '../../lib/lessons';
 import { getPreviewContext } from '../../lib/preview';
-import { isStudentVisibleBadgeCondition, ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
+import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
 import { badgeDisplayDescription, badgeDisplayName } from '../../lib/badge-display';
 
 const iconMap: Record<string, string> = {
@@ -250,8 +250,8 @@ const allCourseBadges = (badgeRows ?? []).map((b) => {
 };
 });
 courseBadges = isOnDemand
-  ? allCourseBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete' | 'manual'))
-  : allCourseBadges.filter((b) => isStudentVisibleBadgeCondition(b.condition_type));
+  ? allCourseBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete'))
+  : allCourseBadges;
 ---
 
 <DashboardLayout role={showAdminView ? 'admin' : 'student'}>

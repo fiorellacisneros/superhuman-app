@@ -4,7 +4,7 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import BadgeIcon from '../../components/BadgeIcon.astro';
 import { getPreviewContext } from '../../lib/preview';
-import { isStudentVisibleBadgeCondition, ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
+import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
 import { badgeDisplayDescription, badgeDisplayName } from '../../lib/badge-display';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
@@ -66,8 +66,8 @@ const allBadges = (badgeRows ?? []).map((b) => {
 };
 });
 const badges = hasLiveEnrollment
-  ? allBadges.filter((b) => isStudentVisibleBadgeCondition(b.condition_type))
-  : allBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete' | 'manual'));
+  ? allBadges
+  : allBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete'));
 
 function formatDate(iso: string) {
   try {
