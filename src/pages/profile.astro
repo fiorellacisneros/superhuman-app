@@ -85,7 +85,8 @@ if (userRow?.email) email = String(userRow.email);
 
 const displayName = userRow?.display_name ?? 'Estudiante';
 const avatarId = userRow?.avatar_id ?? 'avatar-01';
-const avatarSrc = profilePhotoUrl?.trim() || avatarImagePath(avatarId) || '/avatars/avatar-01.png';
+/** Avatar predefinido en toda la app; la foto subida solo se usa en el directorio superHumans. */
+const avatarSrc = avatarImagePath(avatarId) || '/avatars/avatar-01.png';
 let points = 0;
 const { data: pointsRows } = await supabase.from('user_course_points').select('points').eq('user_id', userId);
 points = (pointsRows ?? []).reduce((a, r) => a + (r.points ?? 0), 0);
@@ -441,6 +442,9 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
         </div>
         <div class="flex flex-col gap-2">
           <label class="text-sm font-medium text-muted">Foto de perfil</label>
+          <p class="-mt-1 text-xs text-muted">
+            Solo se muestra en el directorio superHumans. En el dashboard, perfil y rankings se usa tu avatar de la lista.
+          </p>
           <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
             <div class="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <input

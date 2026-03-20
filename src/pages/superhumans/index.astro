@@ -16,11 +16,11 @@ const role = (userRow?.role as string) ?? 'student';
 const { preview } = getPreviewContext(Astro);
 const isPreviewMode = role === 'admin' && preview;
 
+/** Solo `show_in_directory`; antes se filtraba `role = student` y los admins nunca aparecían. */
 const { data: directoryRows } = await supabase
   .from('users')
   .select('id, display_name, self_declared_role, description, profile_photo_url, avatar_id, linkedin_url, instagram_url, portfolio_url')
   .eq('show_in_directory', true)
-  .eq('role', 'student')
   .order('display_name', { ascending: true });
 
 type DirectoryUser = {
@@ -73,7 +73,7 @@ const users: DirectoryUser[] = (directoryRows ?? []).map((u) => {
 
     <header>
       <h1 class="text-2xl font-semibold tracking-tight text-white">SuperHumans</h1>
-      <p class="mt-1 text-sm text-muted">Conoce a la comunidad. Estudiantes que comparten su perfil.</p>
+      <p class="mt-1 text-sm text-muted">Conoce a la comunidad. Quienes activan “Aparecer en el directorio” en su perfil.</p>
     </header>
 
     {users.length > 0 ? (
