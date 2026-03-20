@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { computeChallengeApprovalPoints, normalizeChallengePointsReward } from './points';
+import {
+  CHALLENGE_ON_TIME_BONUS,
+  computeChallengeApprovalPoints,
+  normalizeChallengePointsReward,
+} from './points';
 
 export type PointsBreakdownItem = {
   label: string;
@@ -83,14 +87,18 @@ export async function getPointsBreakdownByCourse(
       const deadline = ch.deadline ? new Date(ch.deadline).getTime() : null;
       const submittedAt = new Date((s as { submitted_at: string }).submitted_at).getTime();
       const onTime = isOnDemand || (deadline != null && submittedAt <= deadline);
-      const pts = computeChallengeApprovalPoints(ch.points_reward, { onTime, isOnDemand });
       const retoValor = normalizeChallengePointsReward(ch.points_reward);
-      const timing = onTime ? 'a tiempo' : 'tarde (mitad del valor)';
       const title = (ch.title ?? 'Desafío').trim();
-      items.push({
-        label: `${title} · ${retoValor} pts · ${timing}`,
-        pts,
-      });
+      if (onTime || isOnDemand) {
+        items.push({ label: `${title} · ${retoValor} pts`, pts: retoValor });
+        items.push({ label: 'Entrega a tiempo', pts: CHALLENGE_ON_TIME_BONUS });
+      } else {
+        const ptsLate = computeChallengeApprovalPoints(ch.points_reward, { onTime: false, isOnDemand: false });
+        items.push({
+          label: `${title} · ${retoValor} pts · tarde (mitad del valor)`,
+          pts: ptsLate,
+        });
+      }
     }
     for (const k of allKahoot ?? []) {
       const lesson = (k as { lessons?: { course_id?: string; title?: string } | null }).lessons;

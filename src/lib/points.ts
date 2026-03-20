@@ -25,15 +25,24 @@ export function normalizeChallengePointsReward(pointsRewardRaw: number | null | 
 }
 
 /**
- * Puntos que se suman al aprobar una entrega de reto: usa `points_reward` del reto.
- * Tarde = la mitad (redondeo hacia abajo), salvo on demand (siempre puntaje completo).
+ * Bonus fijo por entregar a tiempo (independiente del `points_reward` del reto).
+ * Total al aprobar a tiempo = valor del reto + este bonus.
+ */
+export const CHALLENGE_ON_TIME_BONUS = POINT_VALUES.challenge_submitted_on_time;
+
+/**
+ * Puntos que se suman al aprobar una entrega de reto:
+ * - A tiempo / on demand: `points_reward` + bonus fijo por a tiempo (30).
+ * - Tarde: solo la mitad del `points_reward` (sin bonus).
  */
 export function computeChallengeApprovalPoints(
   pointsRewardRaw: number | null | undefined,
   opts: { onTime: boolean; isOnDemand: boolean },
 ): number {
   const base = normalizeChallengePointsReward(pointsRewardRaw);
-  if (opts.isOnDemand || opts.onTime) return base;
+  if (opts.isOnDemand || opts.onTime) {
+    return base + CHALLENGE_ON_TIME_BONUS;
+  }
   return Math.max(0, Math.floor(base / 2));
 }
 
