@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import { normalizeAvatarId } from '../../lib/avatars';
-import { safeRedirectPath, sanitizeHttpUrl } from '../../lib/request-security';
+import { safeRedirectPath, sanitizeHttpUrl, withToastParams } from '../../lib/request-security';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
@@ -65,28 +65,37 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const instagramUrl = sanitizeHttpUrl(formData.get('instagram_url'));
     const portfolioUrl = sanitizeHttpUrl(formData.get('portfolio_url'));
     const profilePhotoUrl = sanitizeHttpUrl(formData.get('profile_photo_url'));
-    try {
-      await db
-        .from('users')
-        .update({
-          description: description || null,
-          self_declared_role: selfDeclaredRole || null,
-          show_in_directory: showInDirectory,
-          timezone,
-          birthday,
-          linkedin_url: linkedinUrl,
-          instagram_url: instagramUrl,
-          portfolio_url: portfolioUrl,
-          profile_photo_url: profilePhotoUrl,
-        })
-        .eq('id', userId);
-    } catch (e) {
-      // Columns may not exist yet — run docs/supabase-profile-fields.sql and docs/supabase-profile-social.sql in Supabase
-    }
     const redirectTo = safeRedirectPath(formData.get('redirect_to'), '/profile');
+    const { error: profileUpdateError } = await db
+      .from('users')
+      .update({
+        description: description || null,
+        self_declared_role: selfDeclaredRole || null,
+        show_in_directory: showInDirectory,
+        timezone,
+        birthday,
+        linkedin_url: linkedinUrl,
+        instagram_url: instagramUrl,
+        portfolio_url: portfolioUrl,
+        profile_photo_url: profilePhotoUrl,
+      })
+      .eq('id', userId);
+    if (profileUpdateError) {
+      console.error('[onboarding profile]', profileUpdateError.message);
+      return new Response(null, {
+        status: 303,
+        headers: {
+          Location: withToastParams(
+            redirectTo,
+            'No se guardó el perfil. Revisa en Supabase las columnas (docs/supabase-profile-fields.sql, supabase-profile-social.sql).',
+            'error',
+          ),
+        },
+      });
+    }
     return new Response(null, {
       status: 303,
-      headers: { Location: redirectTo },
+      headers: { Location: withToastParams(redirectTo, 'Perfil actualizado', 'success') },
     });
   }
 

@@ -310,6 +310,10 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
     <div class="rounded-xl border border-transparent bg-surface p-5 sm:p-4">
       <h2 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted">Visibilidad en el directorio</h2>
       <p class="mb-4 text-sm text-muted">Estos datos pueden mostrarse en el directorio de estudiantes si lo activas.</p>
+      <!-- Formulario de foto separado: un &lt;form&gt; dentro de otro es inválido en HTML y el navegador cierra el formulario principal antes de "Guardar cambios". -->
+      <form id="profile-photo-form" method="post" action="/api/profile/photo" enctype="multipart/form-data" class="hidden" aria-hidden="true">
+        <input type="hidden" name="redirect_to" value="/profile" />
+      </form>
       <form method="post" action="/api/onboarding" class="space-y-5">
         <input type="hidden" name="intent" value="profile" />
         <input type="hidden" name="redirect_to" value="/profile" />
@@ -438,19 +442,19 @@ const avatarOptions = Array.from({ length: avatarCount }, (_, i) => {
         <div class="flex flex-col gap-2">
           <label class="text-sm font-medium text-muted">Foto de perfil</label>
           <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
-            <form id="profile-photo-form" method="post" action="/api/profile/photo" enctype="multipart/form-data" class="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-              <input type="hidden" name="redirect_to" value="/profile" />
+            <div class="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <input
                 type="file"
                 id="profile-photo-file"
                 name="photo"
+                form="profile-photo-form"
                 accept="image/jpeg,image/png,image/webp"
                 class="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-lime/20 file:px-4 file:py-2 file:text-sm file:font-medium file:text-lime hover:file:bg-lime/30"
               />
-              <button type="submit" class="btn btn-secondary shrink-0">
+              <button type="submit" form="profile-photo-form" class="btn btn-secondary shrink-0">
                 Subir foto
               </button>
-            </form>
+            </div>
           </div>
           <p id="profile-photo-size-warning" class="hidden text-xs font-medium text-amber-400">
             La foto pesa demasiado (máx. 500KB). Comprímela o elige otra.
