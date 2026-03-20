@@ -1157,12 +1157,7 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
                     {course.items.length > 0 ? (
                       <ul class="mt-3 space-y-1.5">
                         {course.items.map((item) => (
-                          <PointsBreakdownListItem
-                            label={item.label}
-                            detail={item.detail}
-                            pts={item.pts}
-                            infoOnly={item.infoOnly}
-                          />
+                          <PointsBreakdownListItem label={item.label} detail={item.detail} pts={item.pts} />
                         ))}
                         {sumFromItems !== course.totalStored && (
                           <li class="mt-2 border-t border-transparent pt-2 text-xs text-amber-400">

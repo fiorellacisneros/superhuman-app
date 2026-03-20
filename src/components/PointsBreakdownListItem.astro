@@ -1,20 +1,16 @@
 ---
-/**
- * Ítem del desglose de puntos. `infoOnly`: solo contexto (ej. valor del reto), sin columna +pts.
- */
 interface Props {
   label: string;
   detail?: string;
   pts: number;
-  infoOnly?: boolean;
 }
-const { label, detail, pts, infoOnly } = Astro.props;
+const { label, detail, pts } = Astro.props;
 ---
 
 <li class="flex items-start justify-between gap-3 text-sm">
   <div class="min-w-0 flex-1">
-    <span class:list={[infoOnly ? 'font-medium text-white/90' : 'text-muted']}>{label}</span>
+    <span class="text-muted">{label}</span>
     {detail && <p class="mt-0.5 text-xs text-muted/85">{detail}</p>}
   </div>
-  {!infoOnly && <span class="shrink-0 font-medium text-lime">+{pts}</span>}
+  <span class="shrink-0 font-medium text-lime">+{pts}</span>
 </li>
