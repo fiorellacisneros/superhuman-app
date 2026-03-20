@@ -292,23 +292,17 @@ if (role !== 'admin' || preview) {
 
     let leaderboardRowsRes: { data: { id: string; display_name: string | null; avatar_id: string | null }[] | null } = { data: [] };
     const leaderboardPointsByUser = new Map<string, number>();
-    if (enrolledIds.length > 0) {
-      const { data: cohortUserIds } = await supabase
-        .from('enrollments')
-        .select('user_id')
-        .in('course_id', enrolledIds);
-      const uniqueIds = [...new Set((cohortUserIds ?? []).map((r) => r.user_id as string))];
-      if (uniqueIds.length > 0) {
-        const [userRes, pointsRes] = await Promise.all([
-          supabase.from('users').select('id, display_name, avatar_id').in('id', uniqueIds).eq('role', 'student'),
-          supabase.from('user_course_points').select('user_id, points').in('user_id', uniqueIds).in('course_id', enrolledIds),
-        ]);
-        leaderboardRowsRes = userRes;
-        for (const row of pointsRes.data ?? []) {
-          const uid = row.user_id as string;
-          leaderboardPointsByUser.set(uid, (leaderboardPointsByUser.get(uid) ?? 0) + (row.points ?? 0));
-        }
+    {
+      const [{ data: allCoursePoints }, { data: allStudents }] = await Promise.all([
+        supabase.from('user_course_points').select('user_id, points'),
+        supabase.from('users').select('id, display_name, avatar_id').eq('role', 'student'),
+      ]);
+      for (const row of allCoursePoints ?? []) {
+        const uid = row.user_id as string;
+        const pts = (row as { points: number | null }).points ?? 0;
+        leaderboardPointsByUser.set(uid, (leaderboardPointsByUser.get(uid) ?? 0) + pts);
       }
+      leaderboardRowsRes = { data: allStudents ?? [] };
     }
 
     let lessonsByCourse = new Map<string, { total: number; completed: number }>();
@@ -448,16 +442,16 @@ if (role !== 'admin' || preview) {
     }
 
     const leaderboardRows = leaderboardRowsRes.data;
-    leaderboard = (leaderboardRows ?? [])
+    const leaderboardSorted = (leaderboardRows ?? [])
       .map((u) => ({
         id: u.id,
         name: u.display_name ?? 'Estudiante',
         avatarId: u.avatar_id ?? null,
         points: leaderboardPointsByUser.get(u.id) ?? 0,
       }))
-      .filter((u) => u.points > 0)
-      .sort((a, b) => b.points - a.points)
-      .slice(0, 5);
+      .sort((a, b) => b.points - a.points);
+    // Ranking general: suma de puntos en todos los cursos (plataforma); solo top 5 en UI.
+    leaderboard = leaderboardSorted.filter((u) => u.points > 0).slice(0, 5);
 
     const { data: myPointsByCourseRows } = await supabase
       .from('user_course_points')
@@ -974,7 +968,7 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
           {hasLiveEnrollment && (
           <div class="rounded-xl bg-background p-3">
             <h2 class="font-manrope text-2xl font-semibold text-white">Ranking general</h2>
-            <p class="mt-0.5 text-[10px] text-muted">Puntos acumulados de todos tus cursos.</p>
+            <p class="mt-0.5 text-[10px] text-muted">Puntos acumulados en todos los cursos.</p>
             {leaderboard.length > 0 ? (
               <ul class="mt-3 space-y-1.5">
                 {leaderboard.map((u, i) => (
@@ -1027,11 +1021,10 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
             <ul class="mt-4 grid grid-cols-3 gap-x-5 gap-y-6 sm:gap-x-6 sm:gap-y-6">
               {dashboardBadges.map((b) => (
                 <li
-                  class={`badge-tooltip-group group flex min-w-0 flex-col items-center rounded-xl transition-colors ${
+                  class={`group flex min-w-0 flex-col items-center rounded-xl transition-colors ${
                     'bg-background'
                   }`}
                 >
-                  <span class="badge-tooltip badge-tooltip--bottom" role="tooltip">{b.description ?? b.name}</span>
                   <BadgeOutline id={b.id} variant={b.earned ? 'earned' : 'unearned'} count={b.earnedCount > 0 ? b.earnedCount : undefined}>
                     <BadgeIcon
                       icon={iconMap[b.condition_type ?? ''] ?? 'manual'}
