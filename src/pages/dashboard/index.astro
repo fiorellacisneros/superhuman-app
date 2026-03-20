@@ -11,6 +11,7 @@ import { getPreviewContext, setPreviewCookie, clearPreviewCookie } from '../../l
 import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
 import { badgeDisplayDescription, badgeDisplayName } from '../../lib/badge-display';
 import { getPointsBreakdownByCourse, type CoursePointsBreakdown } from '../../lib/points-breakdown';
+import PointsBreakdownListItem from '../../components/PointsBreakdownListItem.astro';
 import { getBadgeEarnGuideRows, type BadgeEarnRow } from '../../lib/badge-earn-guide';
 import { APP_BIRTHDAY_TIMEZONE, daysUntilBirthdayAnniversary } from '../../lib/birthday';
 
@@ -1156,10 +1157,12 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
                     {course.items.length > 0 ? (
                       <ul class="mt-3 space-y-1.5">
                         {course.items.map((item) => (
-                          <li class="flex items-center justify-between gap-2 text-sm">
-                            <span class="text-muted">{item.label}</span>
-                            <span class="font-medium text-lime">+{item.pts}</span>
-                          </li>
+                          <PointsBreakdownListItem
+                            label={item.label}
+                            detail={item.detail}
+                            pts={item.pts}
+                            infoOnly={item.infoOnly}
+                          />
                         ))}
                         {sumFromItems !== course.totalStored && (
                           <li class="mt-2 border-t border-transparent pt-2 text-xs text-amber-400">

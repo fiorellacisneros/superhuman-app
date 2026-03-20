@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { addPointsForEvent } from '../../../lib/points';
+import { addPointsForCourse, computeChallengeApprovalPoints } from '../../../lib/points';
 import { safeRedirectPath } from '../../../lib/request-security';
 import { requireAdmin } from '../../../lib/api-admin';
 import { isRateLimited } from '../../../lib/rate-limit';
@@ -50,14 +50,28 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (action === 'approve') {
     const { data: challenge } = await db
       .from('challenges')
-      .select('deadline, course_id')
+      .select('deadline, course_id, points_reward')
       .eq('id', submission.challenge_id)
       .maybeSingle();
+    let isOnDemand = false;
+    if (challenge?.course_id) {
+      const { data: enrollment } = await db
+        .from('enrollments')
+        .select('access_type')
+        .eq('user_id', submission.user_id)
+        .eq('course_id', challenge.course_id as string)
+        .maybeSingle();
+      isOnDemand = (enrollment?.access_type as string) === 'on_demand';
+    }
     const deadline = challenge?.deadline ? new Date(challenge.deadline as string).getTime() : null;
     const submittedAt = new Date((submission.submitted_at as string) || 0).getTime();
-    const type = deadline != null && submittedAt <= deadline ? 'challenge_submitted_on_time' : 'challenge_submitted_late';
+    const onTime = isOnDemand || (deadline != null && submittedAt <= deadline);
     if (challenge?.course_id) {
-      await addPointsForEvent({ userId: submission.user_id as string, type, courseId: challenge.course_id as string, supabase: db });
+      const toAdd = computeChallengeApprovalPoints(challenge.points_reward as number | null | undefined, {
+        onTime,
+        isOnDemand,
+      });
+      await addPointsForCourse(submission.user_id as string, challenge.course_id as string, toAdd, db);
     }
   }
   await recordAdminAudit(db, userId, 'submission.review.legacy', {

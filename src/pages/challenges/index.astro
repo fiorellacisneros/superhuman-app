@@ -125,36 +125,38 @@ function daysLeft(deadline: string | null): string {
           const isRejected = Boolean(submission && submission.reviewed && !submission.approved);
           const deadlineMs = ch.deadline ? new Date(ch.deadline).getTime() : null;
           const nowMs = Date.now();
-          const canEdit = ch.isOnDemand || !deadlineMs || deadlineMs > nowMs;
-          const canUpdateSubmission = submitted && canEdit && !isApproved;
-          const canCreateSubmission = !submitted && canEdit;
+          const isPastDeadline = !ch.isOnDemand && deadlineMs !== null && nowMs >= deadlineMs;
+          const allowSend = !isApproved;
+          const canUpdateSubmission = submitted && allowSend;
+          const canCreateSubmission = !submitted && allowSend;
+          const showPastDeadlineTag = isPastDeadline && !isApproved;
           const statusLabel = isApproved
             ? 'Completado'
             : isPending
               ? 'En revisión'
               : isRejected
                 ? 'Rechazado'
-                : canEdit
-                  ? 'Por vencerse'
-                  : 'Vencido';
+                : isPastDeadline
+                  ? 'Pendiente de entregar'
+                  : 'Por vencerse';
           const statusClasses = isApproved
             ? 'border-lime/40 bg-lime/10 text-lime'
             : isPending
               ? 'border-amber-400/40 bg-amber-500/10 text-amber-300'
               : isRejected
                 ? 'border-red-500/40 bg-red-500/10 text-red-300'
-                : canEdit
-                  ? 'border-sky-400/40 bg-sky-500/10 text-sky-300'
-                  : 'border-zinc-400/40 bg-zinc-500/10 text-zinc-300';
+                : isPastDeadline
+                  ? 'border-amber-400/40 bg-amber-500/10 text-amber-300'
+                  : 'border-sky-400/40 bg-sky-500/10 text-sky-300';
           const statusIcon = isApproved
             ? 'bi-check-circle-fill'
             : isPending
               ? 'bi-hourglass-split'
               : isRejected
                 ? 'bi-x-circle-fill'
-                : canEdit
-                  ? 'bi-clock-fill'
-                  : 'bi-calendar2-x-fill';
+                : isPastDeadline
+                  ? 'bi-calendar2-x-fill'
+                  : 'bi-clock-fill';
           return (
             <li class="rounded-xl border border-transparent bg-surface p-4 sm:p-5">
               <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -170,6 +172,14 @@ function daysLeft(deadline: string | null): string {
                     <span class="rounded bg-lime/15 px-2 py-0.5 text-xs font-semibold text-lime">{ch.points_reward} pts</span>
                     {ch.deadline && !ch.isOnDemand && <span class="text-xs text-muted">{daysLeft(ch.deadline)}</span>}
                     {ch.isOnDemand && <span class="text-xs text-muted">Sin fecha límite</span>}
+                    {showPastDeadlineTag && (
+                      <span
+                        class="rounded border border-amber-400/50 bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-200"
+                        title="Podés enviar igual; al aprobarse, los puntos pueden ser menores que si hubieras entregado a tiempo."
+                      >
+                        Plazo vencido — entrega tardía
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div class="w-full lg:w-[220px]">
@@ -187,6 +197,12 @@ function daysLeft(deadline: string | null): string {
                   <p class="font-medium text-muted">Entrega:</p>
                   <p class="mt-1 break-all text-sm font-medium text-white/85">{submission.link}</p>
                 </div>
+              )}
+
+              {showPastDeadlineTag && (canCreateSubmission || canUpdateSubmission) && (
+                <p class="mt-3 text-xs leading-relaxed text-amber-200/90">
+                  Si entregás después del plazo, al aprobarse puede contar con <span class="font-semibold">menos puntos</span> que una entrega a tiempo.
+                </p>
               )}
 
               {(isApproved || isRejected) && submission?.feedback?.trim() && (
@@ -223,11 +239,6 @@ function daysLeft(deadline: string | null): string {
                 </form>
               )}
 
-              {submitted && !canEdit && !isApproved && (
-                <p class="mt-4 border-t border-transparent pt-4 text-sm text-muted">
-                  El tiempo para editar tu entrega ya venció.
-                </p>
-              )}
             </li>
           );
         })}
