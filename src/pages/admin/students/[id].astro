@@ -224,7 +224,6 @@ const pointsBreakdownByCourse =
       {pointsBreakdownByCourse.length > 0 ? (
         <div class="mt-4 space-y-6">
           {pointsBreakdownByCourse.map((course) => {
-            const sumFromItems = course.items.reduce((a, i) => a + i.pts, 0);
             return (
               <div class="rounded-lg border border-transparent bg-surface-2/40 p-4">
                 <div class="flex flex-wrap items-center justify-between gap-2">
@@ -236,11 +235,6 @@ const pointsBreakdownByCourse =
                     {course.items.map((item) => (
                       <PointsBreakdownListItem label={item.label} detail={item.detail} pts={item.pts} />
                     ))}
-                    {sumFromItems !== course.totalStored && (
-                      <li class="mt-2 border-t border-transparent pt-2 text-xs text-amber-400">
-                        Suma del desglose: {sumFromItems} pts (en BD: {course.totalStored})
-                      </li>
-                    )}
                   </ul>
                 ) : (
                   <p class="mt-2 text-sm text-muted">Sin ítems registrados para este curso (puntos pueden venir de datos anteriores).</p>

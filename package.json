@@ -6,7 +6,8 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "fix:challenge-points": "node scripts/fix-challenge-points.mjs"
   },
   "dependencies": {
     "@astrojs/vercel": "^9.0.4",
