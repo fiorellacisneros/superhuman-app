@@ -10,6 +10,8 @@ import { isLessonCompleted } from '../../lib/lessons';
 import { getPreviewContext } from '../../lib/preview';
 import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
 import { badgeDisplayDescription, badgeDisplayName } from '../../lib/badge-display';
+import { getPointsBreakdownByCourse, type CoursePointsBreakdown } from '../../lib/points-breakdown';
+import { getBadgeEarnGuideRows } from '../../lib/badge-earn-guide';
 
 const iconMap: Record<string, string> = {
   first_submission: 'first_submission',
@@ -89,6 +91,8 @@ if (!isAdmin && !isPreviewingThisCourse) {
 
 // En preview mostramos vista estudiante, no la de admin
 const showAdminView = isAdmin && !isPreviewingThisCourse;
+/** Misma guía que el dashboard: en vivo = todas las filas; on-demand = solo tipos permitidos. */
+const badgeEarnGuideRows = getBadgeEarnGuideRows(!isOnDemand);
 
 const [{ data: modulesData }, { data: lessons }] = await Promise.all([
   supabase
@@ -128,6 +132,19 @@ if (challengeIds.length > 0) {
   courseChallengesCompleted = new Set((mySubs ?? []).map((s) => (s as { challenge_id: string }).challenge_id)).size;
 }
 
+const { data: courseRetosRows } = await supabase
+  .from('challenges')
+  .select('id, title, points_reward, deadline')
+  .eq('course_id', course.id)
+  .eq('is_active', true)
+  .order('deadline', { ascending: true });
+const courseRetos = (courseRetosRows ?? []) as {
+  id: string;
+  title: string | null;
+  points_reward: number | null;
+  deadline: string | null;
+}[];
+
 // Puntos específicos de este curso para el usuario actual
 const { data: myCoursePointsRows } = await supabase
   .from('user_course_points')
@@ -135,6 +152,11 @@ const { data: myCoursePointsRows } = await supabase
   .eq('user_id', userId)
   .eq('course_id', course.id);
 coursePoints = (myCoursePointsRows ?? []).reduce((acc, row) => acc + ((row as { points: number | null }).points ?? 0), 0);
+
+let coursePointsBreakdown: CoursePointsBreakdown[] = [];
+if (!showAdminView) {
+  coursePointsBreakdown = await getPointsBreakdownByCourse(supabase, userId, [course.id]);
+}
 
 const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone ?? null;
 const totalLessons = (lessons ?? []).length;
@@ -217,6 +239,11 @@ if (enrolledUserIds.length > 0) {
     .sort((a, b) => b.points - a.points);
 }
 
+/** Estudiantes: solo top 5 con puntos. Admin (vista de gestión del curso): ranking completo. */
+const courseLeaderboardDisplay = showAdminView
+  ? courseLeaderboard
+  : courseLeaderboard.filter((u) => u.points > 0).slice(0, 5);
+
 const totalEnrolled = enrolledUserIds.length;
 const totalPointsAll = courseLeaderboard.reduce((acc, u) => acc + u.points, 0);
 const averagePoints = totalEnrolled ? Math.round(totalPointsAll / totalEnrolled) : 0;
@@ -278,7 +305,7 @@ courseBadges = isOnDemand
       <span class="text-white">{course.title}</span>
     </nav>
 
-    <!-- Dos columnas: izquierda = progreso+contenido; derecha = ranking desde arriba -->
+    <!-- Dos columnas: izquierda = progreso + Sesiones|Retos; derecha = ranking + Insignias -->
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px] lg:items-start">
       <div class="min-w-0 space-y-6">
         <div class="overflow-hidden rounded-xl">
@@ -358,7 +385,19 @@ courseBadges = isOnDemand
                 </dd>
               </div>
               <div class="flex min-w-0 flex-col rounded-xl bg-[#F5B800] p-3 sm:p-5">
-                <dt class="font-manrope text-2xl font-semibold text-[#1A1A1A]">Puntos</dt>
+                <div class="flex items-start justify-between gap-2">
+                  <dt class="font-manrope text-2xl font-semibold text-[#1A1A1A]">Puntos</dt>
+                  <button
+                    type="button"
+                    class="open-course-points-breakdown-trigger -mr-1 -mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-[#1A1A1A]/55 transition hover:bg-black/10 hover:text-[#1A1A1A]"
+                    aria-label="Ver desglose de puntos"
+                    title="Ver desglose de puntos"
+                    aria-haspopup="dialog"
+                    aria-controls="course-points-breakdown-modal"
+                  >
+                    <i class="bi bi-eye text-[1.125rem] leading-none" aria-hidden="true"></i>
+                  </button>
+                </div>
                 <dd class="mt-8 font-manrope text-2xl font-semibold leading-none text-[#1A1A1A] sm:text-[48px]">{coursePoints}</dd>
               </div>
             </dl>
@@ -366,128 +405,208 @@ courseBadges = isOnDemand
         )}
 
         {!showAdminView ? (
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
-          <div class="flex h-[350px] min-w-0 flex-col overflow-hidden rounded-xl p-4 sm:p-5" style="background-color: #D6D6D6;">
-            <div class="flex shrink-0 items-start justify-between gap-2">
-              <div>
-                <h2 class="font-manrope text-xl font-semibold text-[#1A1A1A] sm:text-2xl">Sesiones</h2>
-                {nextMonthLabel && <p class="mt-0.5 text-xs text-[#404040]">{nextMonthLabel}</p>}
+          <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+            <div class="flex h-[350px] min-w-0 flex-col overflow-hidden rounded-xl p-4 sm:p-5" style="background-color: #D6D6D6;">
+              <div class="flex shrink-0 items-start justify-between gap-2">
+                <div>
+                  <h2 class="font-manrope text-xl font-semibold text-[#1A1A1A] sm:text-2xl">Sesiones</h2>
+                  {nextMonthLabel && <p class="mt-0.5 text-xs text-[#404040]">{nextMonthLabel}</p>}
+                </div>
+                <a
+                  href={`/courses/${resolvedCourseSlug}/clases`}
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#012EDC] transition hover:bg-[#012EDC]/15"
+                  title="Ver todas las clases"
+                  aria-label="Ver todas las clases"
+                >
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
               </div>
-              <a
-                href={`/courses/${resolvedCourseSlug}/clases`}
-                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#012EDC] transition hover:bg-[#012EDC]/15"
-                title="Ver todas las clases"
-                aria-label="Ver todas las clases"
-              >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
+              {upcomingSessionsPreview.length > 0 ? (
+                <ul class="mt-3 h-[260px] shrink-0 space-y-2 overflow-y-auto pt-1 pb-4 pr-1" style="scrollbar-color: #404040 transparent;">
+                  {upcomingSessionsPreview.map((s, idx) => {
+                    const isNext = idx === 0;
+                    return (
+                    <li>
+                      <a
+                        href={`/courses/${resolvedCourseSlug}/lessons/${s.id}`}
+                        class={`block rounded-lg px-3 py-2.5 transition hover:opacity-90 ${isNext ? 'border-l-4 border-l-[#012EDC]' : ''}`}
+                        style="background-color: #FFFFFF;"
+                      >
+                        <p class="text-[11px] font-medium text-[#404040]">
+                          {formatDayAndDate(s.scheduled_at, userTimezone)} {formatTime(s.scheduled_at, userTimezone)}
+                        </p>
+                        <p class="mt-0.5 text-sm font-medium text-[#1A1A1A]">{s.title}</p>
+                        <p class="mt-0.5 text-xs text-[#737373]">{course.title}</p>
+                      </a>
+                    </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p class="mt-3 text-sm text-[#404040]">No hay sesiones próximas.</p>
+              )}
             </div>
-            {upcomingSessionsPreview.length > 0 ? (
-              <ul class="mt-3 h-[260px] shrink-0 space-y-2 overflow-y-auto pt-1 pb-4 pr-1" style="scrollbar-color: #404040 transparent;">
-                {upcomingSessionsPreview.map((s, idx) => {
-                  const isNext = idx === 0;
-                  return (
-                  <li>
-                    <a
-                      href={`/courses/${resolvedCourseSlug}/lessons/${s.id}`}
-                      class={`block rounded-lg px-3 py-2.5 transition hover:opacity-90 ${isNext ? 'border-l-4 border-l-[#012EDC]' : ''}`}
-                      style="background-color: #FFFFFF;"
-                    >
-                      <p class="text-[11px] font-medium text-[#404040]">
-                        {formatDayAndDate(s.scheduled_at, userTimezone)} {formatTime(s.scheduled_at, userTimezone)}
-                      </p>
-                      <p class="mt-0.5 text-sm font-medium text-[#1A1A1A]">{s.title}</p>
-                      <p class="mt-0.5 text-xs text-[#737373]">{course.title}</p>
-                    </a>
-                  </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p class="mt-3 text-sm text-[#404040]">No hay sesiones próximas.</p>
-            )}
-          </div>
 
-          {(courseBadges.length > 0) && (
-          <div class="relative flex h-[350px] min-w-0 flex-col rounded-[24px] bg-background p-5">
-            <h2 class="font-manrope text-xl font-semibold text-white sm:text-2xl">Insignias</h2>
-            <p class="mt-0.5 text-xs text-muted">{isOnDemand ? 'Insignias que puedes desbloquear (sin puntos).' : 'Completa lecciones y desafíos.'}</p>
-            {courseBadges.length > 0 ? (
-              <ul class="mt-4 grid min-h-0 flex-1 grid-cols-2 gap-x-5 gap-y-6 overflow-y-auto py-2 pr-2 sm:grid-cols-4 sm:gap-x-6 sm:gap-y-6" style="scrollbar-color: #404040 transparent;">
-                {courseBadges.map((b) => (
-                  <li class="badge-tooltip-group group flex min-w-0 flex-col items-center rounded-xl transition-colors">
-                    <span class="badge-tooltip badge-tooltip--bottom" role="tooltip">{b.description ?? b.name}</span>
-                    <BadgeOutline id={b.id} variant={b.earned ? 'earned' : 'unearned'} count={b.earnedCount > 0 ? b.earnedCount : undefined}>
-                      <BadgeIcon
-                        icon={iconMap[b.condition_type ?? ''] ?? 'manual'}
-                        class={`transition-transform duration-200 group-hover:scale-110 ${b.earned ? 'text-[#012EDC]' : 'text-[#595959]'}`}
-                      />
-                    </BadgeOutline>
-                    <p class="mt-2 min-w-0 max-w-full truncate text-center font-work-sans text-xs font-normal text-white" title={b.name}>{b.name}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p class="mt-3 text-sm text-muted">No hay insignias definidas aún.</p>
-            )}
-          </div>
-          )}
-        </div>
-        ) : (
-          <div class="flex h-[350px] min-w-0 flex-col rounded-xl p-4 sm:p-5" style="background-color: #D6D6D6;">
-            <div class="flex items-start justify-between gap-2">
-              <div>
-                <h2 class="font-manrope text-xl font-semibold text-[#1A1A1A] sm:text-2xl">Sesiones</h2>
-                {nextMonthLabel && <p class="mt-0.5 text-xs text-[#404040]">{nextMonthLabel}</p>}
-              </div>
-              <a
-                href={`/courses/${resolvedCourseSlug}/clases`}
-                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#012EDC] transition hover:bg-[#012EDC]/15"
-                title="Ver todas las clases"
-                aria-label="Ver todas las clases"
-              >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
-            </div>
-            {upcomingSessionsPreview.length > 0 ? (
-              <ul class="mt-3 h-[260px] space-y-2 overflow-y-auto pt-1 pb-4 pr-1" style="scrollbar-color: #404040 transparent;">
-                {upcomingSessionsPreview.map((s, idx) => {
-                  const isNext = idx === 0;
-                  return (
-                  <li>
-                    <a
-                      href={`/courses/${resolvedCourseSlug}/lessons/${s.id}`}
-                      class={`block rounded-lg px-3 py-2.5 transition hover:opacity-90 ${isNext ? 'border-l-4 border-l-[#012EDC]' : ''}`}
-                      style="background-color: #FFFFFF;"
+            <div class="flex h-[350px] min-w-0 flex-col overflow-hidden rounded-xl bg-background p-4 sm:p-5">
+              <div class="flex shrink-0 items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1">
+                    <h2 class="font-manrope text-xl font-semibold text-white sm:text-2xl">Retos</h2>
+                    <button
+                      type="button"
+                      class="open-course-retos-info-trigger inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted transition hover:bg-white/10 hover:text-white"
+                      aria-label="Qué son los retos"
+                      title="Qué son los retos"
+                      aria-haspopup="dialog"
+                      aria-controls="course-retos-info-modal"
                     >
-                      <p class="text-[11px] font-medium text-[#404040]">
-                        {formatDayAndDate(s.scheduled_at, userTimezone)} {formatTime(s.scheduled_at, userTimezone)}
-                      </p>
-                      <p class="mt-0.5 text-sm font-medium text-[#1A1A1A]">{s.title}</p>
-                      <p class="mt-0.5 text-xs text-[#737373]">{course.title}</p>
-                    </a>
-                  </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p class="mt-3 text-sm text-[#404040]">No hay sesiones próximas.</p>
-            )}
+                      <i class="bi bi-info-circle text-base leading-none" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                  <p class="mt-0.5 text-xs text-muted">Desafíos activos de este curso.</p>
+                </div>
+                <a
+                  href="/challenges"
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lime transition hover:bg-white/10"
+                  title="Ver todos los retos"
+                  aria-label="Ver todos los retos"
+                >
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
+              {courseRetos.length > 0 ? (
+                <ul class="mt-3 h-[260px] shrink-0 space-y-2 overflow-y-auto pt-1 pb-4 pr-1" style="scrollbar-color: #404040 transparent;">
+                  {courseRetos.map((r) => (
+                    <li>
+                      <a
+                        href="/challenges"
+                        class="block rounded-lg border border-border bg-surface-2 px-3 py-2.5 transition hover:bg-white/5"
+                      >
+                        <p class="line-clamp-2 text-sm font-medium text-white">{r.title ?? 'Reto'}</p>
+                        <p class="mt-0.5 text-[11px] font-medium text-muted">
+                          {(r.points_reward ?? 0) > 0 ? `${r.points_reward} pts` : 'Sin puntos'}
+                        </p>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p class="mt-3 text-sm text-muted">No hay retos activos en este curso.</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+            <div class="flex h-[350px] min-w-0 flex-col overflow-hidden rounded-xl p-4 sm:p-5" style="background-color: #D6D6D6;">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <h2 class="font-manrope text-xl font-semibold text-[#1A1A1A] sm:text-2xl">Sesiones</h2>
+                  {nextMonthLabel && <p class="mt-0.5 text-xs text-[#404040]">{nextMonthLabel}</p>}
+                </div>
+                <a
+                  href={`/courses/${resolvedCourseSlug}/clases`}
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#012EDC] transition hover:bg-[#012EDC]/15"
+                  title="Ver todas las clases"
+                  aria-label="Ver todas las clases"
+                >
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
+              {upcomingSessionsPreview.length > 0 ? (
+                <ul class="mt-3 h-[260px] space-y-2 overflow-y-auto pt-1 pb-4 pr-1" style="scrollbar-color: #404040 transparent;">
+                  {upcomingSessionsPreview.map((s, idx) => {
+                    const isNext = idx === 0;
+                    return (
+                    <li>
+                      <a
+                        href={`/courses/${resolvedCourseSlug}/lessons/${s.id}`}
+                        class={`block rounded-lg px-3 py-2.5 transition hover:opacity-90 ${isNext ? 'border-l-4 border-l-[#012EDC]' : ''}`}
+                        style="background-color: #FFFFFF;"
+                      >
+                        <p class="text-[11px] font-medium text-[#404040]">
+                          {formatDayAndDate(s.scheduled_at, userTimezone)} {formatTime(s.scheduled_at, userTimezone)}
+                        </p>
+                        <p class="mt-0.5 text-sm font-medium text-[#1A1A1A]">{s.title}</p>
+                        <p class="mt-0.5 text-xs text-[#737373]">{course.title}</p>
+                      </a>
+                    </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p class="mt-3 text-sm text-[#404040]">No hay sesiones próximas.</p>
+              )}
+            </div>
+
+            <div class="flex h-[350px] min-w-0 flex-col overflow-hidden rounded-xl bg-background p-4 sm:p-5">
+              <div class="flex shrink-0 items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1">
+                    <h2 class="font-manrope text-xl font-semibold text-white sm:text-2xl">Retos</h2>
+                    <button
+                      type="button"
+                      class="open-course-retos-info-trigger inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted transition hover:bg-white/10 hover:text-white"
+                      aria-label="Qué son los retos"
+                      title="Qué son los retos"
+                      aria-haspopup="dialog"
+                      aria-controls="course-retos-info-modal"
+                    >
+                      <i class="bi bi-info-circle text-base leading-none" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                  <p class="mt-0.5 text-xs text-muted">Desafíos activos de este curso.</p>
+                </div>
+                <a
+                  href="/admin/challenges"
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lime transition hover:bg-white/10"
+                  title="Gestionar retos"
+                  aria-label="Gestionar retos"
+                >
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
+              {courseRetos.length > 0 ? (
+                <ul class="mt-3 h-[260px] shrink-0 space-y-2 overflow-y-auto pt-1 pb-4 pr-1" style="scrollbar-color: #404040 transparent;">
+                  {courseRetos.map((r) => (
+                    <li>
+                      <a
+                        href={`/admin/challenges/${r.id}/edit`}
+                        class="block rounded-lg border border-border bg-surface-2 px-3 py-2.5 transition hover:bg-white/5"
+                      >
+                        <p class="line-clamp-2 text-sm font-medium text-white">{r.title ?? 'Reto'}</p>
+                        <p class="mt-0.5 text-[11px] font-medium text-muted">
+                          {(r.points_reward ?? 0) > 0 ? `${r.points_reward} pts` : 'Sin puntos'}
+                        </p>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p class="mt-3 text-sm text-muted">No hay retos activos en este curso.</p>
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      <aside>
+      <aside class="flex min-w-0 flex-col gap-6">
         <div class="rounded-xl bg-surface p-4">
           <h2 class="font-manrope text-xl font-semibold text-white sm:text-2xl">Ranking {course.title}</h2>
           <p class="mt-0.5 text-[10px] text-muted">Puntos de este curso.</p>
-          {courseLeaderboard.length > 0 ? (
-            <ul class="mt-3 space-y-1.5">
-              {courseLeaderboard.map((u, i) => (
+          {courseLeaderboardDisplay.length > 0 ? (
+            <ul
+              class={`mt-3 space-y-1.5 ${showAdminView ? 'max-h-[min(70vh,520px)] overflow-y-auto pr-1' : ''}`}
+              style={showAdminView ? 'scrollbar-color: #404040 transparent;' : undefined}
+            >
+              {courseLeaderboardDisplay.map((u, i) => (
                 <li class="flex items-center gap-2 rounded-lg bg-background px-2 py-1.5">
                   <span class={`w-5 shrink-0 text-[10px] font-semibold ${i < 5 ? 'text-lime' : 'text-muted'}`}>{i + 1}º</span>
                   <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-surface-2">
@@ -504,7 +623,245 @@ courseBadges = isOnDemand
             <p class="mt-3 text-xs text-muted">Sin puntos aún en este curso.</p>
           )}
         </div>
+
+        {!showAdminView && courseBadges.length > 0 && (
+          <div class="relative flex max-h-[min(70vh,520px)] min-h-0 w-full min-w-0 flex-col rounded-[24px] bg-background p-4 sm:p-5">
+            <div class="mb-3 flex flex-wrap items-start justify-between gap-1">
+              <div class="min-w-0 flex-1">
+                <h2 class="font-manrope text-xl font-semibold text-white sm:text-2xl">Insignias</h2>
+                <p class="mt-0.5 text-xs text-muted">{isOnDemand ? 'Insignias que puedes desbloquear (sin puntos).' : 'Completa lecciones y desafíos.'}</p>
+              </div>
+              <button
+                type="button"
+                class="open-course-insignias-info-trigger inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted transition hover:bg-surface-2 hover:text-lime"
+                aria-label="Cómo ganar insignias"
+                title="Cómo ganar insignias"
+                aria-haspopup="dialog"
+                aria-controls="course-insignias-info-modal"
+              >
+                <i class="bi bi-info-circle text-[1.125rem] leading-none" aria-hidden="true"></i>
+              </button>
+            </div>
+            <ul class="mt-4 grid min-h-0 flex-1 grid-cols-3 gap-x-2 gap-y-4 overflow-y-auto py-2 pr-1" style="scrollbar-color: #404040 transparent;">
+              {courseBadges.map((b) => (
+                <li class="group flex min-w-0 flex-col items-center rounded-xl transition-colors">
+                  <BadgeOutline id={b.id} variant={b.earned ? 'earned' : 'unearned'} count={b.earnedCount > 0 ? b.earnedCount : undefined}>
+                    <BadgeIcon
+                      icon={iconMap[b.condition_type ?? ''] ?? 'manual'}
+                      class={`transition-transform duration-200 group-hover:scale-110 ${b.earned ? 'text-[#012EDC]' : 'text-[#595959]'}`}
+                    />
+                  </BadgeOutline>
+                  <p class="mt-2 min-w-0 max-w-full truncate text-center font-work-sans text-[10px] font-normal leading-tight text-white sm:text-xs" title={b.name}>{b.name}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </aside>
     </div>
+
+    {!showAdminView && (
+        <div
+          id="course-points-breakdown-modal"
+          class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="course-points-breakdown-modal-title"
+        >
+          <div id="course-points-breakdown-modal-backdrop" class="absolute inset-0" tabindex="-1" aria-hidden="true"></div>
+          <div class="relative z-10 flex max-h-[min(85vh,620px)] w-full max-w-lg flex-col rounded-xl border border-transparent bg-surface shadow-xl">
+            <div class="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-4">
+              <h2 id="course-points-breakdown-modal-title" class="text-base font-semibold text-white">
+                Desglose de puntos · {course.title}
+              </h2>
+              <button
+                type="button"
+                id="close-course-points-breakdown-modal"
+                class="rounded-lg p-1.5 text-muted transition hover:bg-surface-2 hover:text-white"
+                aria-label="Cerrar"
+              >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <p class="text-xs text-muted">Cómo suman tus puntos en este curso.</p>
+              {coursePointsBreakdown.length > 0 ? (
+                <div class="mt-4 space-y-6">
+                  {coursePointsBreakdown.map((c) => {
+                    const sumFromItems = c.items.reduce((a, i) => a + i.pts, 0);
+                    return (
+                      <div class="rounded-lg border border-transparent bg-surface-2/40 p-4">
+                        <div class="flex justify-end">
+                          <span class="text-sm font-semibold text-lime">{c.totalStored} pts totales</span>
+                        </div>
+                        {c.items.length > 0 ? (
+                          <ul class="mt-3 space-y-1.5">
+                            {c.items.map((item) => (
+                              <li class="flex items-center justify-between gap-2 text-sm">
+                                <span class="text-muted">{item.label}</span>
+                                <span class="font-medium text-lime">+{item.pts}</span>
+                              </li>
+                            ))}
+                            {sumFromItems !== c.totalStored && (
+                              <li class="mt-2 border-t border-transparent pt-2 text-xs text-amber-400">
+                                Suma del desglose: {sumFromItems} pts (en BD: {c.totalStored})
+                              </li>
+                            )}
+                          </ul>
+                        ) : (
+                          <p class="mt-2 text-sm text-muted">
+                            Aún no hay asistencias ni entregas registradas en este curso.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p class="mt-3 text-sm text-muted">
+                  Aún no hay puntos registrados. Asiste a clases, entrega retos o participa en Kahoot para sumar.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+    )}
+
+        <div
+          id="course-retos-info-modal"
+          class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="course-retos-info-modal-title"
+        >
+          <div id="course-retos-info-modal-backdrop" class="absolute inset-0" tabindex="-1" aria-hidden="true"></div>
+          <div class="relative z-10 flex max-h-[min(85vh,520px)] w-full max-w-lg flex-col rounded-xl border border-transparent bg-surface shadow-xl">
+            <div class="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-4">
+              <h2 id="course-retos-info-modal-title" class="text-base font-semibold text-white">Sobre los retos</h2>
+              <button
+                type="button"
+                id="close-course-retos-info-modal"
+                class="rounded-lg p-1.5 text-muted transition hover:bg-surface-2 hover:text-white"
+                aria-label="Cerrar"
+              >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 text-sm text-muted">
+              <p>
+                Los <strong class="font-medium text-white">retos</strong> son desafíos prácticos de este curso: entregas con enlace o archivo que revisa el equipo. Al aprobar una entrega sumas puntos según la rúbrica del reto (y a tiempo o fuera de plazo).
+              </p>
+              <p>
+                Desde la lista puedes ir a <a href="/challenges" class="font-medium text-lime underline-offset-2 hover:underline">Retos</a> para ver el detalle, plazos y enviar o actualizar tu entrega.
+              </p>
+              <p class="text-xs">
+                La tarjeta <strong class="text-white/90">Desafíos</strong> arriba muestra cuántos retos llevas completados respecto al total previsto del curso.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="course-insignias-info-modal"
+          class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="course-insignias-info-modal-title"
+        >
+          <div id="course-insignias-info-modal-backdrop" class="absolute inset-0" tabindex="-1" aria-hidden="true"></div>
+          <div class="relative z-10 flex max-h-[min(85vh,560px)] w-full max-w-lg flex-col rounded-xl border border-transparent bg-surface shadow-xl">
+            <div class="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-4">
+              <h2 id="course-insignias-info-modal-title" class="text-base font-semibold text-white">Cómo ganar insignias</h2>
+              <button
+                type="button"
+                id="close-course-insignias-info-modal"
+                class="rounded-lg p-1.5 text-muted transition hover:bg-surface-2 hover:text-white"
+                aria-label="Cerrar"
+              >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <p class="text-xs text-muted">
+                {!isOnDemand
+                  ? 'Estas reglas aplican a tus cursos y a los retos vinculados. Tus Jedis también pueden otorgar insignias manuales.'
+                  : 'En cursos on-demand solo aplican las insignias ligadas a entregas y progreso del curso (sin asistencia en vivo).'}
+              </p>
+              <ul class="mt-4 space-y-4">
+                {badgeEarnGuideRows.map((row) => (
+                  <li class="rounded-lg bg-surface-2/50 px-3 py-2.5">
+                    <p class="text-sm font-medium text-white">{row.title}</p>
+                    <p class="mt-1 text-xs text-muted">{row.body}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <script is:inline>
+          document.addEventListener('DOMContentLoaded', () => {
+            function syncBodyScroll() {
+              const a = document.getElementById('course-points-breakdown-modal');
+              const b = document.getElementById('course-retos-info-modal');
+              const c = document.getElementById('course-insignias-info-modal');
+              const anyOpen = [a, b, c].some((m) => m && !m.classList.contains('hidden'));
+              document.body.style.overflow = anyOpen ? 'hidden' : '';
+            }
+            function wireModal(modalId, openSelector, closeBtnId, backdropId) {
+              const modal = document.getElementById(modalId);
+              const closeBtn = document.getElementById(closeBtnId);
+              const backdrop = document.getElementById(backdropId);
+              function openModal() {
+                if (!modal) return;
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                syncBodyScroll();
+              }
+              function closeModal() {
+                if (!modal) return;
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                syncBodyScroll();
+              }
+              document.querySelectorAll(openSelector).forEach((el) => {
+                el.addEventListener('click', openModal);
+              });
+              closeBtn?.addEventListener('click', closeModal);
+              backdrop?.addEventListener('click', closeModal);
+              return { closeModal, modal };
+            }
+            const pts = wireModal(
+              'course-points-breakdown-modal',
+              '.open-course-points-breakdown-trigger',
+              'close-course-points-breakdown-modal',
+              'course-points-breakdown-modal-backdrop',
+            );
+            const retos = wireModal(
+              'course-retos-info-modal',
+              '.open-course-retos-info-trigger',
+              'close-course-retos-info-modal',
+              'course-retos-info-modal-backdrop',
+            );
+            const insignias = wireModal(
+              'course-insignias-info-modal',
+              '.open-course-insignias-info-trigger',
+              'close-course-insignias-info-modal',
+              'course-insignias-info-modal-backdrop',
+            );
+            document.addEventListener('keydown', (e) => {
+              if (e.key !== 'Escape') return;
+              if (pts.modal && !pts.modal.classList.contains('hidden')) pts.closeModal();
+              else if (retos.modal && !retos.modal.classList.contains('hidden')) retos.closeModal();
+              else if (insignias.modal && !insignias.modal.classList.contains('hidden')) insignias.closeModal();
+            });
+          });
+        </script>
   </section>
 </DashboardLayout>
