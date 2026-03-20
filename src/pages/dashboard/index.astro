@@ -12,6 +12,7 @@ import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
 import { badgeDisplayDescription, badgeDisplayName } from '../../lib/badge-display';
 import { getPointsBreakdownByCourse, type CoursePointsBreakdown } from '../../lib/points-breakdown';
 import { getBadgeEarnGuideRows, type BadgeEarnRow } from '../../lib/badge-earn-guide';
+import { APP_BIRTHDAY_TIMEZONE, daysUntilBirthdayAnniversary } from '../../lib/birthday';
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
 
@@ -23,14 +24,14 @@ const supabase = getSupabaseServiceRoleClient();
 
 let { data: userRow } = await supabase
   .from('users')
-  .select('id, email, display_name, avatar_id, points, role, timezone')
+  .select('id, email, display_name, avatar_id, points, role, timezone, birthday')
   .eq('id', userId)
   .maybeSingle();
 if (!userRow) {
   await supabase.from('users').upsert({ id: userId }, { onConflict: 'id' });
   const refetch = await supabase
     .from('users')
-    .select('id, email, display_name, avatar_id, points, role, timezone')
+    .select('id, email, display_name, avatar_id, points, role, timezone, birthday')
     .eq('id', userId)
     .maybeSingle();
   userRow = refetch.data ?? null;
@@ -64,9 +65,11 @@ let cohortProgress: { id: string; name: string; avatarId: string | null; points:
 let recentSubmissions: { id: string; studentName: string; challengeTitle: string; submitted_at: string }[] = [];
 let cohortMaxPoints = 1;
 let adminCoursesWithStats: AdminCourseStats[] = [];
+let adminBirthdaysToday: string[] = [];
+let adminBirthdaysUpcoming: { name: string; daysUntil: number }[] = [];
 
 if (role === 'admin' && !preview) {
-  const [studentsCountRes, pendingCountRes, activeCountRes, cohortRowsRes, subRowsRes, pointsRowsRes, coursesRes, enrollmentsRes, lessonsCountRes] = await Promise.all([
+  const [studentsCountRes, pendingCountRes, activeCountRes, cohortRowsRes, subRowsRes, pointsRowsRes, coursesRes, enrollmentsRes, lessonsCountRes, studentBirthdaysRes] = await Promise.all([
     supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
     supabase.from('submissions').select('*', { count: 'exact', head: true }).eq('reviewed', false),
     supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
@@ -81,6 +84,7 @@ if (role === 'admin' && !preview) {
     supabase.from('courses').select('id, slug, title').order('title'),
     supabase.from('enrollments').select('course_id'),
     supabase.from('lessons').select('course_id'),
+    supabase.from('users').select('display_name, birthday').eq('role', 'student').not('birthday', 'is', null),
   ]);
   totalStudents = studentsCountRes.count ?? 0;
   pendingSubmissionsCount = pendingCountRes.count ?? 0;
@@ -159,6 +163,20 @@ if (role === 'admin' && !preview) {
       avgPoints,
     };
   });
+
+  const tz = APP_BIRTHDAY_TIMEZONE;
+  const todayNames: string[] = [];
+  const upcoming: { name: string; daysUntil: number }[] = [];
+  for (const row of studentBirthdaysRes.data ?? []) {
+    const name = String((row as { display_name?: string | null }).display_name ?? '').trim() || 'Estudiante';
+    const bd = (row as { birthday?: string | null }).birthday;
+    const d = daysUntilBirthdayAnniversary(bd ?? null, tz);
+    if (d === null) continue;
+    if (d === 0) todayNames.push(name);
+    else if (d >= 1 && d <= 3) upcoming.push({ name, daysUntil: d });
+  }
+  adminBirthdaysToday = todayNames.sort((a, b) => a.localeCompare(b));
+  adminBirthdaysUpcoming = upcoming.sort((a, b) => a.daysUntil - b.daysUntil || a.name.localeCompare(b.name));
 }
 
 // ---------- Student view data (when student OR admin in preview) ----------
@@ -476,6 +494,9 @@ const displayName =
   (role === 'admin' ? 'Admin' : 'Estudiante');
 
 const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone ?? null;
+const myBirthdayRaw = (userRow as { birthday?: string | null })?.birthday ?? null;
+const daysUntilMyBirthday = daysUntilBirthdayAnniversary(myBirthdayRaw, APP_BIRTHDAY_TIMEZONE);
+const showStudentBirthdayBanner = (role !== 'admin' || preview) && daysUntilMyBirthday === 0;
 const recordingHasAny = recordingByMonth.some(({ lessons }) => lessons.length > 0);
 const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug}` : '/courses';
 ---
@@ -504,6 +525,42 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
           </a>
         </div>
       </header>
+
+      {(adminBirthdaysToday.length > 0 || adminBirthdaysUpcoming.length > 0) && (
+        <div
+          class="relative flex flex-wrap items-start gap-3 rounded-xl border border-lime/35 bg-lime/[0.08] px-4 py-3 md:items-center"
+          role="status"
+        >
+          <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/20 text-lg text-lime" aria-hidden="true">
+            🎂
+          </span>
+          <div class="min-w-0 flex-1 space-y-1.5 text-sm">
+            <p class="font-medium text-white">Cumpleaños del cohort</p>
+            {adminBirthdaysToday.length > 0 && (
+              <p class="text-muted">
+                <span class="font-medium text-lime">Hoy:</span>{' '}
+                {adminBirthdaysToday.join(', ')}
+              </p>
+            )}
+            {adminBirthdaysUpcoming.length > 0 && (
+              <p class="text-muted">
+                <span class="font-medium text-white/90">Próximos (3 días):</span>{' '}
+                {adminBirthdaysUpcoming
+                  .map((u) => `${u.name} (${u.daysUntil === 1 ? 'mañana' : `en ${u.daysUntil} días`})`)
+                  .join(' · ')}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted transition hover:bg-white/10 hover:text-lime"
+            title={`Fechas según cumpleaños en perfil. Aviso hasta 3 días antes de cada día (zona ${APP_BIRTHDAY_TIMEZONE.replace('_', ' ')}).`}
+            aria-label="Información sobre avisos de cumpleaños"
+          >
+            <i class="bi bi-info-circle text-lg leading-none" aria-hidden="true"></i>
+          </button>
+        </div>
+      )}
 
       <div class="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div class="min-w-0 space-y-6">
@@ -667,6 +724,25 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
             Volver al dashboard de admin
           </a>
         </div>
+      </div>
+    )}
+    {showStudentBirthdayBanner && (
+      <div
+        class="group relative mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-lime/40 bg-gradient-to-r from-lime/15 via-lime/5 to-transparent px-4 py-3 md:mb-8"
+        role="status"
+        title="Te lo mostramos en tu cumple según la fecha de tu perfil (zona horaria Lima)."
+      >
+        <span class="text-2xl" aria-hidden="true">🎉</span>
+        <div class="min-w-0 flex-1">
+          <p class="text-base font-semibold text-white">¡Feliz cumpleaños, superHuman!</p>
+          <p class="mt-0.5 text-sm text-muted">Que tengas un gran día.</p>
+        </div>
+        <span
+          class="inline-flex h-8 w-8 shrink-0 cursor-help items-center justify-center rounded-full text-muted"
+          aria-hidden="true"
+        >
+          <i class="bi bi-info-circle text-lg leading-none" aria-hidden="true"></i>
+        </span>
       </div>
     )}
     <section class="max-w-5xl space-y-8 xl:max-w-6xl">
