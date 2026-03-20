@@ -4,10 +4,8 @@ import { computeChallengeApprovalPoints, normalizeChallengePointsReward } from '
 export type PointsBreakdownItem = {
   label: string;
   pts: number;
-  /** Subtítulo (ej. valor configurado del reto). */
+  /** Subtítulo opcional (texto pequeño debajo del título). */
   detail?: string;
-  /** Solo contexto; no muestra columna +pts (pts debe ser 0). */
-  infoOnly?: boolean;
 };
 
 export type CoursePointsBreakdown = {
@@ -87,15 +85,10 @@ export async function getPointsBreakdownByCourse(
       const onTime = isOnDemand || (deadline != null && submittedAt <= deadline);
       const pts = computeChallengeApprovalPoints(ch.points_reward, { onTime, isOnDemand });
       const retoValor = normalizeChallengePointsReward(ch.points_reward);
+      const timing = onTime ? 'a tiempo' : 'tarde (mitad del valor)';
+      const title = (ch.title ?? 'Desafío').trim();
       items.push({
-        label: `Reto "${ch.title ?? 'Desafío'}"`,
-        detail: `Valor del reto: ${retoValor} pts`,
-        pts: 0,
-        infoOnly: true,
-      });
-      items.push({
-        label: onTime ? 'Por entrega a tiempo' : 'Por entrega tardía',
-        detail: !onTime ? `Mitad del valor del reto (${retoValor} pts)` : undefined,
+        label: `${title} · ${retoValor} pts · ${timing}`,
         pts,
       });
     }

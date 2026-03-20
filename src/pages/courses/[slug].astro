@@ -700,12 +700,7 @@ courseBadges = isOnDemand
                         {c.items.length > 0 ? (
                           <ul class="mt-3 space-y-1.5">
                             {c.items.map((item) => (
-                              <PointsBreakdownListItem
-                                label={item.label}
-                                detail={item.detail}
-                                pts={item.pts}
-                                infoOnly={item.infoOnly}
-                              />
+                              <PointsBreakdownListItem label={item.label} detail={item.detail} pts={item.pts} />
                             ))}
                             {sumFromItems !== c.totalStored && (
                               <li class="mt-2 border-t border-transparent pt-2 text-xs text-amber-400">
