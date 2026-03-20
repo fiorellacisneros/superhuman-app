@@ -691,7 +691,6 @@ courseBadges = isOnDemand
               {coursePointsBreakdown.length > 0 ? (
                 <div class="mt-4 space-y-6">
                   {coursePointsBreakdown.map((c) => {
-                    const sumFromItems = c.items.reduce((a, i) => a + i.pts, 0);
                     return (
                       <div class="rounded-lg border border-transparent bg-surface-2/40 p-4">
                         <div class="flex justify-end">
@@ -702,11 +701,6 @@ courseBadges = isOnDemand
                             {c.items.map((item) => (
                               <PointsBreakdownListItem label={item.label} detail={item.detail} pts={item.pts} />
                             ))}
-                            {sumFromItems !== c.totalStored && (
-                              <li class="mt-2 border-t border-transparent pt-2 text-xs text-amber-400">
-                                Suma del desglose: {sumFromItems} pts (en BD: {c.totalStored})
-                              </li>
-                            )}
                           </ul>
                         ) : (
                           <p class="mt-2 text-sm text-muted">
