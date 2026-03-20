@@ -29,7 +29,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const db = getSupabaseServiceRoleClient();
   const { data: challenge } = await db
     .from('challenges')
-    .select('deadline, is_active, course_id')
+    .select('is_active, course_id')
     .eq('id', challenge_id.trim())
     .maybeSingle();
   if (!challenge || !challenge.is_active) {
@@ -39,11 +39,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  let isOnDemand = false;
   if (challenge.course_id) {
     const { data: enrollment } = await db
       .from('enrollments')
-      .select('user_id, access_type')
+      .select('user_id')
       .eq('user_id', userId)
       .eq('course_id', challenge.course_id as string)
       .maybeSingle();
@@ -53,22 +52,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    isOnDemand = (enrollment.access_type as string) === 'on_demand';
   }
-
-  const deadlineIso = (challenge?.deadline as string | null) ?? null;
-  const canEditByDeadline = isOnDemand || !deadlineIso || new Date(deadlineIso).getTime() > Date.now();
 
   const { data: existing } = await db
     .from('submissions')
-    .select('id')
+    .select('id, approved')
     .eq('challenge_id', challenge_id.trim())
     .eq('user_id', userId)
     .order('submitted_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (existing) {
-    if (mode === 'update' && canEditByDeadline) {
+    if (existing.approved === true) {
+      const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
+      const url = withToastParams(redirect, 'La entrega ya fue aprobada y no se puede editar', 'info');
+      return new Response(null, { status: 303, headers: { Location: url } });
+    }
+    if (mode === 'update') {
       await db.from('submissions').update({ link: linkStr }).eq('id', existing.id);
       const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
       const url = withToastParams(redirect, 'Entrega actualizada', 'success');

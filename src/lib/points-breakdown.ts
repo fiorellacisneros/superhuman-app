@@ -1,6 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { computeChallengeApprovalPoints, normalizeChallengePointsReward } from './points';
 
-export type PointsBreakdownItem = { label: string; pts: number };
+export type PointsBreakdownItem = {
+  label: string;
+  pts: number;
+  /** Subtítulo (ej. valor configurado del reto). */
+  detail?: string;
+  /** Solo contexto; no muestra columna +pts (pts debe ser 0). */
+  infoOnly?: boolean;
+};
 
 export type CoursePointsBreakdown = {
   courseId: string;
@@ -11,7 +19,7 @@ export type CoursePointsBreakdown = {
 
 /**
  * Reconstruye un desglose explicativo de puntos por curso (asistencia, entregas aprobadas, Kahoot)
- * alineado con cómo se otorgan en la app. El total en BD puede diferir si hubo ajustes manuales.
+ * alineado con cómo se otorgan en la app (incl. `points_reward` por reto). El total en BD puede diferir si hubo ajustes manuales.
  */
 export async function getPointsBreakdownByCourse(
   supabase: SupabaseClient,
@@ -25,18 +33,23 @@ export async function getPointsBreakdownByCourse(
     .select('course_id, points')
     .eq('user_id', userId);
 
-  const [{ data: allLessons }, { data: allAttendance }, { data: allSubs }, { data: allKahoot }, { data: coursesList }] =
+  const [{ data: enrollmentRows }, { data: allLessons }, { data: allAttendance }, { data: allSubs }, { data: allKahoot }, { data: coursesList }] =
     await Promise.all([
+      supabase.from('enrollments').select('course_id, access_type').eq('user_id', userId).in('course_id', courseIds),
       supabase.from('lessons').select('id, course_id, title').in('course_id', courseIds),
       supabase.from('attendance').select('lesson_id, lessons(course_id, title)').eq('user_id', userId),
       supabase
         .from('submissions')
-        .select('submitted_at, challenge_id, challenges(course_id, deadline, title)')
+        .select('submitted_at, challenge_id, challenges(course_id, deadline, title, points_reward)')
         .eq('user_id', userId)
         .eq('approved', true),
       supabase.from('kahoot_results').select('lesson_id, points_earned, lessons(course_id, title)').eq('user_id', userId),
       supabase.from('courses').select('id, title').in('id', courseIds),
     ]);
+
+  const accessByCourse = new Map(
+    (enrollmentRows ?? []).map((r) => [r.course_id as string, (r as { access_type?: string }).access_type ?? 'cohort']),
+  );
 
   const courseTitles = new Map((coursesList ?? []).map((c) => [c.id, (c as { title: string | null }).title ?? 'Curso']));
   const pointsStoredByCourse = new Map(
@@ -55,8 +68,6 @@ export async function getPointsBreakdownByCourse(
     if (cid) attendanceByCourse.set(cid, (attendanceByCourse.get(cid) ?? 0) + 1);
   }
   const PTS_ATT = 10;
-  const PTS_ON_TIME = 30;
-  const PTS_LATE = 15;
 
   const pointsBreakdownByCourse: CoursePointsBreakdown[] = [];
   for (const cid of courseIds) {
@@ -65,15 +76,26 @@ export async function getPointsBreakdownByCourse(
     if (attCount > 0) {
       items.push({ label: `Asistencia (${attCount} clase${attCount !== 1 ? 's' : ''})`, pts: attCount * PTS_ATT });
     }
+    const isOnDemand = accessByCourse.get(cid) === 'on_demand';
     for (const s of allSubs ?? []) {
-      const ch = (s as { challenges?: { course_id?: string; deadline?: string; title?: string } | null }).challenges;
+      const ch = (s as {
+        challenges?: { course_id?: string; deadline?: string; title?: string; points_reward?: number | null } | null;
+      }).challenges;
       if (ch?.course_id !== cid) continue;
       const deadline = ch.deadline ? new Date(ch.deadline).getTime() : null;
       const submittedAt = new Date((s as { submitted_at: string }).submitted_at).getTime();
-      const pts = deadline != null && submittedAt <= deadline ? PTS_ON_TIME : PTS_LATE;
-      const onTime = pts === PTS_ON_TIME;
+      const onTime = isOnDemand || (deadline != null && submittedAt <= deadline);
+      const pts = computeChallengeApprovalPoints(ch.points_reward, { onTime, isOnDemand });
+      const retoValor = normalizeChallengePointsReward(ch.points_reward);
       items.push({
-        label: `Reto "${ch.title ?? 'Desafío'}" (${onTime ? 'a tiempo' : 'tarde'})`,
+        label: `Reto "${ch.title ?? 'Desafío'}"`,
+        detail: `Valor del reto: ${retoValor} pts`,
+        pts: 0,
+        infoOnly: true,
+      });
+      items.push({
+        label: onTime ? 'Por entrega a tiempo' : 'Por entrega tardía',
+        detail: !onTime ? `Mitad del valor del reto (${retoValor} pts)` : undefined,
         pts,
       });
     }

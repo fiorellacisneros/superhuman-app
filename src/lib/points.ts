@@ -7,11 +7,35 @@ export type PointsEventType =
 
 export const POINT_VALUES: Record<PointsEventType, number> = {
   lesson_attended: 10,
+  /** Legacy fijo; al aprobar retos se usa `points_reward` del reto vía `computeChallengeApprovalPoints`. */
   challenge_submitted_on_time: 30,
   challenge_submitted_late: 15,
   first_submission: 10,
   module_completed: 50,
 };
+
+/** Valor por defecto si el reto no tiene `points_reward` en BD (misma base que antes). */
+export const DEFAULT_CHALLENGE_POINTS_REWARD = 30;
+
+/** Normaliza el puntaje configurado en el reto (0–1000, acorde al admin). */
+export function normalizeChallengePointsReward(pointsRewardRaw: number | null | undefined): number {
+  if (pointsRewardRaw == null || !Number.isFinite(Number(pointsRewardRaw))) return DEFAULT_CHALLENGE_POINTS_REWARD;
+  const v = Math.round(Number(pointsRewardRaw));
+  return Math.max(0, Math.min(1000, v));
+}
+
+/**
+ * Puntos que se suman al aprobar una entrega de reto: usa `points_reward` del reto.
+ * Tarde = la mitad (redondeo hacia abajo), salvo on demand (siempre puntaje completo).
+ */
+export function computeChallengeApprovalPoints(
+  pointsRewardRaw: number | null | undefined,
+  opts: { onTime: boolean; isOnDemand: boolean },
+): number {
+  const base = normalizeChallengePointsReward(pointsRewardRaw);
+  if (opts.isOnDemand || opts.onTime) return base;
+  return Math.max(0, Math.floor(base / 2));
+}
 
 export const calculatePointsForEvent = (type: PointsEventType): number => {
   return POINT_VALUES[type] ?? 0;
