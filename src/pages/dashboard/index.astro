@@ -189,6 +189,8 @@ let badgeEarnGuideRows: BadgeEarnRow[] = [];
 type UpcomingLesson = { id: string; title: string; scheduled_at: string; zoom_link: string | null; recording_url: string | null; courseTitle: string; courseSlug: string };
 let upcomingLessons: UpcomingLesson[] = [];
 let upcomingByMonth: { monthLabel: string; lessons: UpcomingLesson[] }[] = [];
+/** Solo cohort en vivo: lecciones pasadas con grabación (acceso rápido al lado del horario). */
+let recordingByMonth: { monthLabel: string; lessons: UpcomingLesson[] }[] = [];
 
 if (role !== 'admin' || preview) {
   try {
@@ -365,6 +367,49 @@ if (role !== 'admin' || preview) {
             courseSlug: (course?.slug ?? l.course_id) as string,
           };
         });
+        const monthMapLive = new Map<string, UpcomingLesson[]>();
+        for (const lesson of upcomingLessons) {
+          const d = new Date(lesson.scheduled_at);
+          const key = d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
+          const label = key.charAt(0).toUpperCase() + key.slice(1);
+          if (!monthMapLive.has(label)) monthMapLive.set(label, []);
+          monthMapLive.get(label)!.push(lesson);
+        }
+        upcomingByMonth = Array.from(monthMapLive.entries()).map(([monthLabel, lessons]) => ({ monthLabel, lessons }));
+
+        const { data: recLessonRows } = await supabase
+          .from('lessons')
+          .select('id, title, scheduled_at, recording_url, course_id, courses(title, slug)')
+          .in('course_id', enrolledIds)
+          .not('scheduled_at', 'is', null)
+          .not('recording_url', 'is', null)
+          .lt('scheduled_at', now)
+          .order('scheduled_at', { ascending: false })
+          .limit(24);
+        const recordingLessons: UpcomingLesson[] = (recLessonRows ?? [])
+          .map((l) => {
+            const course = l.courses as { title: string | null; slug: string | null } | null;
+            const recUrl = (l.recording_url && String(l.recording_url).trim()) || null;
+            return {
+              id: l.id,
+              title: l.title ?? 'Clase',
+              scheduled_at: l.scheduled_at as string,
+              zoom_link: null,
+              recording_url: recUrl,
+              courseTitle: course?.title ?? 'Curso',
+              courseSlug: (course?.slug ?? l.course_id) as string,
+            };
+          })
+          .filter((l) => Boolean(l.recording_url));
+        const recMonthMap = new Map<string, UpcomingLesson[]>();
+        for (const lesson of recordingLessons) {
+          const d = new Date(lesson.scheduled_at);
+          const key = d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
+          const label = key.charAt(0).toUpperCase() + key.slice(1);
+          if (!recMonthMap.has(label)) recMonthMap.set(label, []);
+          recMonthMap.get(label)!.push(lesson);
+        }
+        recordingByMonth = Array.from(recMonthMap.entries()).map(([monthLabel, lessons]) => ({ monthLabel, lessons }));
       } else {
         const { data: lessonRows } = await supabase
           .from('lessons')
@@ -390,16 +435,16 @@ if (role !== 'admin' || preview) {
             };
           })
           .filter((l) => Boolean(l.recording_url));
+        const monthMapOd = new Map<string, UpcomingLesson[]>();
+        for (const lesson of upcomingLessons) {
+          const d = new Date(lesson.scheduled_at);
+          const key = d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
+          const label = key.charAt(0).toUpperCase() + key.slice(1);
+          if (!monthMapOd.has(label)) monthMapOd.set(label, []);
+          monthMapOd.get(label)!.push(lesson);
+        }
+        upcomingByMonth = Array.from(monthMapOd.entries()).map(([monthLabel, lessons]) => ({ monthLabel, lessons }));
       }
-      const monthMap = new Map<string, UpcomingLesson[]>();
-      for (const lesson of upcomingLessons) {
-        const d = new Date(lesson.scheduled_at);
-        const key = d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
-        const label = key.charAt(0).toUpperCase() + key.slice(1);
-        if (!monthMap.has(label)) monthMap.set(label, []);
-        monthMap.get(label)!.push(lesson);
-      }
-      upcomingByMonth = Array.from(monthMap.entries()).map(([monthLabel, lessons]) => ({ monthLabel, lessons }));
     }
 
     const leaderboardRows = leaderboardRowsRes.data;
@@ -437,6 +482,8 @@ const displayName =
   (role === 'admin' ? 'Admin' : 'Estudiante');
 
 const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone ?? null;
+const recordingHasAny = recordingByMonth.some(({ lessons }) => lessons.length > 0);
+const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug}` : '/courses';
 ---
 
 {role === 'admin' && !preview ? (
@@ -746,81 +793,181 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
             </div>
           </div>
 
-          <div class="rounded-2xl bg-background p-5">
-            {hasLiveEnrollment ? (
-              <>
+          {hasLiveEnrollment ? (
+            <div class="grid gap-4 lg:grid-cols-2 lg:items-start">
+              <div class="rounded-2xl bg-background p-5">
                 <h2 class="font-manrope text-2xl font-semibold text-white">Mi horario</h2>
                 <p class="mt-0.5 text-xs text-muted">Próximas clases de tus cursos.</p>
-              </>
-            ) : (
-              <>
-                <h2 class="font-manrope text-2xl font-semibold text-white">Tu contenido</h2>
-                <p class="mt-0.5 text-xs text-muted">Accede a las lecciones y materiales cuando quieras.</p>
-              </>
-            )}
-            {upcomingLessons.length > 0 ? (
-              <div class="mt-3 max-h-[320px] overflow-y-auto space-y-4">
-                {upcomingByMonth.map(({ monthLabel, lessons }) => (
+                {upcomingLessons.length > 0 ? (
+                  <div class="mt-3 max-h-[320px] overflow-y-auto space-y-4">
+                    {upcomingByMonth.map(({ monthLabel, lessons }, monthIdx) => (
+                      <div>
+                        <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted">{monthLabel}</p>
+                        <ul class="space-y-2">
+                          {lessons.map((lesson, idx) => {
+                            const isNext =
+                              monthIdx === 0 && idx === 0 && upcomingByMonth[0]?.lessons[0]?.id === lesson.id;
+                            const joinUrl = lesson.zoom_link?.trim() || null;
+                            return (
+                              <li
+                                class={`rounded-lg px-3 py-2.5 ${
+                                  isNext ? 'border-l-4 border-l-lime bg-lime/10' : 'bg-background'
+                                }`}
+                              >
+                                <div class="flex items-start justify-between gap-2">
+                                  <div class="min-w-0 flex-1">
+                                    <p class="text-[10px] text-muted">
+                                      {formatDayAndDate(lesson.scheduled_at, userTimezone)} · {formatTime(lesson.scheduled_at, userTimezone)}
+                                    </p>
+                                    <p class="mt-0.5 font-work-sans text-[14px] font-medium leading-snug text-white">
+                                      {lesson.title}
+                                    </p>
+                                    <p class="mt-0.5 text-[10px] text-muted">{lesson.courseTitle}</p>
+                                  </div>
+                                  {isNext && joinUrl && (
+                                    <a
+                                      href={joinUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      class="shrink-0 rounded border border-lime bg-lime/15 px-2 py-1 text-[10px] font-medium text-lime transition hover:bg-lime/25"
+                                    >
+                                      Ver clase
+                                    </a>
+                                  )}
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div class="mt-3 rounded-xl border border-dashed border-transparent bg-background p-6 text-center">
+                    <p class="text-sm text-muted">No hay clases programadas aún.</p>
+                  </div>
+                )}
+              </div>
+
+              <div class="rounded-2xl bg-[#D6D6D6] p-5">
+                <div class="flex items-start justify-between gap-2">
                   <div>
-                    <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted">{monthLabel}</p>
-                    <ul class="space-y-2">
-                      {lessons.map((lesson, idx) => {
-                        const isNext = hasLiveEnrollment && idx === 0 && upcomingByMonth[0]?.lessons[0]?.id === lesson.id;
-                        const joinUrl = lesson.zoom_link?.trim() || null;
-                        const lessonHref = `/courses/${lesson.courseSlug}/lessons/${lesson.id}`;
-                        const hasRecording = Boolean(lesson.recording_url);
-                        return (
-                          <li
-                            class={`rounded-lg px-3 py-2.5 ${
-                              isNext
-                                ? 'border-l-4 border-l-lime bg-lime/10'
-                                : 'bg-background'
-                            }`}
-                          >
-                            <div class="flex items-start justify-between gap-2">
-                              <div class="min-w-0 flex-1">
-                                <p class="text-[10px] text-muted">
-                                  {formatDayAndDate(lesson.scheduled_at, userTimezone)} · {formatTime(lesson.scheduled_at, userTimezone)}
-                                </p>
-                                <p class="mt-0.5 text-xs font-medium text-white">{lesson.title}</p>
-                                <p class="mt-0.5 text-[10px] text-muted">{lesson.courseTitle}</p>
-                              </div>
-                              {hasLiveEnrollment && isNext && joinUrl && (
-                                <a
-                                  href={joinUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  class="shrink-0 rounded border border-lime bg-lime/15 px-2 py-1 text-[10px] font-medium text-lime transition hover:bg-lime/25"
-                                >
-                                  Ver clase
-                                </a>
-                              )}
-                              {!hasLiveEnrollment && hasRecording && (
+                    <h2 class="font-manrope text-2xl font-semibold text-[#1A1A1A]">Grabaciones</h2>
+                    <p class="mt-0.5 text-xs text-[#404040]">Acceso rápido a clases pasadas.</p>
+                  </div>
+                  <a
+                    href={firstCourseHref}
+                    class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#012EDC] transition hover:bg-black/5"
+                    aria-label="Ir a tu curso"
+                    title="Ir a tu curso"
+                  >
+                    <i class="bi bi-box-arrow-up-right text-lg leading-none" aria-hidden="true"></i>
+                  </a>
+                </div>
+                {recordingHasAny ? (
+                  <div class="mt-3 max-h-[320px] overflow-y-auto space-y-4">
+                    {recordingByMonth.map(({ monthLabel, lessons }, monthIdx) => (
+                      <div>
+                        <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#737373]">{monthLabel}</p>
+                        <ul class="space-y-2">
+                          {lessons.map((lesson, idx) => {
+                            const lessonHref = `/courses/${lesson.courseSlug}/lessons/${lesson.id}`;
+                            const isLatestRecording = monthIdx === 0 && idx === 0;
+                            return (
+                              <li
+                                class={`rounded-xl bg-white px-3 py-2.5 shadow-sm ${isLatestRecording ? 'border-l-4 border-l-blue' : ''}`}
+                              >
+                                <div class="flex items-start justify-between gap-3">
+                                  <div class="min-w-0 flex-1">
+                                    <p class="text-[10px] text-[#737373]">
+                                      {formatDayAndDate(lesson.scheduled_at, userTimezone)} · {formatTime(lesson.scheduled_at, userTimezone)}
+                                    </p>
+                                    <p class="mt-0.5 font-work-sans text-[14px] font-medium leading-snug text-[#1A1A1A]">
+                                      {lesson.title}
+                                    </p>
+                                    <p class="mt-0.5 text-[10px] text-[#737373]">{lesson.courseTitle}</p>
+                                  </div>
+                                  <a
+                                    href={lessonHref}
+                                    class="shrink-0 rounded-lg px-2 py-1.5 text-[10px] font-medium text-blue transition-colors hover:bg-[oklab(0.43797_-0.026316_-0.256138_/_0.15)]"
+                                  >
+                                    Ver grabación
+                                  </a>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div class="mt-3 rounded-xl border border-dashed border-[#737373]/50 bg-white/60 p-6 text-center">
+                    <p class="text-sm text-[#404040]">Aún no hay grabaciones publicadas.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div class="rounded-2xl bg-[#D6D6D6] p-5">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <h2 class="font-manrope text-2xl font-semibold text-[#1A1A1A]">Tu contenido</h2>
+                  <p class="mt-0.5 text-xs text-[#404040]">Accede a las lecciones y materiales cuando quieras.</p>
+                </div>
+                <a
+                  href={firstCourseHref}
+                  class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#012EDC] transition hover:bg-black/5"
+                  aria-label="Ir a tu curso"
+                  title="Ir a tu curso"
+                >
+                  <i class="bi bi-box-arrow-up-right text-lg leading-none" aria-hidden="true"></i>
+                </a>
+              </div>
+              {upcomingLessons.length > 0 ? (
+                <div class="mt-3 max-h-[320px] overflow-y-auto space-y-4">
+                  {upcomingByMonth.map(({ monthLabel, lessons }, monthIdx) => (
+                    <div>
+                      <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#737373]">{monthLabel}</p>
+                      <ul class="space-y-2">
+                        {lessons.map((lesson, idx) => {
+                          const lessonHref = `/courses/${lesson.courseSlug}/lessons/${lesson.id}`;
+                          const isLatestRecording = monthIdx === 0 && idx === 0;
+                          return (
+                            <li
+                              class={`rounded-xl bg-white px-3 py-2.5 shadow-sm ${isLatestRecording ? 'border-l-4 border-l-blue' : ''}`}
+                            >
+                              <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0 flex-1">
+                                  <p class="text-[10px] text-[#737373]">
+                                    {formatDayAndDate(lesson.scheduled_at, userTimezone)} · {formatTime(lesson.scheduled_at, userTimezone)}
+                                  </p>
+                                  <p class="mt-0.5 font-work-sans text-[14px] font-medium leading-snug text-[#1A1A1A]">
+                                    {lesson.title}
+                                  </p>
+                                  <p class="mt-0.5 text-[10px] text-[#737373]">{lesson.courseTitle}</p>
+                                </div>
                                 <a
                                   href={lessonHref}
-                                  class="shrink-0 rounded border border-lime bg-lime/15 px-2 py-1 text-[10px] font-medium text-lime transition hover:bg-lime/25"
+                                  class="shrink-0 rounded-lg px-2 py-1.5 text-[10px] font-medium text-blue transition-colors hover:bg-[oklab(0.43797_-0.026316_-0.256138_/_0.15)]"
                                 >
                                   Ver grabación
                                 </a>
-                              )}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div class="mt-3 rounded-xl border border-dashed border-transparent bg-background p-6 text-center">
-                {hasLiveEnrollment ? (
-                  <p class="text-sm text-muted">No hay clases programadas aún.</p>
-                ) : (
-                  <p class="text-sm text-muted">Ve a Mis cursos para ver el contenido disponible.</p>
-                )}
-              </div>
-            )}
-          </div>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div class="mt-3 rounded-xl border border-dashed border-[#737373]/50 bg-white/60 p-6 text-center">
+                  <p class="text-sm text-[#404040]">Ve a Mis cursos para ver el contenido disponible.</p>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         <aside class="w-full shrink-0 space-y-4 lg:ml-auto lg:w-[300px]">

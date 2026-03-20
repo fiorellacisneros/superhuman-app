@@ -135,10 +135,10 @@ if (noModule.length > 0) {
                       {canOpen ? (
                         <a
                           href={href}
-                          class={`flex items-center gap-3 rounded-xl border px-4 py-3 transition ${
+                          class={`group flex items-center gap-3 rounded-xl border px-4 py-3 transition ${
                             lesson.completed
                               ? 'border-yellow bg-yellow/5 hover:bg-yellow/10'
-                              : 'border-transparent bg-[#262626] hover:border-[#012EDC]/50 hover:bg-[#333]'
+                              : 'border-transparent bg-[#262626] hover:border-yellow/55 hover:bg-yellow/10'
                           }`}
                         >
                           <span class={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${lesson.completed ? 'bg-yellow text-[#1A1A1A]' : 'bg-[#404040] text-muted'}`} aria-hidden="true">
@@ -162,6 +162,12 @@ if (noModule.length > 0) {
                               </p>
                             )}
                           </div>
+                          <span
+                            class="shrink-0 text-muted opacity-60 transition group-hover:opacity-100 group-hover:text-lime"
+                            aria-hidden="true"
+                          >
+                            <i class="bi bi-chevron-right text-xl leading-none"></i>
+                          </span>
                         </a>
                       ) : (
                         <div class="flex items-center gap-3 rounded-xl bg-[#262626] px-4 py-3 opacity-75">
