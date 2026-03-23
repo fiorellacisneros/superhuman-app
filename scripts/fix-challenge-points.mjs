@@ -2,7 +2,7 @@
 /**
  * Ajusta `user_course_points` cuando cambió la lógica de puntos por retos aprobados.
  *
- * Necesitás:
+ * Necesitas:
  *   - SUPABASE_URL
  *   - SUPABASE_SERVICE_ROLE_KEY (rol servicio; no uses la anon key en prod)
  *
@@ -87,7 +87,7 @@ Opciones:
   --user-id=...                 Solo este usuario (Clerk id).
   --course-id=...               Solo este curso (UUID).
   --reviewed-before=ISO         Solo submissions con reviewed_at < esta fecha (ej. deploy).
-  --dry-run                     Solo imprime (default si no pasás --apply).
+  --dry-run                     Solo imprime (default si no pasas --apply).
   --apply                       Aplica cambios en user_course_points.
 
 Ejemplo:
@@ -100,14 +100,14 @@ Ejemplo:
   const args = parseArgs(process.argv.slice(2));
 
   if (!args.legacyModel || !['rewardOnly', 'fixed30'].includes(args.legacyModel)) {
-    console.error('Error: indicá --legacy-model=rewardOnly o --legacy-model=fixed30');
+    console.error('Error: indica --legacy-model=rewardOnly o --legacy-model=fixed30');
     process.exit(1);
   }
 
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
-    console.error('Error: definí SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en el entorno.');
+    console.error('Error: define SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en el entorno.');
     process.exit(1);
   }
 
@@ -195,7 +195,7 @@ Ejemplo:
   console.log(`\nSuma de todos los deltas: +${totalDelta}`);
 
   if (args.dryRun) {
-    console.log('\n(dry-run: no se escribió nada. Usá --apply para aplicar.)');
+    console.log('\n(dry-run: no se escribió nada. Usa --apply para aplicar.)');
     return;
   }
 
