@@ -2,7 +2,7 @@
 
 Corrige `user_course_points` cuando las entregas se aprobaron con una **lógica vieja** y ahora la app suma **valor del reto + 30** por entrega a tiempo.
 
-## Qué necesitás
+## Qué necesitas
 
 | Dónde | Qué |
 |--------|-----|
@@ -20,7 +20,7 @@ Corrige `user_course_points` cuando las entregas se aprobaron con una **lógica 
 - **`fixed30`** — Muy antiguo: **30** a tiempo / **15** tarde, sin usar `points_reward`.  
   - El delta depende del `points_reward` del reto (ej. si el reto vale 50 y a tiempo: pasa de 30 a 80 → **+50**).
 
-Elegí el modelo que refleje **cómo se sumaron en realidad** esos puntos cuando aprobaste.
+Elige el modelo que refleje **cómo se sumaron en realidad** esos puntos cuando aprobaste.
 
 ## Uso
 
@@ -38,7 +38,7 @@ node scripts/fix-challenge-points.mjs --legacy-model=rewardOnly --dry-run --user
 node scripts/fix-challenge-points.mjs --legacy-model=rewardOnly --apply --user-id=user_ABC123
 ```
 
-También podés añadir en `package.json`:
+También puedes añadir en `package.json`:
 
 ```json
 "scripts": {
@@ -50,6 +50,6 @@ y luego: `npm run fix:challenge-points -- --legacy-model=rewardOnly --dry-run`
 
 ## Importante
 
-- Corré siempre **`--dry-run`** primero y revisá el listado por submission y el resumen Δ.
-- **`--apply`** suma los deltas sobre el total actual de `user_course_points`. Si corrés dos veces el mismo ajuste, **duplicarías** puntos: usá `--reviewed-before` o `--user-id` para acotar.
-- Si mezclás aprobaciones viejas y nuevas, limitá por **`--reviewed-before`** a la fecha en que subiste el código nuevo.
+- Corre siempre **`--dry-run`** primero y revisa el listado por submission y el resumen Δ.
+- **`--apply`** suma los deltas sobre el total actual de `user_course_points`. Si corres dos veces el mismo ajuste, **duplicarías** puntos: usa `--reviewed-before` o `--user-id` para acotar.
+- Si mezclas aprobaciones viejas y nuevas, limita por **`--reviewed-before`** a la fecha en que subiste el código nuevo.
