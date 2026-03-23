@@ -5,6 +5,11 @@ import { avatarImagePath } from '../lib/avatars';
 import { SignOutButton } from '@clerk/astro/components';
 import DeleteConfirmModal from '../components/DeleteConfirmModal.astro';
 import { getPreviewContext } from '../lib/preview';
+import {
+  getCourseIdsWithPlatformAccess,
+  getEligibleCourseIdsForLiveChallenges,
+  type EnrollmentAccessInput,
+} from '../lib/course-access';
 
 interface Props {
   role?: 'admin' | 'student' | null;
@@ -98,11 +103,38 @@ if (preview) {
     .eq('is_active', true);
   activeRetosCount = activeChallengesCount ?? 0;
 } else {
-  // For students: solo retos activos de cursos en los que está inscrito, pendientes de entregar.
-  const { data: enrollmentRows } = await supabase.from('enrollments').select('course_id, access_type').eq('user_id', userId);
+  // Retos pendientes: mismo alcance que el dashboard (cohorte en vivo / on-demand con acceso; no mezclar cohortes cerrados).
+  const { data: enrollmentRows } = await supabase
+    .from('enrollments')
+    .select('course_id, access_type, enrolled_at, access_expires_at, courses(ends_at)')
+    .eq('user_id', userId);
+
+  type ErRow = {
+    course_id: string;
+    access_type?: string | null;
+    enrolled_at?: string | null;
+    access_expires_at?: string | null;
+    courses?: { ends_at?: string | null } | null;
+  };
+  const nowMs = Date.now();
+  const courseEndsById = new Map<string, string | null | undefined>();
+  const enrollmentInputs: EnrollmentAccessInput[] = [];
+  for (const row of (enrollmentRows ?? []) as ErRow[]) {
+    const ends = row.courses?.ends_at;
+    if (row.course_id) courseEndsById.set(row.course_id, ends ?? null);
+    enrollmentInputs.push({
+      course_id: row.course_id,
+      access_type: row.access_type,
+      enrolled_at: row.enrolled_at,
+      access_expires_at: row.access_expires_at,
+    });
+  }
+  const eligibleCourseIds = getEligibleCourseIdsForLiveChallenges(enrollmentInputs, courseEndsById, nowMs);
+  const eligibleSet = new Set(eligibleCourseIds);
+  const hasPlatformAccessAny = getCourseIdsWithPlatformAccess(enrollmentInputs, nowMs).length > 0;
+
   hasOnlyOnDemand = (enrollmentRows ?? []).length > 0 && (enrollmentRows ?? []).every((r) => (r.access_type as string) === 'on_demand');
   navLinks = hasOnlyOnDemand ? studentNavOnDemand : studentNavLive;
-  const enrolledCourseIds = (enrollmentRows ?? []).map((r) => r.course_id);
   const onDemandCourseIds = new Set(
     (enrollmentRows ?? []).filter((r) => (r.access_type as string) === 'on_demand').map((r) => r.course_id as string),
   );
@@ -114,8 +146,8 @@ if (preview) {
 
   const relevantIds = (challengeRows ?? [])
     .filter((c) => {
-      if (!c.course_id) return true;
-      if (!enrolledCourseIds.includes(c.course_id)) return false;
+      if (!c.course_id) return hasPlatformAccessAny;
+      if (!eligibleSet.has(c.course_id)) return false;
       if (onDemandCourseIds.has(c.course_id)) {
         return (c.available_for_on_demand as boolean) === true;
       }

@@ -4,6 +4,11 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import { getPreviewContext } from '../../lib/preview';
 import { renderMarkdown } from '../../lib/markdown';
+import {
+  getCourseIdsWithPlatformAccess,
+  getEligibleCourseIdsForLiveChallenges,
+  type EnrollmentAccessInput,
+} from '../../lib/course-access';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -20,18 +25,52 @@ if (role === 'admin' && !isPreviewMode) {
   return Astro.redirect('/admin/challenges');
 }
 
-let enrollmentRows: { course_id: string; access_type?: string }[] | null = null;
+type ErRow = {
+  course_id: string;
+  access_type?: string | null;
+  enrolled_at?: string | null;
+  access_expires_at?: string | null;
+  courses?: { ends_at?: string | null } | null;
+};
+let enrollmentRows: ErRow[] | null = null;
+let enrolledCourseIds: string[] = [];
+const onDemandCourseIds = new Set<string>();
+let hasPlatformAccessAny = false;
+
 if (isPreviewMode) {
   const { data: allCourses } = await supabase.from('courses').select('id');
   enrollmentRows = (allCourses ?? []).map((c) => ({ course_id: c.id, access_type: 'cohort' }));
+  enrolledCourseIds = (enrollmentRows ?? []).map((r) => r.course_id as string);
+  for (const r of enrollmentRows ?? []) {
+    if ((r.access_type as string) === 'on_demand') onDemandCourseIds.add(r.course_id);
+  }
+  hasPlatformAccessAny = true;
 } else {
-  const { data } = await supabase.from('enrollments').select('course_id, access_type').eq('user_id', userId);
-  enrollmentRows = data;
+  const { data } = await supabase
+    .from('enrollments')
+    .select('course_id, access_type, enrolled_at, access_expires_at, courses(ends_at)')
+    .eq('user_id', userId);
+  enrollmentRows = (data ?? []) as ErRow[];
+  const nowMs = Date.now();
+  const courseEndsById = new Map<string, string | null | undefined>();
+  const enrollmentInputs: EnrollmentAccessInput[] = [];
+  for (const row of enrollmentRows ?? []) {
+    if (row.course_id) courseEndsById.set(row.course_id, row.courses?.ends_at ?? null);
+    enrollmentInputs.push({
+      course_id: row.course_id,
+      access_type: row.access_type,
+      enrolled_at: row.enrolled_at,
+      access_expires_at: row.access_expires_at,
+    });
+  }
+  enrolledCourseIds = getEligibleCourseIdsForLiveChallenges(enrollmentInputs, courseEndsById, nowMs);
+  hasPlatformAccessAny = getCourseIdsWithPlatformAccess(enrollmentInputs, nowMs).length > 0;
+  for (const r of enrollmentRows ?? []) {
+    if ((r.access_type as string) === 'on_demand' && enrolledCourseIds.includes(r.course_id)) {
+      onDemandCourseIds.add(r.course_id);
+    }
+  }
 }
-const enrolledCourseIds = (enrollmentRows ?? []).map((r) => r.course_id as string);
-const onDemandCourseIds = new Set(
-  (enrollmentRows ?? []).filter((r) => (r.access_type as string) === 'on_demand').map((r) => r.course_id as string),
-);
 
 const { data: challengeRows } = await supabase
   .from('challenges')
@@ -41,7 +80,7 @@ const { data: challengeRows } = await supabase
 
 const activeChallenges = (challengeRows ?? [])
   .filter((c) => {
-    if (!c.course_id) return true;
+    if (!c.course_id) return hasPlatformAccessAny;
     if (!enrolledCourseIds.includes(c.course_id)) return false;
     if (onDemandCourseIds.has(c.course_id)) {
       return (c.available_for_on_demand as boolean) === true;

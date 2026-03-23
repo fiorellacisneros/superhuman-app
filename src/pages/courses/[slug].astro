@@ -13,6 +13,7 @@ import { badgeDisplayDescription, badgeDisplayName } from '../../lib/badge-displ
 import { getPointsBreakdownByCourse, type CoursePointsBreakdown } from '../../lib/points-breakdown';
 import PointsBreakdownListItem from '../../components/PointsBreakdownListItem.astro';
 import { getBadgeEarnGuideRows } from '../../lib/badge-earn-guide';
+import { hasPlatformAccess, isCourseLivePhaseActive } from '../../lib/course-access';
 
 const iconMap: Record<string, string> = {
   first_submission: 'first_submission',
@@ -49,10 +50,11 @@ let course: {
   description: string | null;
   cover_image: string | null;
   expected_challenges_count?: number | null;
+  ends_at?: string | null;
 } | null = null;
 const { data: bySlug } = await supabase
   .from('courses')
-  .select('id, slug, title, description, cover_image, expected_challenges_count')
+  .select('id, slug, title, description, cover_image, expected_challenges_count, ends_at')
   .eq('slug', courseSlug)
   .maybeSingle();
 if (bySlug) {
@@ -60,7 +62,7 @@ if (bySlug) {
 } else {
   const { data: byId } = await supabase
     .from('courses')
-    .select('id, slug, title, description, cover_image, expected_challenges_count')
+    .select('id, slug, title, description, cover_image, expected_challenges_count, ends_at')
     .eq('id', courseSlug)
     .maybeSingle();
   course = byId as typeof course;
@@ -77,12 +79,22 @@ let isOnDemand = false;
 if (!isAdmin && !isPreviewingThisCourse) {
   const { data: enrollment } = await supabase
     .from('enrollments')
-    .select('course_id, access_type')
+    .select('course_id, access_type, enrolled_at, access_expires_at')
     .eq('user_id', userId)
     .eq('course_id', course.id)
     .maybeSingle();
   if (!enrollment) {
     return Astro.redirect('/dashboard');
+  }
+  const accessNow = Date.now();
+  if (
+    !hasPlatformAccess(
+      (enrollment as { enrolled_at?: string | null }).enrolled_at,
+      (enrollment as { access_expires_at?: string | null }).access_expires_at,
+      accessNow,
+    )
+  ) {
+    return Astro.redirect('/courses?accessExpired=1');
   }
   isOnDemand = (enrollment.access_type as string) === 'on_demand';
 } else if (isPreviewingThisCourse) {
@@ -109,33 +121,14 @@ const [{ data: modulesData }, { data: lessons }] = await Promise.all([
 ]);
 const modules = (modulesData ?? []) as { id: string; title: string; order: number }[];
 
-// Desafíos y puntos por curso (total = retos previstos del curso; completados = al menos una entrega, como en el dashboard)
+// Desafíos y puntos por curso (alumnos: solo retos visibles según cohorte en vivo / on-demand)
 let courseChallengesCompleted = 0;
 let courseChallengesTotal = 1;
 let coursePoints = 0;
 
-const { data: courseChallenges } = await supabase.from('challenges').select('id').eq('course_id', course.id);
-const challengeIds = (courseChallenges ?? []).map((c) => (c as { id: string }).id);
-const rawExpected = course.expected_challenges_count;
-const expectedN = Number(rawExpected);
-if (rawExpected != null && rawExpected !== '' && Number.isFinite(expectedN) && expectedN >= 0) {
-  courseChallengesTotal = expectedN < 1 ? Math.max(challengeIds.length, 1) : expectedN;
-} else {
-  courseChallengesTotal = Math.max(challengeIds.length, 1);
-}
-
-if (challengeIds.length > 0) {
-  const { data: mySubs } = await supabase
-    .from('submissions')
-    .select('challenge_id')
-    .eq('user_id', userId)
-    .in('challenge_id', challengeIds);
-  courseChallengesCompleted = new Set((mySubs ?? []).map((s) => (s as { challenge_id: string }).challenge_id)).size;
-}
-
 const { data: courseRetosRows } = await supabase
   .from('challenges')
-  .select('id, title, points_reward, deadline')
+  .select('id, title, points_reward, deadline, available_for_on_demand')
   .eq('course_id', course.id)
   .eq('is_active', true)
   .order('deadline', { ascending: true });
@@ -144,7 +137,45 @@ const courseRetos = (courseRetosRows ?? []) as {
   title: string | null;
   points_reward: number | null;
   deadline: string | null;
+  available_for_on_demand?: boolean | null;
 }[];
+
+const nowMsChallenges = Date.now();
+const displayCourseRetos = !showAdminView
+  ? courseRetos.filter((r) => {
+      if (isOnDemand) return (r.available_for_on_demand as boolean) === true;
+      return isCourseLivePhaseActive(course.ends_at, nowMsChallenges);
+    })
+  : courseRetos;
+
+if (!showAdminView) {
+  const challengeIds = displayCourseRetos.map((c) => c.id);
+  const rawExpected = course.expected_challenges_count;
+  const expectedN = Number(rawExpected);
+  if (rawExpected != null && rawExpected !== '' && Number.isFinite(expectedN) && expectedN >= 0) {
+    courseChallengesTotal = expectedN < 1 ? Math.max(challengeIds.length, 1) : expectedN;
+  } else {
+    courseChallengesTotal = Math.max(challengeIds.length, 1);
+  }
+
+  if (challengeIds.length > 0) {
+    const { data: mySubs } = await supabase
+      .from('submissions')
+      .select('challenge_id')
+      .eq('user_id', userId)
+      .in('challenge_id', challengeIds);
+    courseChallengesCompleted = new Set((mySubs ?? []).map((s) => (s as { challenge_id: string }).challenge_id)).size;
+  }
+} else {
+  const allIds = courseRetos.map((c) => c.id);
+  const rawExpected = course.expected_challenges_count;
+  const expectedN = Number(rawExpected);
+  if (rawExpected != null && rawExpected !== '' && Number.isFinite(expectedN) && expectedN >= 0) {
+    courseChallengesTotal = expectedN < 1 ? Math.max(allIds.length, 1) : expectedN;
+  } else {
+    courseChallengesTotal = Math.max(allIds.length, 1);
+  }
+}
 
 // Puntos específicos de este curso para el usuario actual
 const { data: myCoursePointsRows } = await supabase
@@ -479,9 +510,9 @@ courseBadges = isOnDemand
                   </svg>
                 </a>
               </div>
-              {courseRetos.length > 0 ? (
+              {displayCourseRetos.length > 0 ? (
                 <ul class="mt-3 h-[260px] shrink-0 space-y-2 overflow-y-auto pt-1 pb-4 pr-1" style="scrollbar-color: #404040 transparent;">
-                  {courseRetos.map((r) => (
+                  {displayCourseRetos.map((r) => (
                     <li>
                       <a
                         href="/challenges"

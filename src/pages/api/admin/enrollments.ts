@@ -4,6 +4,12 @@ import { requireAdmin } from '../../../lib/api-admin';
 import { isRateLimited } from '../../../lib/rate-limit';
 import { recordAdminAudit } from '../../../lib/security-audit';
 
+function defaultAccessExpiresIso(): string {
+  const d = new Date();
+  d.setUTCFullYear(d.getUTCFullYear() + 1);
+  return d.toISOString();
+}
+
 export const POST: APIRoute = async ({ request, locals }) => {
   const admin = await requireAdmin(locals as any);
   if (admin instanceof Response) return admin;
@@ -64,6 +70,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
           user_id: user_id.trim(),
           course_id: courseId,
           enrolled_at: new Date().toISOString(),
+          access_expires_at: defaultAccessExpiresIso(),
           access_type: accessType((formData.get(`access_type_${courseId}`) as string) ?? 'live'),
         })),
       );
@@ -124,6 +131,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
           user_id: user_id.trim(),
           course_id: course_id.trim(),
           enrolled_at: new Date().toISOString(),
+          access_expires_at: defaultAccessExpiresIso(),
           access_type: accessType((formData.get('access_type') as string) ?? 'live'),
         });
       }

@@ -4,11 +4,14 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import { isLessonCompleted } from '../../lib/lessons';
 import { getPreviewContext } from '../../lib/preview';
+import { getCourseIdsWithPlatformAccess, type EnrollmentAccessInput } from '../../lib/course-access';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
   return redirectToSignIn();
 }
+
+const accessExpiredNotice = Astro.url.searchParams.get('accessExpired') === '1';
 
 const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
@@ -38,11 +41,26 @@ if (role === 'admin' && !isPreviewMode) {
 } else {
   const { data: enrollmentRows } = await supabase
     .from('enrollments')
-    .select('course_id, courses(id, slug, title, cover_image, description)')
+    .select('course_id, enrolled_at, access_expires_at, access_type, courses(id, slug, title, cover_image, description)')
     .eq('user_id', userId);
+  const nowMs = Date.now();
+  const inputs: EnrollmentAccessInput[] = (enrollmentRows ?? []).map((row) => ({
+    course_id: row.course_id as string,
+    access_type: (row as { access_type?: string | null }).access_type,
+    enrolled_at: (row as { enrolled_at?: string | null }).enrolled_at,
+    access_expires_at: (row as { access_expires_at?: string | null }).access_expires_at,
+  }));
+  const allowedIds = new Set(getCourseIdsWithPlatformAccess(inputs, nowMs));
   enrolledCourseRows = (enrollmentRows ?? [])
-    .map((row) => (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null }).courses)
-    .filter((course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } => Boolean(course?.id));
+    .map(
+      (row) =>
+        (row as { courses: { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } | null })
+          .courses,
+    )
+    .filter(
+      (course): course is { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null } =>
+        Boolean(course?.id) && allowedIds.has(course.id),
+    );
 }
 
 const enrolledIds = enrolledCourseRows.map((course) => course.id);
@@ -80,6 +98,11 @@ for (const course of enrolledCourseRows) {
 ---
 
 <DashboardLayout role={isPreviewMode ? 'student' : (role === 'admin' ? 'admin' : 'student')}>
+  {accessExpiredNotice && role === 'student' && !isPreviewMode && (
+    <div class="-mx-4 -mt-6 mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 md:-mx-6 md:px-6" role="status">
+      Tu acceso a la plataforma para ese curso ha vencido (1 año desde la inscripción). Si necesitas extenderlo, contacta al equipo.
+    </div>
+  )}
   {isPreviewMode && (
     <div class="-mx-4 -mt-6 mb-6 flex flex-wrap items-center justify-between gap-2 bg-background/95 px-4 py-3 md:-mx-6 md:mb-8 md:gap-4 md:px-6">
       <span class="flex items-center gap-2 text-sm font-medium text-lime">

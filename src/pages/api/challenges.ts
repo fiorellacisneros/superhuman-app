@@ -1,6 +1,11 @@
 import type { APIRoute } from 'astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import { safeRedirectPath, sanitizeHttpUrl, withToastParams } from '../../lib/request-security';
+import {
+  canUserSubmitToChallenge,
+  getCourseIdsWithPlatformAccess,
+  type EnrollmentAccessInput,
+} from '../../lib/course-access';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const { isAuthenticated, userId, redirectToSignIn } = locals.auth();
@@ -27,9 +32,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const db = getSupabaseServiceRoleClient();
+  const nowMs = Date.now();
+
+  const { data: allEnrollRows } = await db
+    .from('enrollments')
+    .select('course_id, access_type, enrolled_at, access_expires_at')
+    .eq('user_id', userId);
+  const enrollmentInputs: EnrollmentAccessInput[] = (allEnrollRows ?? []).map((r) => ({
+    course_id: r.course_id as string,
+    access_type: r.access_type as string | null,
+    enrolled_at: r.enrolled_at as string | null,
+    access_expires_at: r.access_expires_at as string | null,
+  }));
+  const userHasAnyPlatformAccess = getCourseIdsWithPlatformAccess(enrollmentInputs, nowMs).length > 0;
+
   const { data: challenge } = await db
     .from('challenges')
-    .select('is_active, course_id')
+    .select('is_active, course_id, available_for_on_demand')
     .eq('id', challenge_id.trim())
     .maybeSingle();
   if (!challenge || !challenge.is_active) {
@@ -39,19 +58,29 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  if (challenge.course_id) {
-    const { data: enrollment } = await db
-      .from('enrollments')
-      .select('user_id')
-      .eq('user_id', userId)
-      .eq('course_id', challenge.course_id as string)
-      .maybeSingle();
-    if (!enrollment) {
+  const courseId = challenge.course_id as string | null;
+  let courseEndsAt: string | null | undefined;
+  let enrollmentForCourse: EnrollmentAccessInput | null = null;
+
+  if (courseId) {
+    const row = enrollmentInputs.find((e) => e.course_id === courseId);
+    if (!row) {
       return new Response(JSON.stringify({ error: 'not enrolled in this course' }), {
         status: 403,
         headers: { 'Content-Type': 'application/json' },
       });
     }
+    enrollmentForCourse = row;
+    const { data: courseRow } = await db.from('courses').select('ends_at').eq('id', courseId).maybeSingle();
+    courseEndsAt = (courseRow as { ends_at?: string | null } | null)?.ends_at;
+  }
+
+  const allowed = canUserSubmitToChallenge(enrollmentForCourse, courseEndsAt, challenge, nowMs, userHasAnyPlatformAccess);
+  if (!allowed) {
+    return new Response(JSON.stringify({ error: 'challenge not available for your enrollment' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   const { data: existing } = await db

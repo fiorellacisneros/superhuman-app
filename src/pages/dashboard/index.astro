@@ -14,6 +14,13 @@ import { getPointsBreakdownByCourse, type CoursePointsBreakdown } from '../../li
 import PointsBreakdownListItem from '../../components/PointsBreakdownListItem.astro';
 import { getBadgeEarnGuideRows, type BadgeEarnRow } from '../../lib/badge-earn-guide';
 import { APP_BIRTHDAY_TIMEZONE, daysUntilBirthdayAnniversary } from '../../lib/birthday';
+import {
+  getCourseIdsWithPlatformAccess,
+  getEligibleCourseIdsForLiveChallenges,
+  hasPlatformAccess,
+  isCourseLivePhaseActive,
+  type EnrollmentAccessInput,
+} from '../../lib/course-access';
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
 
@@ -200,6 +207,8 @@ type DashboardBadge = { id: string; name: string; description: string | null; co
 let dashboardBadges: DashboardBadge[] = [];
 let studentTotalExpectedChallenges = 0;
 let studentChallengesCompleted = 0;
+/** Mostrar tarjeta azul "Desafíos" solo si hay retos en alcance (cohorte en vivo / on-demand con acceso). */
+let showChallengeProgressCard = false;
 let enrolledIds: string[] = [];
 let enrolledCourses: { id: string; slug: string; title: string; cover_image: string | null; description: string | null; totalLessons: number; completedLessons: number }[] = [];
 let leaderboard: { id: string; name: string; avatarId: string | null; points: number }[] = [];
@@ -218,7 +227,9 @@ if (role !== 'admin' || preview) {
       supabase.from('user_badges').select('badge_id, earned_at').eq('user_id', userId),
       supabase
         .from('enrollments')
-        .select('course_id, access_type, courses(id, slug, title, cover_image, description, expected_challenges_count)')
+        .select(
+          'course_id, access_type, enrolled_at, access_expires_at, courses(id, slug, title, cover_image, description, expected_challenges_count, ends_at)',
+        )
         .eq('user_id', userId),
     ]);
     const badgeRows = badgeRowsRes.data ?? null;
@@ -244,14 +255,66 @@ if (role !== 'admin' || preview) {
       earnedCount: earnedCountMap.get(b.id) ?? 0,
     };
     });
-    const enrollmentRows = enrollmentRowsRes.data ?? null;
-    const fromEnrollments = (enrollmentRows ?? []).some((r) => (r.access_type as string) !== 'on_demand');
-    hasLiveEnrollment = role === 'admin' && preview ? previewAs === 'live' : fromEnrollments;
+    const enrollmentRowsRaw = enrollmentRowsRes.data ?? [];
+    const nowAccessMs = Date.now();
+
+    type EnrolledCourseRow = { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null; expected_challenges_count?: number | null };
+    type EnrollmentRowDb = {
+      course_id: string;
+      access_type?: string | null;
+      enrolled_at?: string | null;
+      access_expires_at?: string | null;
+      courses: (EnrolledCourseRow & { ends_at?: string | null }) | null;
+    };
+
+    let enrolledCourseRows: EnrolledCourseRow[] = [];
+    let platformCourseIdsList: string[] = [];
+    let challengeEligibleIds: string[] = [];
+
+    if (role === 'admin' && preview) {
+      hasLiveEnrollment = previewAs === 'live';
+      const { data: allCourses } = await supabase
+        .from('courses')
+        .select('id, slug, title, cover_image, description, expected_challenges_count')
+        .order('title');
+      enrolledCourseRows = (allCourses ?? []).filter((c): c is EnrolledCourseRow => Boolean(c?.id));
+      platformCourseIdsList = enrolledCourseRows.map((c) => c.id);
+      challengeEligibleIds = [...platformCourseIdsList];
+    } else {
+      const courseEndsById = new Map<string, string | null | undefined>();
+      const enrollmentInputs: EnrollmentAccessInput[] = [];
+      for (const row of enrollmentRowsRaw as EnrollmentRowDb[]) {
+        const c = row.courses;
+        if (c?.id) courseEndsById.set(c.id, c.ends_at ?? null);
+        enrollmentInputs.push({
+          course_id: row.course_id,
+          access_type: row.access_type,
+          enrolled_at: row.enrolled_at,
+          access_expires_at: row.access_expires_at,
+        });
+      }
+      platformCourseIdsList = getCourseIdsWithPlatformAccess(enrollmentInputs, nowAccessMs);
+      const platformSet = new Set(platformCourseIdsList);
+      challengeEligibleIds = getEligibleCourseIdsForLiveChallenges(enrollmentInputs, courseEndsById, nowAccessMs);
+
+      const hasActiveLiveCohort = (enrollmentRowsRaw as EnrollmentRowDb[]).some((row) => {
+        if (row.access_type === 'on_demand') return false;
+        if (!hasPlatformAccess(row.enrolled_at, row.access_expires_at, nowAccessMs)) return false;
+        return isCourseLivePhaseActive(row.courses?.ends_at ?? null, nowAccessMs);
+      });
+      hasLiveEnrollment = hasActiveLiveCohort;
+
+      enrolledCourseRows = (enrollmentRowsRaw as EnrollmentRowDb[])
+        .filter((row) => platformSet.has(row.course_id))
+        .map((row) => row.courses)
+        .filter((course): course is EnrolledCourseRow => Boolean(course?.id));
+    }
+
     dashboardBadges = hasLiveEnrollment
       ? allDashboardBadges
       : allDashboardBadges.filter((b) => b.condition_type && ON_DEMAND_BADGE_CONDITION_TYPES.includes(b.condition_type as 'first_submission' | 'early_bird' | 'module_complete' | 'course_complete'));
 
-    const enrolledCourseIdsForPoints = [...new Set((enrollmentRows ?? []).map((r) => r.course_id as string).filter(Boolean))];
+    const enrolledCourseIdsForPoints = [...new Set(platformCourseIdsList)];
     if (enrolledCourseIdsForPoints.length > 0) {
       const { data: myPointsRows } = await supabase
         .from('user_course_points')
@@ -260,29 +323,18 @@ if (role !== 'admin' || preview) {
         .in('course_id', enrolledCourseIdsForPoints);
       points = (myPointsRows ?? []).reduce((a, r) => a + (r.points ?? 0), 0);
     }
-    type EnrolledCourseRow = { id: string; slug: string | null; title: string; cover_image: string | null; description: string | null; expected_challenges_count?: number | null };
-    let enrolledCourseRows = (enrollmentRows ?? [])
-      .map((row) => (row as { courses: EnrolledCourseRow | null }).courses)
-      .filter((course): course is EnrolledCourseRow => Boolean(course?.id));
-
-    if (role === 'admin' && preview) {
-      const { data: allCourses } = await supabase
-        .from('courses')
-        .select('id, slug, title, cover_image, description, expected_challenges_count')
-        .order('title');
-      enrolledCourseRows = (allCourses ?? []).filter(
-        (c): c is EnrolledCourseRow => Boolean(c?.id),
-      );
-    }
 
     enrolledIds = enrolledCourseRows.map((course) => course.id);
 
-    // Total retos previstos por curso inscrito (o todos en vista previa admin). null/omitido cuenta como 1 (Number(null) sería 0 y rompía el total).
-    const uniqueCourseIds = [...new Set(enrolledIds.filter(Boolean))];
-    if (uniqueCourseIds.length > 0) {
-      const { data: courseTotals } = await supabase.from('courses').select('id, expected_challenges_count').in('id', uniqueCourseIds);
+    // Retos previstos solo en cursos con fase en vivo / on-demand según reglas (cohortes paralelos no se mezclan).
+    const challengeExpectedCourseIds = [...new Set(challengeEligibleIds.filter(Boolean))];
+    if (challengeExpectedCourseIds.length > 0) {
+      const { data: courseTotals } = await supabase
+        .from('courses')
+        .select('id, expected_challenges_count')
+        .in('id', challengeExpectedCourseIds);
       const byId = new Map((courseTotals ?? []).map((r) => [r.id as string, (r as { expected_challenges_count?: unknown }).expected_challenges_count]));
-      studentTotalExpectedChallenges = uniqueCourseIds.reduce((sum, cid) => {
+      studentTotalExpectedChallenges = challengeExpectedCourseIds.reduce((sum, cid) => {
         const raw = byId.get(cid);
         if (raw === null || raw === undefined || raw === '') return sum + 1;
         const n = Number(raw);
@@ -292,21 +344,29 @@ if (role !== 'admin' || preview) {
       studentTotalExpectedChallenges = 0;
     }
 
-    // Retos con al menos una entrega: del curso inscrito O retos globales (sin curso), como en /challenges
-    if (enrolledIds.length > 0) {
-      const [{ data: chByCourse }, { data: chGlobal }] = await Promise.all([
-        supabase.from('challenges').select('id').in('course_id', enrolledIds),
-        supabase.from('challenges').select('id').is('course_id', null).eq('is_active', true),
-      ]);
-      const enrolledChallengeIds = [
-        ...new Set(
-          [...(chByCourse ?? []), ...(chGlobal ?? [])].map((c) => c.id as string).filter(Boolean),
-        ),
-      ];
-      if (enrolledChallengeIds.length > 0) {
-        const { data: subRows } = await supabase.from('submissions').select('challenge_id').eq('user_id', userId).in('challenge_id', enrolledChallengeIds);
-        studentChallengesCompleted = new Set((subRows ?? []).map((s) => s.challenge_id)).size;
-      }
+    const chByCoursePromise =
+      challengeEligibleIds.length > 0
+        ? supabase.from('challenges').select('id').in('course_id', challengeEligibleIds)
+        : Promise.resolve({ data: [] as { id: string }[] });
+    const chGlobalPromise =
+      platformCourseIdsList.length > 0
+        ? supabase.from('challenges').select('id').is('course_id', null).eq('is_active', true)
+        : Promise.resolve({ data: [] as { id: string }[] });
+
+    const [{ data: chByCourse }, { data: chGlobal }] = await Promise.all([chByCoursePromise, chGlobalPromise]);
+    const enrolledChallengeIds = [
+      ...new Set(
+        [...(chByCourse ?? []), ...(chGlobal ?? [])].map((c) => c.id as string).filter(Boolean),
+      ),
+    ];
+    showChallengeProgressCard = enrolledChallengeIds.length > 0;
+    if (enrolledChallengeIds.length > 0) {
+      const { data: subRows } = await supabase
+        .from('submissions')
+        .select('challenge_id')
+        .eq('user_id', userId)
+        .in('challenge_id', enrolledChallengeIds);
+      studentChallengesCompleted = new Set((subRows ?? []).map((s) => s.challenge_id)).size;
     }
 
     let leaderboardRowsRes: { data: { id: string; display_name: string | null; avatar_id: string | null }[] | null } = { data: [] };
@@ -477,7 +537,7 @@ if (role !== 'admin' || preview) {
       .select('course_id, points')
       .eq('user_id', userId);
     const courseIdsWithPts = new Set((myPointsByCourseRows ?? []).map((r) => r.course_id as string));
-    const breakdownCourseIds = [...new Set([...courseIdsWithPts, ...enrolledIds])];
+    const breakdownCourseIds = [...new Set([...courseIdsWithPts, ...platformCourseIdsList])];
     if (breakdownCourseIds.length > 0) {
       pointsBreakdownByCourse = await getPointsBreakdownByCourse(supabase, userId, breakdownCourseIds);
     }
@@ -836,14 +896,16 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
               Sigue tus puntos y cómo creces cada semana.
             </p>
 
-            <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-              <div class="flex min-w-0 flex-col rounded-xl bg-[#012EDC] p-3 sm:p-5">
-                <span class="font-manrope text-2xl font-semibold text-white">Desafíos</span>
-                <div class="mt-8 flex items-baseline gap-0.5">
-                  <span class="font-manrope text-2xl font-semibold leading-none text-white sm:text-[48px]">{studentChallengesCompleted}</span>
-                  <span class="font-manrope text-2xl font-semibold leading-none text-[#436AFE] sm:text-[48px]">/{studentTotalExpectedChallenges > 0 ? studentTotalExpectedChallenges : 1}</span>
+            <div class={`mt-4 grid grid-cols-1 gap-3 sm:gap-4 ${showChallengeProgressCard ? 'sm:grid-cols-2' : ''}`}>
+              {showChallengeProgressCard && (
+                <div class="flex min-w-0 flex-col rounded-xl bg-[#012EDC] p-3 sm:p-5">
+                  <span class="font-manrope text-2xl font-semibold text-white">Desafíos</span>
+                  <div class="mt-8 flex items-baseline gap-0.5">
+                    <span class="font-manrope text-2xl font-semibold leading-none text-white sm:text-[48px]">{studentChallengesCompleted}</span>
+                    <span class="font-manrope text-2xl font-semibold leading-none text-[#436AFE] sm:text-[48px]">/{studentTotalExpectedChallenges > 0 ? studentTotalExpectedChallenges : 1}</span>
+                  </div>
                 </div>
-              </div>
+              )}
               <div class="flex min-w-0 flex-col rounded-xl bg-[#F5B800] p-3 sm:p-5">
                 <div class="flex items-start justify-between gap-2">
                   <span class="font-manrope text-2xl font-semibold text-[#1A1A1A]">Puntos</span>

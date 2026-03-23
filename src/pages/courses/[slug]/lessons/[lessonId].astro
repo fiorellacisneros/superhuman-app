@@ -4,6 +4,7 @@ import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../../lib/supabase';
 import { formatDayAndDate, formatTime } from '../../../../lib/format-date';
 import { getPreviewContext } from '../../../../lib/preview';
+import { hasPlatformAccess } from '../../../../lib/course-access';
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -48,12 +49,22 @@ let isOnDemand = false;
 if (!isAdmin && !isPreviewingThisCourse) {
   const { data: enrollment } = await supabase
     .from('enrollments')
-    .select('course_id, access_type')
+    .select('course_id, access_type, enrolled_at, access_expires_at')
     .eq('user_id', userId)
     .eq('course_id', course.id)
     .maybeSingle();
   if (!enrollment) {
     return Astro.redirect('/dashboard');
+  }
+  const accessNow = Date.now();
+  if (
+    !hasPlatformAccess(
+      (enrollment as { enrolled_at?: string | null }).enrolled_at,
+      (enrollment as { access_expires_at?: string | null }).access_expires_at,
+      accessNow,
+    )
+  ) {
+    return Astro.redirect('/courses?accessExpired=1');
   }
   isOnDemand = (enrollment.access_type as string) === 'on_demand';
 }
