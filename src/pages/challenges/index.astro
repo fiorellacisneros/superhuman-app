@@ -129,7 +129,8 @@ function daysLeft(deadline: string | null): string {
           const allowSend = !isApproved;
           const canUpdateSubmission = submitted && allowSend;
           const canCreateSubmission = !submitted && allowSend;
-          const showPastDeadlineTag = isPastDeadline && !isApproved;
+          // Solo avisar "plazo vencido" si aún puede enviar o reenviar; si ya entregó y está en revisión, el estado principal es "En revisión".
+          const showPastDeadlineTag = isPastDeadline && !isApproved && !isPending;
           const statusLabel = isApproved
             ? 'Completado'
             : isPending
