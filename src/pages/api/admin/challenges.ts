@@ -3,6 +3,7 @@ import { safeRedirectPath, withToastParams } from '../../../lib/request-security
 import { requireAdmin } from '../../../lib/api-admin';
 import { isRateLimited } from '../../../lib/rate-limit';
 import { recordAdminAudit } from '../../../lib/security-audit';
+import { parseAdminDateTimeLocalToIsoUtc } from '../../../lib/challenge-deadline';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const admin = await requireAdmin(locals as any);
@@ -30,13 +31,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const pointsRaw = formData.get('points_reward');
     const points_reward = pointsRaw != null && pointsRaw !== '' ? Number(pointsRaw) : 30;
     const deadlineRaw = formData.get('deadline');
-    const deadline = typeof deadlineRaw === 'string' && deadlineRaw.trim() ? deadlineRaw.trim() : null;
+    const deadlineTrim =
+      typeof deadlineRaw === 'string' && deadlineRaw.trim() ? deadlineRaw.trim() : null;
+    const deadline = deadlineTrim ? parseAdminDateTimeLocalToIsoUtc(deadlineTrim) : null;
+    if (deadlineTrim && !deadline) {
+      return errorRedirect('Fecha límite inválida (usa el calendario; hora según Perú)', 303);
+    }
     const course_id = formData.get('course_id');
     const courseId = typeof course_id === 'string' && course_id.trim() ? course_id.trim() : null;
     const activateNow = formData.get('activate_now') === 'on' || formData.get('activate_now') === 'true';
     const availableForOnDemand = formData.get('available_for_on_demand') === 'on' || formData.get('available_for_on_demand') === 'true';
     const scheduledAtRaw = formData.get('scheduled_at');
-    const scheduled_at = typeof scheduledAtRaw === 'string' && scheduledAtRaw.trim() ? scheduledAtRaw.trim() : null;
+    const scheduledTrim =
+      typeof scheduledAtRaw === 'string' && scheduledAtRaw.trim() ? scheduledAtRaw.trim() : null;
+    const scheduled_at = scheduledTrim ? parseAdminDateTimeLocalToIsoUtc(scheduledTrim) : null;
+    if (scheduledTrim && !scheduled_at) {
+      return errorRedirect('Fecha de activación inválida (hora según Perú)', 303);
+    }
 
     if (!title) {
       return errorRedirect('El título es obligatorio', 303);
@@ -112,7 +123,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const update: Record<string, unknown> = {};
     if (typeof title === 'string') update.title = title.trim().slice(0, 140);
     if (typeof description === 'string') update.description = description.trim().slice(0, 2000) || null;
-    if (typeof deadline === 'string') update.deadline = deadline.trim() || null;
+    if (typeof deadline === 'string') {
+      const t = deadline.trim();
+      if (!t) {
+        update.deadline = null;
+      } else {
+        const parsed = parseAdminDateTimeLocalToIsoUtc(t);
+        if (!parsed) return errorRedirect('Fecha límite inválida (hora según Perú)', 303);
+        update.deadline = parsed;
+      }
+    }
     if (typeof points_reward === 'string' && points_reward !== '') {
       const parsedPoints = Number(points_reward);
       if (!Number.isFinite(parsedPoints) || parsedPoints < 0 || parsedPoints > 1000) {

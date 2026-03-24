@@ -3,6 +3,7 @@ import '../../../styles/global.css';
 import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 import { renderMarkdown } from '../../../lib/markdown';
+import { formatDateTime } from '../../../lib/format-date';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -92,11 +93,7 @@ const pendingSubmissions = challenges.reduce((acc, c) => acc + c.pendingCount, 0
 
 function formatDeadline(iso: string | null): string {
   if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return iso;
-  }
+  return formatDateTime(iso, 'America/Lima');
 }
 
 function tabUrl(nextView: string): string {
@@ -151,11 +148,12 @@ function tabUrl(nextView: string): string {
               <input id="challenge-points" type="number" name="points_reward" value="30" min="0" class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" />
             </div>
             <div>
-              <label for="challenge-deadline" class="block text-xs font-medium text-muted">Fecha límite</label>
+              <label for="challenge-deadline" class="block text-xs font-medium text-muted">Fecha límite (hora Perú — Lima)</label>
               <div class="relative mt-1.5">
                 <input id="challenge-deadline" type="text" name="deadline" readonly class="w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Elegir fecha y hora" autocomplete="off" />
                 <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
               </div>
+              <p class="mt-1 text-[11px] text-muted/80">Los alumnos ven el plazo convertido a la zona de su perfil; el cierre real es siempre a la hora que elijas aquí (Lima).</p>
             </div>
           </div>
           <div>
@@ -211,7 +209,7 @@ function tabUrl(nextView: string): string {
               <span class="text-sm text-white">Disponible para on-demand</span>
             </label>
             <div id="scheduled-at-wrap" class="hidden min-w-[240px] flex-1">
-              <label for="challenge-scheduled" class="block text-xs font-medium text-muted">Programar para</label>
+              <label for="challenge-scheduled" class="block text-xs font-medium text-muted">Programar para (hora Perú — Lima)</label>
               <div class="relative mt-1.5">
                 <input id="challenge-scheduled" type="text" name="scheduled_at" readonly class="w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Elegir fecha y hora" autocomplete="off" />
                 <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>

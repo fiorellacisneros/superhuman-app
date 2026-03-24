@@ -3,6 +3,7 @@ import '../../../../styles/global.css';
 import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../../lib/supabase';
 import { renderMarkdown } from '../../../../lib/markdown';
+import { utcIsoToAdminLocalFlatpickr } from '../../../../lib/challenge-deadline';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -46,7 +47,7 @@ const courses = (coursesRows ?? []).map((c) => ({ id: c.id, title: c.title ?? 'S
 const selectedCourse = courses.find((c) => c.id === (challenge.course_id as string)) ?? null;
 const selectedCourseLabel = selectedCourse?.title ?? '— Sin curso —';
 
-const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string).toISOString().slice(0, 16) : '';
+const deadlineLocal = utcIsoToAdminLocalFlatpickr(challenge.deadline as string | null);
 ---
 
 <DashboardLayout>
@@ -82,7 +83,7 @@ const deadlineLocal = challenge.deadline ? new Date(challenge.deadline as string
       </div>
       <div class="grid gap-6 sm:grid-cols-2">
         <div>
-          <label for="edit-deadline" class="block text-xs font-medium text-muted">Fecha límite</label>
+          <label for="edit-deadline" class="block text-xs font-medium text-muted">Fecha límite (hora Perú — Lima)</label>
           <div class="relative mt-1.5">
             <input id="edit-deadline" type="text" name="deadline" value={deadlineLocal} readonly class="w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime" placeholder="Elegir fecha y hora" autocomplete="off" />
             <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
