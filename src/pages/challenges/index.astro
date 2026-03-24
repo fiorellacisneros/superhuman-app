@@ -4,6 +4,8 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
 import { getPreviewContext } from '../../lib/preview';
 import { renderMarkdown } from '../../lib/markdown';
+import { formatDateTime } from '../../lib/format-date';
+import { formatDeadlineRelativeLabel } from '../../lib/challenge-deadline';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -11,8 +13,9 @@ if (!isAuthenticated || !userId) {
 }
 
 const supabase = getSupabaseServiceRoleClient();
-const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+const { data: userRow } = await supabase.from('users').select('role, timezone').eq('id', userId).maybeSingle();
 const role = (userRow?.role as string) ?? 'student';
+const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone ?? null;
 const { preview } = getPreviewContext(Astro);
 const isPreviewMode = role === 'admin' && preview;
 
@@ -76,16 +79,7 @@ for (const s of mySubmissions ?? []) {
   });
 }
 
-function daysLeft(deadline: string | null): string {
-  if (!deadline) return '';
-  const d = new Date(deadline);
-  const now = new Date();
-  const diff = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  if (diff < 0) return 'Vencido';
-  if (diff === 0) return 'Hoy';
-  if (diff === 1) return '1 día restante';
-  return `${diff} días restantes`;
-}
+const nowMs = Date.now();
 ---
 
 <DashboardLayout role="student">
@@ -124,7 +118,6 @@ function daysLeft(deadline: string | null): string {
           const isApproved = Boolean(submission && submission.reviewed && submission.approved);
           const isRejected = Boolean(submission && submission.reviewed && !submission.approved);
           const deadlineMs = ch.deadline ? new Date(ch.deadline).getTime() : null;
-          const nowMs = Date.now();
           const isPastDeadline = !ch.isOnDemand && deadlineMs !== null && nowMs >= deadlineMs;
           const allowSend = !isApproved;
           const canUpdateSubmission = submitted && allowSend;
@@ -171,7 +164,13 @@ function daysLeft(deadline: string | null): string {
                   )}
                   <div class="mt-3 flex flex-wrap items-center gap-3">
                     <span class="rounded bg-lime/15 px-2 py-0.5 text-xs font-semibold text-lime">{ch.points_reward} pts</span>
-                    {ch.deadline && !ch.isOnDemand && <span class="text-xs text-muted">{daysLeft(ch.deadline)}</span>}
+                    {ch.deadline && !ch.isOnDemand && (
+                      <span class="text-xs text-muted" title="El cierre es el mismo instante para todos; la hora mostrada es la de tu perfil.">
+                        <span class="font-medium text-white/80">{formatDeadlineRelativeLabel(ch.deadline, nowMs)}</span>
+                        <span class="mx-1 text-muted">·</span>
+                        {formatDateTime(ch.deadline, userTimezone)}
+                      </span>
+                    )}
                     {ch.isOnDemand && <span class="text-xs text-muted">Sin fecha límite</span>}
                     {showPastDeadlineTag && (
                       <span
