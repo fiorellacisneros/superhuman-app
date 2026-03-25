@@ -121,19 +121,64 @@ for (const u of studentRows ?? []) {
     {students.length > 0 ? (
       <div class="relative overflow-visible rounded-xl border border-transparent bg-surface shadow-[0_8px_30px_rgba(0,0,0,0.18)]">
         <div class="-mx-2 overflow-x-auto overflow-y-visible px-2 sm:mx-0 sm:px-0">
-        <table class="w-full min-w-[760px] text-left text-sm">
+        <table id="admin-students-table" class="w-full min-w-[760px] text-left text-sm">
           <thead>
             <tr class="border-b border-transparent bg-surface-2/40 text-muted">
-              <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Estudiante</th>
-              <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]">Puntos</th>
-              <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]">Insignias</th>
-              <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">Cursos</th>
-              <th class="px-4 pb-3 pt-3 text-right text-[11px] font-semibold uppercase tracking-[0.14em]">Acciones</th>
+              <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]" scope="col" data-sort-th="name">
+                <button
+                  type="button"
+                  class="student-sort-btn group m-0 inline-flex max-w-full items-center gap-1.5 border-0 bg-transparent p-0 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-muted transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-lime/60"
+                  data-sort-key="name"
+                  aria-label="Ordenar por estudiante"
+                >
+                  <span>ESTUDIANTE</span>
+                  <span class="inline-flex shrink-0 flex-col leading-none" aria-hidden="true">
+                    <i class="bi bi-caret-up-fill sort-caret-up text-[9px] text-white/25 transition" />
+                    <i class="bi bi-caret-down-fill sort-caret-down -mt-1 text-[9px] text-white/25 transition" />
+                  </span>
+                </button>
+              </th>
+              <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]" scope="col" data-sort-th="points">
+                <button
+                  type="button"
+                  class="student-sort-btn group m-0 inline-flex w-full items-center justify-center gap-1.5 border-0 bg-transparent p-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-lime/60"
+                  data-sort-key="points"
+                  aria-label="Ordenar por puntos"
+                >
+                  <span>PUNTOS</span>
+                  <span class="inline-flex shrink-0 flex-col leading-none" aria-hidden="true">
+                    <i class="bi bi-caret-up-fill sort-caret-up text-[9px] text-white/25 transition" />
+                    <i class="bi bi-caret-down-fill sort-caret-down -mt-1 text-[9px] text-white/25 transition" />
+                  </span>
+                </button>
+              </th>
+              <th class="px-4 pb-3 pt-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em]" scope="col" data-sort-th="badges">
+                <button
+                  type="button"
+                  class="student-sort-btn group m-0 inline-flex w-full items-center justify-center gap-1.5 border-0 bg-transparent p-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-lime/60"
+                  data-sort-key="badges"
+                  aria-label="Ordenar por insignias"
+                >
+                  <span>INSIGNIAS</span>
+                  <span class="inline-flex shrink-0 flex-col leading-none" aria-hidden="true">
+                    <i class="bi bi-caret-up-fill sort-caret-up text-[9px] text-white/25 transition" />
+                    <i class="bi bi-caret-down-fill sort-caret-down -mt-1 text-[9px] text-white/25 transition" />
+                  </span>
+                </button>
+              </th>
+              <th class="px-4 pb-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.14em]">CURSOS</th>
+              <th class="px-4 pb-3 pt-3 text-right text-[11px] font-semibold uppercase tracking-[0.14em]">ACCIONES</th>
             </tr>
           </thead>
           <tbody>
             {students.map((s) => (
-              <tr class="border-b border-transparent/60 transition-colors hover:bg-surface-2/30 last:border-0">
+              <tr
+                class="border-b border-transparent/60 transition-colors hover:bg-surface-2/30 last:border-0"
+                data-student-row
+                data-student-name={s.display_name}
+                data-student-points={s.points}
+                data-student-badges={s.badgesCount}
+              >
                 <td class="px-4 py-4">
                   <div class="flex items-center gap-3">
                     <div class="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-transparent bg-surface-2">
@@ -272,6 +317,75 @@ for (const u of studentRows ?? []) {
   </section>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
+      const table = document.getElementById('admin-students-table');
+      const tbody = table?.querySelector('tbody');
+      const sortButtons = Array.from(document.querySelectorAll('.student-sort-btn'));
+      if (tbody && sortButtons.length) {
+        /** @type {'name' | 'points' | 'badges' | null} */
+        let sortKey = null;
+        /** @type {'asc' | 'desc'} */
+        let sortDir = 'asc';
+
+        function updateSortUi() {
+          for (const btn of sortButtons) {
+            const key = /** @type {'name' | 'points' | 'badges'} */ (btn.dataset.sortKey);
+            const th = btn.closest('[data-sort-th]');
+            const up = btn.querySelector('.sort-caret-up');
+            const down = btn.querySelector('.sort-caret-down');
+            const active = sortKey === key;
+            th?.setAttribute('aria-sort', active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none');
+            for (const el of [up, down]) {
+              if (!(el instanceof HTMLElement)) continue;
+              el.classList.remove('text-lime', 'text-white/25');
+              el.classList.add('text-white/25');
+            }
+            if (active && up instanceof HTMLElement && down instanceof HTMLElement) {
+              if (sortDir === 'asc') {
+                up.classList.remove('text-white/25');
+                up.classList.add('text-lime');
+              } else {
+                down.classList.remove('text-white/25');
+                down.classList.add('text-lime');
+              }
+            }
+          }
+        }
+
+        function applySort() {
+          if (!sortKey) return;
+          const rows = Array.from(tbody.querySelectorAll('tr[data-student-row]'));
+          rows.sort((a, b) => {
+            if (sortKey === 'name') {
+              const na = (a.getAttribute('data-student-name') ?? '').trim();
+              const nb = (b.getAttribute('data-student-name') ?? '').trim();
+              const cmp = na.localeCompare(nb, 'es', { sensitivity: 'base' });
+              return sortDir === 'asc' ? cmp : -cmp;
+            }
+            const attr = sortKey === 'points' ? 'data-student-points' : 'data-student-badges';
+            const va = Number(a.getAttribute(attr) ?? 0);
+            const vb = Number(b.getAttribute(attr) ?? 0);
+            return sortDir === 'asc' ? va - vb : vb - va;
+          });
+          for (const row of rows) tbody.appendChild(row);
+        }
+
+        for (const btn of sortButtons) {
+          btn.addEventListener('click', () => {
+            const key = btn.dataset.sortKey;
+            if (key !== 'name' && key !== 'points' && key !== 'badges') return;
+            if (sortKey === key) {
+              sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+              sortKey = key;
+              sortDir = key === 'name' ? 'asc' : 'desc';
+            }
+            updateSortUi();
+            applySort();
+          });
+        }
+        updateSortUi();
+      }
+
       const triggers = Array.from(document.querySelectorAll('.course-picker-trigger'));
       const panels = Array.from(document.querySelectorAll('.course-picker-panel'));
       if (!triggers.length || !panels.length) return;
