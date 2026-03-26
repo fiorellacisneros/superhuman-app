@@ -83,8 +83,8 @@ if (isAdminUi) {
       <p class="mt-2 text-sm text-muted">
         {
           isAdminUi
-            ? 'Subí o enlazá el PDF del certificado por alumno y curso. El alumno lo verá aquí y podrá descargarlo.'
-            : 'Tus certificados oficiales por curso y enlaces a insignias y perfil.'
+            ? 'Sube o enlaza el PDF del certificado por alumno y curso. El alumno lo verá aquí y podrá descargarlo.'
+            : 'Tus certificados oficiales por curso. También puedes ir a insignias o logros por retos desde esta página.'
         }
       </p>
     </header>
@@ -93,9 +93,9 @@ if (isAdminUi) {
       <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
         <p class="font-medium text-amber-50">Falta la tabla en Supabase</p>
         <p class="mt-1 text-amber-100/90">
-          Ejecutá en el SQL Editor <code class="rounded bg-black/20 px-1.5 py-0.5 text-xs">docs/student-course-certificates-migration.sql</code> y, si hace falta,
-          <code class="rounded bg-black/20 px-1.5 py-0.5 text-xs">docs/student-course-certificates-linkedin-migration.sql</code>. Creá el bucket público{' '}
-          <code class="rounded bg-black/20 px-1.5 py-0.5 text-xs">course-certificates</code> en Storage si querés subir PDFs.
+          Ejecuta en el SQL Editor <code class="rounded bg-black/20 px-1.5 py-0.5 text-xs">docs/student-course-certificates-migration.sql</code> y, si hace falta,
+          <code class="rounded bg-black/20 px-1.5 py-0.5 text-xs">docs/student-course-certificates-linkedin-migration.sql</code>. Crea el bucket público{' '}
+          <code class="rounded bg-black/20 px-1.5 py-0.5 text-xs">course-certificates</code> en Storage si quieres subir PDFs.
         </p>
       </div>
     )}
@@ -156,7 +156,7 @@ if (isAdminUi) {
                 placeholder="https://…"
                 class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
               />
-              <p class="mt-1 text-[11px] text-muted">O subí un archivo abajo (si configuraste Storage).</p>
+              <p class="mt-1 text-[11px] text-muted">O sube un archivo abajo (si configuraste Storage).</p>
             </div>
             <div>
               <label for="cert-file" class="block text-xs font-medium text-muted">Subir PDF</label>
@@ -277,7 +277,7 @@ if (isAdminUi) {
 
           {!tableMissing && myCertificates.length === 0 && (
             <div class="rounded-xl border border-transparent bg-surface p-5 text-sm text-muted">
-              Aún no tenés certificados cargados. Cuando completes tu curso, el equipo publicará el PDF aquí.
+              Aún no tienes certificados cargados. Cuando completes tu curso, el equipo publicará el PDF aquí.
             </div>
           )}
 
@@ -298,21 +298,13 @@ if (isAdminUi) {
               <li class="rounded-xl border border-transparent bg-surface p-5">
                 <h2 class="font-work-sans text-base font-semibold text-white">Logros por retos</h2>
                 <p class="mt-1 text-sm text-muted">
-                  En on-demand las insignias vienen de tus entregas. Completá los retos de tus cursos.
+                  En on-demand las insignias vienen de tus entregas. Completa los retos de tus cursos.
                 </p>
                 <p class="mt-3">
                   <a href="/challenges" class="btn btn-secondary inline-flex text-sm">Ver retos</a>
                 </p>
               </li>
             )}
-
-            <li class="rounded-xl border border-transparent bg-surface p-5">
-              <h2 class="font-work-sans text-base font-semibold text-white">Tu perfil</h2>
-              <p class="mt-1 text-sm text-muted">Foto, bio y si aparecés en superHumans.</p>
-              <p class="mt-3">
-                <a href="/profile" class="btn btn-primary inline-flex text-sm">Editar mi perfil</a>
-              </p>
-            </li>
           </ul>
         </>
       )
