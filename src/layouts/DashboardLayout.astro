@@ -116,13 +116,13 @@ const adminMobileMenuSpec = [
 ] as const;
 
 const studentLiveMobileSpec = [
-  { title: 'Tu espacio', hrefs: ['/dashboard', '/courses', '/profile'] },
+  { title: 'Tu espacio', hrefs: ['/dashboard', '/courses'] },
   { title: 'Aprende', hrefs: ['/sesiones-1-1', '/challenges', '/leaderboard', '/badges', '/certificados'] },
   { title: 'Comunidad', hrefs: ['/superhumans'] },
 ] as const;
 
 const studentOnDemandMobileSpec = [
-  { title: 'Tu espacio', hrefs: ['/dashboard', '/courses', '/profile'] },
+  { title: 'Tu espacio', hrefs: ['/dashboard', '/courses'] },
   { title: 'Aprende', hrefs: ['/sesion-grupal', '/challenges', '/certificados'] },
   { title: 'Comunidad', hrefs: ['/superhumans'] },
 ] as const;
@@ -227,11 +227,87 @@ function isActive(href: string): boolean {
         margin-left: 0;
       }
       @media (max-width: 767px) {
-        #main-content-panel { top: 52px; border-top-left-radius: 16px; }
+        /* Sin navbar móvil: el contenido llega al borde superior (safe area vía padding en main si hace falta) */
+        #main-content-panel {
+          top: 0;
+          border-top-left-radius: 20px;
+        }
       }
       @media (min-width: 768px) {
         #main-content-panel { left: 272px; margin-left: 0; } /* 260px sidebar + 12px gap */
         body.sidebar-collapsed #main-content-panel { left: 84px; } /* 72px sidebar + 12px gap */
+      }
+      /* Menú móvil: panel flotante (no pantalla completa) */
+      #mobile-nav-overlay {
+        pointer-events: none;
+      }
+      #mobile-nav-overlay.mobile-nav-open {
+        pointer-events: auto;
+      }
+      #mobile-nav-backdrop {
+        opacity: 0;
+        transition: opacity 0.22s ease-out;
+      }
+      #mobile-nav-overlay.mobile-nav-open #mobile-nav-backdrop {
+        opacity: 1;
+      }
+      #mobile-nav-panel {
+        transform: translateY(calc(100% + 20px));
+        opacity: 0;
+        transition:
+          transform 0.34s cubic-bezier(0.32, 0.72, 0, 1),
+          opacity 0.22s ease-out;
+      }
+      #mobile-nav-overlay.mobile-nav-open #mobile-nav-panel {
+        transform: translateY(0);
+        opacity: 1;
+      }
+      /* Hamburguesa → X (microinteracción) */
+      .mobile-nav-lines {
+        position: relative;
+        display: block;
+        width: 1.125rem;
+        height: 0.875rem;
+      }
+      .mobile-nav-lines .mobile-nav-line {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 2px;
+        border-radius: 1px;
+        background: currentColor;
+        transition:
+          transform 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+          opacity 0.2s ease,
+          top 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+          bottom 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+      }
+      .mobile-nav-lines .mobile-nav-line:nth-child(1) {
+        top: 0;
+      }
+      .mobile-nav-lines .mobile-nav-line:nth-child(2) {
+        top: 6px;
+      }
+      .mobile-nav-lines .mobile-nav-line:nth-child(3) {
+        bottom: 0;
+      }
+      #mobile-nav-open[aria-expanded='true'] .mobile-nav-lines .mobile-nav-line:nth-child(1) {
+        top: 6px;
+        transform: rotate(45deg);
+      }
+      #mobile-nav-open[aria-expanded='true'] .mobile-nav-lines .mobile-nav-line:nth-child(2) {
+        opacity: 0;
+        transform: scaleX(0);
+      }
+      #mobile-nav-open[aria-expanded='true'] .mobile-nav-lines .mobile-nav-line:nth-child(3) {
+        bottom: auto;
+        top: 6px;
+        transform: rotate(-45deg);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .mobile-nav-lines .mobile-nav-line {
+          transition-duration: 0.01ms;
+        }
       }
     </style>
   </head>
@@ -294,11 +370,8 @@ function isActive(href: string): boolean {
 
       <!-- Área principal: header (negro) + bloque de contenido (gris 1A1A1A, radio solo esquina superior izquierda) -->
       <div class="flex min-w-0 flex-1 flex-col">
-        <header class="sticky top-0 z-40 shrink-0 bg-background pl-3 pr-3 py-2.5 md:pl-0 md:pr-6 md:py-4">
-          <div class="flex items-center justify-between gap-2">
-            <a href="/dashboard" class="flex shrink-0 items-center md:hidden" aria-label="Superhuman School">
-              <img src="/logo.png" alt="Superhuman School" class="h-7 w-auto max-w-[120px] object-contain object-left" width="120" height="28" />
-            </a>
+        <header class="sticky top-0 z-40 hidden shrink-0 bg-background py-2.5 pl-3 pr-3 md:flex md:pl-0 md:pr-6 md:py-4">
+          <div class="flex w-full items-center justify-between gap-2">
             <button
               type="button"
               id="sidebar-toggle"
@@ -378,6 +451,7 @@ function isActive(href: string): boolean {
             </div>
             </div>
           </div>
+          </div>
         </header>
 
         <div
@@ -391,110 +465,159 @@ function isActive(href: string): boolean {
           id="main-content-panel"
           class="fixed right-0 bottom-0 z-10 flex flex-col overflow-hidden bg-[#1A1A1A]"
         >
-          <main class="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:px-6 md:pt-8 md:pb-14 lg:pl-[54px] lg:pr-6 lg:pt-[54px] lg:pb-[54px]">
+          <main class="min-h-0 flex-1 overflow-y-auto px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(5.75rem+env(safe-area-inset-bottom))] md:px-6 md:pb-14 md:pt-8 lg:pl-[54px] lg:pr-6 lg:pt-[54px] lg:pb-[54px]">
             <slot />
           </main>
         </div>
       </div>
     </div>
-    <!-- Móvil: barra fija (logo + menú) — el listado completo va en overlay tipo Webflow University -->
+    <!-- Móvil: barra flotante tipo píldora (referencia Webflow University) -->
+    <!-- z-[115] > overlay z-[110]: la X y atajos siguen visibles y pulsables con el menú abierto -->
     <div
-      class="fixed inset-x-0 bottom-0 z-[100] border-t border-white/10 bg-background/95 backdrop-blur-md md:hidden"
-      style={`padding-bottom: env(safe-area-inset-bottom, 0px);`}
+      class="pointer-events-none fixed inset-x-0 z-[115] flex justify-center md:hidden"
+      style={`bottom: calc(10px + env(safe-area-inset-bottom, 0px));`}
     >
-      <div class="flex h-[52px] items-center justify-between px-4">
-        <a href="/dashboard" class="flex shrink-0 items-center opacity-90 transition hover:opacity-100" aria-label="Ir al inicio">
-          <img src="/logo.png" alt="" class="h-7 w-auto max-w-[120px] object-contain object-left" width="120" height="28" />
-        </a>
-        <button
-          type="button"
-          id="mobile-nav-open"
-          class="flex items-center gap-2 rounded-full px-4 py-2 font-work-sans text-sm font-medium text-white transition hover:bg-white/10"
-          aria-expanded="false"
-          aria-controls="mobile-nav-overlay"
-        >
-          <i class="bi bi-list text-xl leading-none" aria-hidden="true" />
-          Menú
-        </button>
-      </div>
-    </div>
-
-    <div
-      id="mobile-nav-overlay"
-      class="fixed inset-0 z-[110] flex max-h-[100dvh] flex-col bg-background opacity-0 pointer-events-none transition-opacity duration-200 ease-out md:hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="mobile-nav-overlay-title"
-      aria-hidden="true"
-    >
-      <h2 id="mobile-nav-overlay-title" class="sr-only">Navegación</h2>
-      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-2">
-        {
-          mobileNavSections.map((section, si) => (
-            <div class={si > 0 ? 'mt-1 border-t border-white/10 pt-2' : ''}>
-              <p
-                class={`px-5 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted ${si === 0 ? 'pt-3' : 'pt-4'}`}
-              >
-                {section.title}
-              </p>
-              <nav class="px-2 pb-2" aria-label={section.title}>
-                {section.items.map((item) => {
-                  const active = isActive(item.href);
-                  return (
-                    <a
-                      href={item.href}
-                      class={`flex min-h-[3rem] items-center gap-4 rounded-xl px-3 py-2 font-work-sans text-[15px] leading-snug transition ${
-                        active ? 'bg-white/10 text-white' : 'text-white/90 hover:bg-white/[0.06]'
-                      }`}
-                    >
-                      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/80">
-                        <i class={`bi ${item.icon} text-lg leading-none`} aria-hidden="true" />
-                      </span>
-                      <span class="min-w-0 flex-1 font-medium">{item.label}</span>
-                      {item.showActiveCount && activeRetosCount > 0 && (
-                        <span class="shrink-0 rounded-full bg-lime/20 px-2 py-0.5 text-center text-[11px] font-semibold text-lime">
-                          {activeRetosCount}
-                        </span>
-                      )}
-                    </a>
-                  );
-                })}
-              </nav>
-            </div>
-          ))
-        }
-      </div>
-
-      <div
-        class="flex shrink-0 items-center justify-between gap-4 border-t border-white/10 bg-background px-4 py-3"
-        style={`padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));`}
+      <nav
+        id="mobile-nav-dock"
+        class="pointer-events-auto flex max-w-[min(100vw-1.25rem,26rem)] items-center gap-0.5 rounded-full border border-white/12 bg-[#101010]/95 py-1 pl-1.5 pr-1 shadow-[0_12px_48px_rgba(0,0,0,0.55)] backdrop-blur-md"
+        aria-label="Accesos rápidos"
       >
-        <a href="/dashboard" class="flex shrink-0 items-center opacity-90 transition hover:opacity-100" aria-label="Inicio">
-          <img src="/logo.png" alt="" class="h-8 w-auto max-w-[128px] object-contain" width="128" height="32" />
+        <a
+          href="/dashboard"
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/90 transition hover:bg-white/10 hover:text-white"
+          aria-label="Inicio"
+          title="Inicio"
+        >
+          <svg class="h-7 w-7 shrink-0" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path
+              d="M128 10C193.17 10 246 62.8304 246 128C246 193.17 193.17 246 128 246C62.8304 246 10 193.17 10 128C10 62.8304 62.8304 10 128 10ZM90.5576 69C90.5475 69.0045 90.5366 69.0091 90.5264 69.0137C83.6225 69.1555 77.3443 70.4113 71.6973 72.7832C66.0618 75.1015 61.5025 78.487 58.0283 82.9395L57.3477 83.8447C53.8401 88.7038 52.0939 94.6384 52.0938 101.632C52.0938 106.256 52.8384 110.217 54.3379 113.499C55.8306 116.714 57.7624 119.435 60.1367 121.654L60.1416 121.659C62.558 123.817 65.2077 125.582 68.0879 126.951H68.0928C70.9595 128.261 73.7786 129.337 76.5459 130.177L104.783 138.718C106.809 139.34 108.657 140.092 110.323 140.971L110.823 141.221C111.948 141.805 112.942 142.474 113.808 143.221C114.771 144.307 115.704 145.379 116.599 146.412C116.898 146.905 117.164 147.423 117.395 147.968L117.396 147.975C118.092 149.501 118.443 151.264 118.443 153.27C118.443 156.74 117.452 159.75 115.473 162.309L115.064 162.813C112.854 165.437 109.908 167.476 106.222 168.925L105.525 169.18C102.024 170.408 98.2065 171.023 94.0732 171.023C86.9825 171.023 80.7864 169.13 75.4795 165.353C70.1804 161.528 66.6948 156.204 65.0254 149.367L64.9678 149.127L64.7207 149.163L48.0371 151.751L47.7656 151.792L47.8115 152.062C49.0428 159.258 51.7138 165.494 55.8252 170.756C59.9858 175.962 65.2525 179.985 71.6162 182.822L71.6191 182.825C78.0342 185.61 85.2146 187 93.1533 187C98.8393 187 104.249 186.265 109.376 184.795C114.505 183.324 119.029 181.142 122.935 178.248C126.035 175.939 128.615 173.206 130.676 170.056V187H149.488V137.737C149.488 133.441 150.461 129.883 152.303 126.972C154.328 123.938 156.88 121.665 159.963 120.125L160.014 120.103C163.135 118.452 166.485 117.626 170.083 117.626C173.681 117.626 177.032 118.452 180.152 120.103L180.178 120.114C183.358 121.749 185.902 124.106 187.82 127.209L187.836 127.234C189.695 130.153 190.678 133.719 190.678 138.042V187H209.484V137.89C209.484 130.625 207.985 124.159 204.909 118.554L204.907 118.551L204.317 117.52C201.296 112.437 197.2 108.429 192.045 105.549C186.535 102.358 180.099 100.813 172.835 100.812C167.615 100.813 162.562 101.844 157.684 103.898L157.663 103.907C154.656 105.205 151.926 106.949 149.479 109.12V69H133.903L112.977 100.86L140.117 116.2L125.644 152.78L124.776 119.74L83.1631 109.12L98.4756 69H90.5576Z"
+              fill="#F7F7F7"
+            />
+          </svg>
         </a>
-        <div class="flex flex-1 items-center justify-center gap-1">
+        <span class="mx-0.5 h-6 w-px shrink-0 bg-white/15" aria-hidden="true" />
+        <div class="flex items-center gap-0.5">
           {navLinks.slice(0, 4).map((item) => {
             const active = isActive(item.href);
             return (
               <a
                 href={item.href}
-                class={`flex h-11 w-11 items-center justify-center rounded-full transition ${active ? 'bg-white/15 text-white' : 'text-muted hover:bg-white/10 hover:text-white'}`}
+                class={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition ${
+                  active ? 'bg-white/15 text-white' : 'text-muted hover:bg-white/10 hover:text-white'
+                }`}
+                aria-current={active ? 'page' : undefined}
                 aria-label={item.label}
                 title={item.label}
               >
-                <i class={`bi ${item.icon} text-[17px] leading-none`} aria-hidden="true" />
+                <i class={`bi ${item.icon} text-[16px] leading-none`} aria-hidden="true" />
+                {item.showActiveCount && activeRetosCount > 0 && (
+                  <span class="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[0.875rem] items-center justify-center rounded-full bg-lime/90 px-0.5 text-[8px] font-bold leading-none text-background">
+                    {activeRetosCount > 9 ? '9+' : activeRetosCount}
+                  </span>
+                )}
               </a>
             );
           })}
         </div>
+        <span class="mx-0.5 h-6 w-px shrink-0 bg-white/15" aria-hidden="true" />
         <button
           type="button"
-          id="mobile-nav-close"
-          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition hover:bg-white/10"
-          aria-label="Cerrar menú"
+          id="mobile-nav-open"
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:bg-white/10"
+          aria-expanded="false"
+          aria-controls="mobile-nav-overlay"
+          aria-label="Abrir menú completo"
         >
-          <i class="bi bi-x-lg text-2xl leading-none" aria-hidden="true" />
+          <span class="mobile-nav-lines" aria-hidden="true">
+            <span class="mobile-nav-line"></span>
+            <span class="mobile-nav-line"></span>
+            <span class="mobile-nav-line"></span>
+          </span>
         </button>
+      </nav>
+    </div>
+
+    <div id="mobile-nav-overlay" class="fixed inset-0 z-[110] md:hidden" aria-hidden="true">
+      <div
+        id="mobile-nav-backdrop"
+        class="absolute inset-0 cursor-pointer bg-black/55 backdrop-blur-[3px]"
+        aria-hidden="true"
+      />
+      <div
+        id="mobile-nav-panel"
+        class="absolute left-3 right-3 flex max-h-[min(78vh,calc(100dvh-7.5rem))] flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#141414] shadow-[0_20px_60px_rgba(0,0,0,0.55)] md:hidden"
+        style={`bottom: calc(58px + env(safe-area-inset-bottom, 0px) + 10px);`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mobile-nav-overlay-title"
+      >
+        <div class="shrink-0 border-b border-white/10 px-4 py-3">
+          <h2 id="mobile-nav-overlay-title" class="font-work-sans text-base font-semibold tracking-tight text-white">
+            Menú
+          </h2>
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-2">
+          {
+            mobileNavSections.map((section, si) => (
+              <div class={si > 0 ? 'mt-1 border-t border-white/10 pt-2' : ''}>
+                <p
+                  class={`px-5 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted ${si === 0 ? 'pt-3' : 'pt-4'}`}
+                >
+                  {section.title}
+                </p>
+                <nav class="px-2 pb-2" aria-label={section.title}>
+                  {section.items.map((item) => {
+                    const active = isActive(item.href);
+                    return (
+                      <a
+                        href={item.href}
+                        class={`flex min-h-[3rem] items-center gap-4 rounded-xl px-3 py-2 font-work-sans text-[15px] leading-snug transition ${
+                          active ? 'bg-white/10 text-white' : 'text-white/90 hover:bg-white/[0.06]'
+                        }`}
+                      >
+                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/80">
+                          <i class={`bi ${item.icon} text-lg leading-none`} aria-hidden="true" />
+                        </span>
+                        <span class="min-w-0 flex-1 font-medium">{item.label}</span>
+                        {item.showActiveCount && activeRetosCount > 0 && (
+                          <span class="shrink-0 rounded-full bg-lime/20 px-2 py-0.5 text-center text-[11px] font-semibold text-lime">
+                            {activeRetosCount}
+                          </span>
+                        )}
+                      </a>
+                    );
+                  })}
+                </nav>
+              </div>
+            ))
+          }
+
+          <div class="mt-1 border-t border-white/10 pt-2">
+            <p class="px-5 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Cuenta</p>
+            <nav class="px-2 pb-4" aria-label="Cuenta">
+              <a
+                href="/profile"
+                class={`flex min-h-[3rem] items-center gap-4 rounded-xl px-3 py-2 font-work-sans text-[15px] leading-snug transition ${
+                  isActive('/profile') ? 'bg-white/10 text-white' : 'text-white/90 hover:bg-white/[0.06]'
+                }`}
+              >
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/80">
+                  <i class="bi bi-person-circle text-lg leading-none" aria-hidden="true" />
+                </span>
+                <span class="min-w-0 flex-1 font-medium">Mi perfil</span>
+              </a>
+              <SignOutButton
+                redirectUrl="/"
+                class="mt-0.5 flex min-h-[3rem] w-full items-center gap-4 rounded-xl border-0 bg-transparent px-3 py-2 text-left font-work-sans text-[15px] font-medium leading-snug text-white/90 transition hover:bg-white/[0.06] hover:text-white"
+              >
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/80">
+                  <i class="bi bi-box-arrow-right text-lg leading-none" aria-hidden="true" />
+                </span>
+                <span class="min-w-0 flex-1">Cerrar sesión</span>
+              </SignOutButton>
+            </nav>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -504,19 +627,26 @@ function isActive(href: string): boolean {
       document.addEventListener('DOMContentLoaded', () => {
         const openBtn = document.getElementById('mobile-nav-open');
         const overlay = document.getElementById('mobile-nav-overlay');
-        const closeBtn = document.getElementById('mobile-nav-close');
-        if (!openBtn || !overlay || !closeBtn) return;
+        const backdrop = document.getElementById('mobile-nav-backdrop');
+        const panel = document.getElementById('mobile-nav-panel');
+        if (!openBtn || !overlay || !backdrop || !panel) return;
+
+        const syncDockToggle = (open) => {
+          openBtn.setAttribute('aria-label', open ? 'Cerrar menú' : 'Abrir menú completo');
+        };
 
         const openNav = () => {
-          overlay.classList.remove('opacity-0', 'pointer-events-none');
+          overlay.classList.add('mobile-nav-open');
           overlay.setAttribute('aria-hidden', 'false');
           openBtn.setAttribute('aria-expanded', 'true');
+          syncDockToggle(true);
           document.body.style.overflow = 'hidden';
         };
         const closeNav = () => {
-          overlay.classList.add('opacity-0', 'pointer-events-none');
+          overlay.classList.remove('mobile-nav-open');
           overlay.setAttribute('aria-hidden', 'true');
           openBtn.setAttribute('aria-expanded', 'false');
+          syncDockToggle(false);
           document.body.style.overflow = '';
         };
 
@@ -525,8 +655,8 @@ function isActive(href: string): boolean {
           if (openBtn.getAttribute('aria-expanded') === 'true') closeNav();
           else openNav();
         });
-        closeBtn.addEventListener('click', () => closeNav());
-        overlay.querySelectorAll('a[href]').forEach((a) => {
+        backdrop.addEventListener('click', () => closeNav());
+        panel.querySelectorAll('a[href]').forEach((a) => {
           a.addEventListener('click', () => closeNav());
         });
         document.addEventListener('keydown', (e) => {

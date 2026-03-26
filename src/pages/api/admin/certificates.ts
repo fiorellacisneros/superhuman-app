@@ -23,7 +23,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!studentUserId || !courseId) {
     return new Response(null, {
       status: 303,
-      headers: { Location: withToastParams(redirectTo, 'Elegí alumno y curso', 'error') },
+      headers: { Location: withToastParams(redirectTo, 'Elige alumno y curso', 'error') },
     });
   }
 
@@ -56,7 +56,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         headers: {
           Location: withToastParams(
             redirectTo,
-            'Error al subir el PDF. Creá el bucket course-certificates en Supabase Storage o usá un enlace HTTPS.',
+            'Error al subir el PDF. Crea el bucket course-certificates en Supabase Storage o usa un enlace HTTPS.',
             'error',
           ),
         },
@@ -70,7 +70,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(null, {
       status: 303,
       headers: {
-        Location: withToastParams(redirectTo, 'Indicá un enlace HTTPS al PDF o subí un archivo', 'error'),
+        Location: withToastParams(redirectTo, 'Indica un enlace HTTPS al PDF o sube un archivo', 'error'),
       },
     });
   }
@@ -120,7 +120,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       headers: {
         Location: withToastParams(
           redirectTo,
-          'No se pudo guardar. ¿Ejecutaste docs/student-course-certificates-migration.sql y student-course-certificates-linkedin-migration.sql?',
+          'No se pudo guardar. ¿Ya ejecutaste docs/student-course-certificates-migration.sql y student-course-certificates-linkedin-migration.sql?',
           'error',
         ),
       },
