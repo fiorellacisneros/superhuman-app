@@ -1,0 +1,321 @@
+---
+import '../../styles/global.css';
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { buildLinkedInAddCertificationUrl } from '../../lib/linkedin-certification-url';
+import { getPreviewContext } from '../../lib/preview';
+import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const { preview } = getPreviewContext(Astro);
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+const role = (userRow?.role as string) ?? 'student';
+
+/** Admin real ve panel de carga; en vista previa como alumno solo ve UX estudiante. */
+const isAdminUi = role === 'admin' && !preview;
+const layoutRole = isAdminUi ? 'admin' : 'student';
+
+const { data: courseRows } = await supabase.from('courses').select('id, title').order('title');
+const coursesList = (courseRows ?? []) as { id: string; title: string | null }[];
+const courseTitle = new Map(coursesList.map((c) => [c.id, (c.title as string) ?? 'Curso']));
+
+type CertRow = {
+  id: string;
+  user_id: string;
+  course_id: string;
+  document_url: string;
+  title: string | null;
+  credential_public_id: string | null;
+  created_at: string;
+};
+
+let tableMissing = false;
+let adminCertificates: CertRow[] = [];
+let myCertificates: CertRow[] = [];
+let studentsList: { id: string; display_name: string | null }[] = [];
+const userNameById = new Map<string, string>();
+let hasLiveEnrollment = false;
+
+if (isAdminUi) {
+  const { data: stud } = await supabase.from('users').select('id, display_name').eq('role', 'student').order('display_name');
+  studentsList = (stud ?? []) as { id: string; display_name: string | null }[];
+
+  const res = await supabase.from('student_course_certificates').select('*').order('created_at', { ascending: false }).limit(400);
+  if (res.error && /relation|does not exist|42P01/i.test(String(res.error.message))) {
+    tableMissing = true;
+  } else {
+    adminCertificates = (res.data ?? []) as CertRow[];
+    const uids = [...new Set(adminCertificates.map((c) => c.user_id))];
+    if (uids.length > 0) {
+      const { data: names } = await supabase.from('users').select('id, display_name').in('id', uids);
+      for (const u of names ?? []) {
+        userNameById.set(u.id as string, String((u as { display_name?: string }).display_name ?? 'Alumno'));
+      }
+    }
+  }
+} else {
+  const { data: enrollmentRows } = await supabase.from('enrollments').select('access_type').eq('user_id', userId);
+  hasLiveEnrollment = (enrollmentRows ?? []).some((e) => (e.access_type as string) !== 'on_demand');
+
+  const res = await supabase.from('student_course_certificates').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+  if (res.error && /relation|does not exist|42P01/i.test(String(res.error.message))) {
+    tableMissing = true;
+  } else {
+    myCertificates = (res.data ?? []) as CertRow[];
+  }
+}
+---
+
+<DashboardLayout role={layoutRole}>
+  <section class="max-w-4xl space-y-8">
+    <nav class="text-sm text-muted">
+      <a href="/dashboard" class="hover:text-white">Dashboard</a>
+      <span class="mx-1">/</span>
+      <span class="text-white">Certificados</span>
+    </nav>
+
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Certificados</h1>
+      <p class="mt-2 text-sm text-muted">
+        {
+          isAdminUi
+            ? 'Subí o enlazá el PDF del certificado por alumno y curso. El alumno lo verá aquí y podrá descargarlo.'
+            : 'Tus certificados oficiales por curso y enlaces a insignias y perfil.'
+        }
+      </p>
+    </header>
+
+    {tableMissing && (
+      <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <p class="font-medium text-amber-50">Falta la tabla en Supabase</p>
+        <p class="mt-1 text-amber-100/90">
+          Ejecutá en el SQL Editor <code class="rounded bg-black/20 px-1.5 py-0.5 text-xs">docs/student-course-certificates-migration.sql</code> y, si hace falta,
+          <code class="rounded bg-black/20 px-1.5 py-0.5 text-xs">docs/student-course-certificates-linkedin-migration.sql</code>. Creá el bucket público{' '}
+          <code class="rounded bg-black/20 px-1.5 py-0.5 text-xs">course-certificates</code> en Storage si querés subir PDFs.
+        </p>
+      </div>
+    )}
+
+    {
+      isAdminUi && !tableMissing && (
+        <div class="rounded-xl border border-transparent bg-surface p-5">
+          <h2 class="font-work-sans text-base font-semibold text-white">Asignar o actualizar certificado</h2>
+          <p class="mt-1 text-sm text-muted">Un certificado por alumno y curso (una nueva carga reemplaza el anterior).</p>
+          <form method="post" action="/api/admin/certificates" class="mt-4 space-y-4" enctype="multipart/form-data">
+            <input type="hidden" name="redirect_to" value="/certificados" />
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label for="cert-user" class="block text-xs font-medium text-muted">Alumno</label>
+                <select
+                  id="cert-user"
+                  name="user_id"
+                  required
+                  class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                >
+                  <option value="">Elegir…</option>
+                  {studentsList.map((s) => (
+                    <option value={s.id}>{(s.display_name as string) ?? s.id}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label for="cert-course" class="block text-xs font-medium text-muted">Curso</label>
+                <select
+                  id="cert-course"
+                  name="course_id"
+                  required
+                  class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                >
+                  <option value="">Elegir…</option>
+                  {coursesList.map((c) => (
+                    <option value={c.id}>{(c.title as string) ?? c.id}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label for="cert-title" class="block text-xs font-medium text-muted">Título (opcional)</label>
+              <input
+                id="cert-title"
+                type="text"
+                name="title"
+                placeholder="Ej. Webflow Camp — Cohort 2026"
+                class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              />
+            </div>
+            <div>
+              <label for="cert-url" class="block text-xs font-medium text-muted">Enlace al PDF (HTTPS)</label>
+              <input
+                id="cert-url"
+                type="url"
+                name="document_url"
+                placeholder="https://…"
+                class="mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              />
+              <p class="mt-1 text-[11px] text-muted">O subí un archivo abajo (si configuraste Storage).</p>
+            </div>
+            <div>
+              <label for="cert-file" class="block text-xs font-medium text-muted">Subir PDF</label>
+              <input
+                id="cert-file"
+                type="file"
+                name="certificate_file"
+                accept="application/pdf,.pdf"
+                class="mt-1 block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-lime/15 file:px-3 file:py-2 file:text-sm file:font-medium file:text-lime"
+              />
+            </div>
+            <button type="submit" class="btn btn-primary">
+              Guardar certificado
+            </button>
+          </form>
+        </div>
+      )
+    }
+
+    {
+      isAdminUi && !tableMissing && adminCertificates.length === 0 && (
+        <p class="text-sm text-muted">Todavía no hay certificados guardados.</p>
+      )
+    }
+
+    {
+      isAdminUi && !tableMissing && adminCertificates.length > 0 && (
+        <div class="rounded-xl border border-transparent bg-surface p-5">
+          <h2 class="font-work-sans text-base font-semibold text-white">Certificados emitidos</h2>
+          <div class="mt-3 overflow-x-auto">
+            <table class="w-full min-w-[520px] text-left text-sm">
+              <thead>
+                <tr class="border-b border-white/10 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                  <th class="pb-2 pr-3">Alumno</th>
+                  <th class="pb-2 pr-3">Curso</th>
+                  <th class="pb-2 pr-3">Título</th>
+                  <th class="pb-2 pr-3">ID LinkedIn</th>
+                  <th class="pb-2 pr-3">Enlace</th>
+                </tr>
+              </thead>
+              <tbody class="text-white/90">
+                {adminCertificates.map((c) => (
+                  <tr class="border-b border-white/5">
+                    <td class="py-3 pr-3 align-top">{userNameById.get(c.user_id) ?? c.user_id}</td>
+                    <td class="py-3 pr-3 align-top">{courseTitle.get(c.course_id) ?? c.course_id}</td>
+                    <td class="py-3 pr-3 align-top text-muted">{c.title ?? '—'}</td>
+                    <td class="py-3 pr-3 align-top font-mono text-[11px] text-muted">
+                      {c.credential_public_id ?? '—'}
+                    </td>
+                    <td class="py-3 align-top">
+                      <a href={c.document_url} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">
+                        Abrir PDF
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )
+    }
+
+    {
+      !isAdminUi && (
+        <>
+          {!tableMissing && myCertificates.length > 0 && (
+            <ul class="space-y-3">
+              {myCertificates.map((c) => {
+                const certDisplayName = (c.title ?? courseTitle.get(c.course_id) ?? 'Certificado de curso') as string;
+                const verifyHref = c.credential_public_id
+                  ? new URL(`/verify/cert/${encodeURIComponent(c.credential_public_id)}`, Astro.url.origin).href
+                  : null;
+                const linkedInHref = buildLinkedInAddCertificationUrl({
+                  name: certDisplayName,
+                  certId: c.credential_public_id,
+                  certUrl: verifyHref ?? c.document_url,
+                  issuedAt: c.created_at,
+                });
+                return (
+                  <li class="rounded-xl border border-transparent bg-surface p-5">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h2 class="font-work-sans text-base font-semibold text-white">
+                          {c.title ?? courseTitle.get(c.course_id) ?? 'Certificado'}
+                        </h2>
+                        <p class="mt-0.5 text-sm text-muted">{courseTitle.get(c.course_id) ?? 'Curso'}</p>
+                        {c.credential_public_id && (
+                          <p class="mt-2 font-mono text-[11px] text-muted">
+                            ID credencial: {c.credential_public_id}
+                          </p>
+                        )}
+                      </div>
+                      <div class="flex shrink-0 flex-wrap gap-2">
+                        <a
+                          href={linkedInHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="btn btn-secondary text-sm"
+                        >
+                          Añadir a LinkedIn
+                        </a>
+                        <a
+                          href={c.document_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="btn btn-primary text-sm"
+                        >
+                          Descargar / ver PDF
+                        </a>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {!tableMissing && myCertificates.length === 0 && (
+            <div class="rounded-xl border border-transparent bg-surface p-5 text-sm text-muted">
+              Aún no tenés certificados cargados. Cuando completes tu curso, el equipo publicará el PDF aquí.
+            </div>
+          )}
+
+          <ul class="space-y-3">
+            {hasLiveEnrollment && (
+              <li class="rounded-xl border border-transparent bg-surface p-5">
+                <h2 class="font-work-sans text-base font-semibold text-white">Insignias digitales</h2>
+                <p class="mt-1 text-sm text-muted">
+                  Tus insignias por asistencia, entregas y hitos del curso en un solo lugar.
+                </p>
+                <p class="mt-3">
+                  <a href="/badges" class="btn btn-secondary inline-flex text-sm">Ver mis insignias</a>
+                </p>
+              </li>
+            )}
+
+            {!hasLiveEnrollment && (
+              <li class="rounded-xl border border-transparent bg-surface p-5">
+                <h2 class="font-work-sans text-base font-semibold text-white">Logros por retos</h2>
+                <p class="mt-1 text-sm text-muted">
+                  En on-demand las insignias vienen de tus entregas. Completá los retos de tus cursos.
+                </p>
+                <p class="mt-3">
+                  <a href="/challenges" class="btn btn-secondary inline-flex text-sm">Ver retos</a>
+                </p>
+              </li>
+            )}
+
+            <li class="rounded-xl border border-transparent bg-surface p-5">
+              <h2 class="font-work-sans text-base font-semibold text-white">Tu perfil</h2>
+              <p class="mt-1 text-sm text-muted">Foto, bio y si aparecés en superHumans.</p>
+              <p class="mt-3">
+                <a href="/profile" class="btn btn-primary inline-flex text-sm">Editar mi perfil</a>
+              </p>
+            </li>
+          </ul>
+        </>
+      )
+    }
+  </section>
+</DashboardLayout>

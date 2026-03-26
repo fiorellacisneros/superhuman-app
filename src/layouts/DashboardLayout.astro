@@ -57,7 +57,10 @@ const studentNavLive = [
   { label: 'Sesiones 1:1', href: '/sesiones-1-1', icon: 'bi-calendar-check-fill' },
   { label: 'Retos', href: '/challenges', icon: 'bi-lightning-charge-fill', showActiveCount: true },
   { label: 'Ranking', href: '/leaderboard', icon: 'bi-trophy-fill' },
+  { label: 'Insignias', href: '/badges', icon: 'bi-award' },
+  { label: 'Certificados', href: '/certificados', icon: 'bi-patch-check' },
   { label: 'superHumans', href: '/superhumans', icon: 'bi-stars' },
+  { label: 'Mi perfil', href: '/profile', icon: 'bi-person-circle' },
 ] as const;
 
 const studentNavOnDemand = [
@@ -65,19 +68,63 @@ const studentNavOnDemand = [
   { label: 'Mis cursos', href: '/courses', icon: 'bi-journal-richtext' },
   { label: 'Sesión grupal', href: '/sesion-grupal', icon: 'bi-calendar-check-fill' },
   { label: 'Retos', href: '/challenges', icon: 'bi-lightning-charge-fill', showActiveCount: true },
+  { label: 'Certificados', href: '/certificados', icon: 'bi-patch-check' },
   { label: 'superHumans', href: '/superhumans', icon: 'bi-stars' },
+  { label: 'Mi perfil', href: '/profile', icon: 'bi-person-circle' },
 ] as const;
 
 const adminNav = [
   { label: 'Dashboard', href: '/dashboard', icon: 'bi-grid-1x2-fill' },
   { label: 'Cursos', href: '/admin/courses', icon: 'bi-journal-richtext' },
-  { label: 'Sesiones 1:1', href: '/sesiones-1-1', icon: 'bi-calendar-check-fill' },
   { label: 'Retos', href: '/admin/challenges', icon: 'bi-lightning-charge-fill', showActiveCount: true },
+  { label: 'Alumnos', href: '/admin/students', icon: 'bi-people-fill' },
+  { label: 'Sesiones 1:1', href: '/sesiones-1-1', icon: 'bi-calendar-check-fill' },
   { label: 'Asistencia', href: '/admin/attendance', icon: 'bi-calendar2-check-fill' },
   { label: 'Kahoot', href: '/admin/kahoot', icon: 'bi-trophy-fill' },
-  { label: 'Alumnos', href: '/admin/students', icon: 'bi-people-fill' },
   { label: 'Submissions', href: '/admin/submissions', icon: 'bi-inbox-fill' },
+  { label: 'Certificados', href: '/certificados', icon: 'bi-patch-check' },
   { label: 'SuperHumans', href: '/superhumans', icon: 'bi-stars' },
+] as const;
+
+type NavLinkItem = {
+  label: string;
+  href: string;
+  icon: string;
+  showActiveCount?: boolean;
+};
+
+function navSectionsFromSpec(
+  links: readonly NavLinkItem[],
+  spec: { title: string; hrefs: string[] }[],
+): { title: string; items: NavLinkItem[] }[] {
+  const byHref = new Map(links.map((l) => [l.href, l]));
+  return spec
+    .map((s) => ({
+      title: s.title,
+      items: s.hrefs.map((h) => byHref.get(h)).filter((x): x is NavLinkItem => Boolean(x)),
+    }))
+    .filter((sec) => sec.items.length > 0);
+}
+
+const adminMobileMenuSpec = [
+  { title: 'Panel', hrefs: ['/dashboard', '/admin/courses'] },
+  {
+    title: 'Gestión',
+    hrefs: ['/admin/challenges', '/sesiones-1-1', '/admin/attendance', '/admin/kahoot', '/admin/students', '/admin/submissions', '/certificados'],
+  },
+  { title: 'Comunidad', hrefs: ['/superhumans'] },
+] as const;
+
+const studentLiveMobileSpec = [
+  { title: 'Tu espacio', hrefs: ['/dashboard', '/courses', '/profile'] },
+  { title: 'Aprende', hrefs: ['/sesiones-1-1', '/challenges', '/leaderboard', '/badges', '/certificados'] },
+  { title: 'Comunidad', hrefs: ['/superhumans'] },
+] as const;
+
+const studentOnDemandMobileSpec = [
+  { title: 'Tu espacio', hrefs: ['/dashboard', '/courses', '/profile'] },
+  { title: 'Aprende', hrefs: ['/sesion-grupal', '/challenges', '/certificados'] },
+  { title: 'Comunidad', hrefs: ['/superhumans'] },
 ] as const;
 
 let hasOnlyOnDemand = false;
@@ -132,6 +179,15 @@ if (preview) {
     const submittedSet = new Set((submittedRows ?? []).map((s) => s.challenge_id as string));
     activeRetosCount = relevantIds.filter((id) => !submittedSet.has(id)).length;
   }
+}
+
+let mobileNavSections: { title: string; items: NavLinkItem[] }[] = [];
+if (role === 'admin') {
+  mobileNavSections = navSectionsFromSpec([...adminNav], [...adminMobileMenuSpec]);
+} else if (hasOnlyOnDemand) {
+  mobileNavSections = navSectionsFromSpec([...navLinks], [...studentOnDemandMobileSpec]);
+} else {
+  mobileNavSections = navSectionsFromSpec([...navLinks], [...studentLiveMobileSpec]);
 }
 
 function isActive(href: string): boolean {
@@ -335,49 +391,159 @@ function isActive(href: string): boolean {
           id="main-content-panel"
           class="fixed right-0 bottom-0 z-10 flex flex-col overflow-hidden bg-[#1A1A1A]"
         >
-          <main class="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:px-6 md:pt-8 md:pb-14 lg:pl-[54px] lg:pr-6 lg:pt-[54px] lg:pb-[54px]">
+          <main class="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:px-6 md:pt-8 md:pb-14 lg:pl-[54px] lg:pr-6 lg:pt-[54px] lg:pb-[54px]">
             <slot />
           </main>
         </div>
       </div>
     </div>
-    <nav
-      class="pointer-events-none fixed inset-x-0 z-[100] md:hidden overflow-visible"
-      style="bottom: calc(env(safe-area-inset-bottom) + 0.5rem);"
-      aria-label="Navegación inferior principal"
+    <!-- Móvil: barra fija (logo + menú) — el listado completo va en overlay tipo Webflow University -->
+    <div
+      class="fixed inset-x-0 bottom-0 z-[100] border-t border-white/10 bg-background/95 backdrop-blur-md md:hidden"
+      style={`padding-bottom: env(safe-area-inset-bottom, 0px);`}
     >
-      <div class="mx-auto w-fit max-w-[min(92vw,360px)] overflow-visible">
-        <div class="pointer-events-auto flex overflow-visible rounded-full bg-surface/95 px-2 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur">
-          <div class="flex items-center justify-center gap-0.5">
-        {navLinks.map((item) => {
-          const active = isActive(item.href);
-          return (
-            <a
-              href={item.href}
-              aria-label={item.label}
-              title={item.label}
-              class={`group relative flex shrink-0 items-center justify-center transition ${navLinks.length <= 4 ? 'min-w-[2.75rem]' : 'min-w-[2.5rem]'} ${
-                active ? 'rounded-full bg-white text-background' : 'rounded-full text-muted hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <span class="relative z-10 flex h-10 w-10 items-center justify-center rounded-full">
-                <i class={`bi ${item.icon} text-[18px] leading-none ${active ? 'text-background' : 'text-current group-hover:text-white'}`} aria-hidden="true" />
-                {item.showActiveCount && activeRetosCount > 0 && (
-                  <span class={`absolute -right-0.5 top-0 inline-flex min-w-4 items-center justify-center rounded-full px-1 py-0.5 text-[9px] font-semibold ${active ? 'bg-background/15 text-background' : 'bg-lime/20 text-lime'}`}>
-                    {activeRetosCount}
-                  </span>
-                )}
-              </span>
-            </a>
-          );
-        })}
-          </div>
-        </div>
+      <div class="flex h-[52px] items-center justify-between px-4">
+        <a href="/dashboard" class="flex shrink-0 items-center opacity-90 transition hover:opacity-100" aria-label="Ir al inicio">
+          <img src="/logo.png" alt="" class="h-7 w-auto max-w-[120px] object-contain object-left" width="120" height="28" />
+        </a>
+        <button
+          type="button"
+          id="mobile-nav-open"
+          class="flex items-center gap-2 rounded-full px-4 py-2 font-work-sans text-sm font-medium text-white transition hover:bg-white/10"
+          aria-expanded="false"
+          aria-controls="mobile-nav-overlay"
+        >
+          <i class="bi bi-list text-xl leading-none" aria-hidden="true" />
+          Menú
+        </button>
       </div>
-    </nav>
+    </div>
+
+    <div
+      id="mobile-nav-overlay"
+      class="fixed inset-0 z-[110] flex max-h-[100dvh] flex-col bg-background opacity-0 pointer-events-none transition-opacity duration-200 ease-out md:hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="mobile-nav-overlay-title"
+      aria-hidden="true"
+    >
+      <h2 id="mobile-nav-overlay-title" class="sr-only">Navegación</h2>
+      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-2">
+        {
+          mobileNavSections.map((section, si) => (
+            <div class={si > 0 ? 'mt-1 border-t border-white/10 pt-2' : ''}>
+              <p
+                class={`px-5 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted ${si === 0 ? 'pt-3' : 'pt-4'}`}
+              >
+                {section.title}
+              </p>
+              <nav class="px-2 pb-2" aria-label={section.title}>
+                {section.items.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <a
+                      href={item.href}
+                      class={`flex min-h-[3rem] items-center gap-4 rounded-xl px-3 py-2 font-work-sans text-[15px] leading-snug transition ${
+                        active ? 'bg-white/10 text-white' : 'text-white/90 hover:bg-white/[0.06]'
+                      }`}
+                    >
+                      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/80">
+                        <i class={`bi ${item.icon} text-lg leading-none`} aria-hidden="true" />
+                      </span>
+                      <span class="min-w-0 flex-1 font-medium">{item.label}</span>
+                      {item.showActiveCount && activeRetosCount > 0 && (
+                        <span class="shrink-0 rounded-full bg-lime/20 px-2 py-0.5 text-center text-[11px] font-semibold text-lime">
+                          {activeRetosCount}
+                        </span>
+                      )}
+                    </a>
+                  );
+                })}
+              </nav>
+            </div>
+          ))
+        }
+      </div>
+
+      <div
+        class="flex shrink-0 items-center justify-between gap-4 border-t border-white/10 bg-background px-4 py-3"
+        style={`padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));`}
+      >
+        <a href="/dashboard" class="flex shrink-0 items-center opacity-90 transition hover:opacity-100" aria-label="Inicio">
+          <img src="/logo.png" alt="" class="h-8 w-auto max-w-[128px] object-contain" width="128" height="32" />
+        </a>
+        <div class="flex flex-1 items-center justify-center gap-1">
+          {navLinks.slice(0, 4).map((item) => {
+            const active = isActive(item.href);
+            return (
+              <a
+                href={item.href}
+                class={`flex h-11 w-11 items-center justify-center rounded-full transition ${active ? 'bg-white/15 text-white' : 'text-muted hover:bg-white/10 hover:text-white'}`}
+                aria-label={item.label}
+                title={item.label}
+              >
+                <i class={`bi ${item.icon} text-[17px] leading-none`} aria-hidden="true" />
+              </a>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          id="mobile-nav-close"
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition hover:bg-white/10"
+          aria-label="Cerrar menú"
+        >
+          <i class="bi bi-x-lg text-2xl leading-none" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+
     <div id="toast-root" class="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(92vw,360px)] flex-col gap-2"></div>
 
     <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const openBtn = document.getElementById('mobile-nav-open');
+        const overlay = document.getElementById('mobile-nav-overlay');
+        const closeBtn = document.getElementById('mobile-nav-close');
+        if (!openBtn || !overlay || !closeBtn) return;
+
+        const openNav = () => {
+          overlay.classList.remove('opacity-0', 'pointer-events-none');
+          overlay.setAttribute('aria-hidden', 'false');
+          openBtn.setAttribute('aria-expanded', 'true');
+          document.body.style.overflow = 'hidden';
+        };
+        const closeNav = () => {
+          overlay.classList.add('opacity-0', 'pointer-events-none');
+          overlay.setAttribute('aria-hidden', 'true');
+          openBtn.setAttribute('aria-expanded', 'false');
+          document.body.style.overflow = '';
+        };
+
+        openBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (openBtn.getAttribute('aria-expanded') === 'true') closeNav();
+          else openNav();
+        });
+        closeBtn.addEventListener('click', () => closeNav());
+        overlay.querySelectorAll('a[href]').forEach((a) => {
+          a.addEventListener('click', () => closeNav());
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && openBtn.getAttribute('aria-expanded') === 'true') {
+            e.preventDefault();
+            closeNav();
+          }
+        });
+        document.querySelector('#main-content-panel main')?.addEventListener(
+          'scroll',
+          () => {
+            if (openBtn.getAttribute('aria-expanded') === 'true') closeNav();
+          },
+          { passive: true },
+        );
+      });
+
       document.addEventListener('DOMContentLoaded', () => {
         const STORAGE_KEY = 'sidebarCollapsed';
         const body = document.getElementById('body-el');

@@ -2,6 +2,7 @@
 import '../../styles/global.css';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+import { getPreviewContext, setPreviewCookie, withPreviewParams } from '../../lib/preview';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -11,19 +12,27 @@ if (!isAuthenticated || !userId) {
 const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
 const role = (userRow?.role as string) ?? 'student';
+const { preview, previewAs } = getPreviewContext(Astro);
 
-if (role === 'admin') {
-  return Astro.redirect('/sesiones-1-1');
+if (role === 'admin' && (!preview || previewAs !== 'on_demand')) {
+  return Astro.redirect(withPreviewParams('/sesiones-1-1', preview, previewAs));
+}
+if (role === 'admin' && preview) {
+  setPreviewCookie(Astro, previewAs);
 }
 
-const { data: enrollments } = await supabase
-  .from('enrollments')
-  .select('access_type')
-  .eq('user_id', userId);
-const hasOnlyOnDemand = (enrollments ?? []).length > 0 && (enrollments ?? []).every((e) => (e.access_type as string) === 'on_demand');
+const previewOnDemandAdmin = role === 'admin' && preview && previewAs === 'on_demand';
 
-if (!hasOnlyOnDemand) {
-  return Astro.redirect('/sesiones-1-1');
+if (!previewOnDemandAdmin) {
+  const { data: enrollments } = await supabase
+    .from('enrollments')
+    .select('access_type')
+    .eq('user_id', userId);
+  const hasOnlyOnDemand = (enrollments ?? []).length > 0 && (enrollments ?? []).every((e) => (e.access_type as string) === 'on_demand');
+
+  if (!hasOnlyOnDemand) {
+    return Astro.redirect(withPreviewParams('/sesiones-1-1', role === 'admin' && preview, previewAs));
+  }
 }
 
 type SesionGrupalItem = { id: number; title: string | null; link_url: string; fecha_label: string | null };

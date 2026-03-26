@@ -1,0 +1,95 @@
+---
+import '../../../styles/global.css';
+import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+
+const raw = Astro.params.publicId ?? '';
+const publicId = decodeURIComponent(raw).trim();
+const formatOk = /^SHS-[0-9A-F]{6}-[0-9A-F]{6}$/i.test(publicId);
+
+let found = false;
+let certTitle: string | null = null;
+let courseTitle: string | null = null;
+let issuedAt: string | null = null;
+
+if (formatOk) {
+  const supabase = getSupabaseServiceRoleClient();
+  const { data: row } = await supabase
+    .from('student_course_certificates')
+    .select('title, course_id, created_at')
+    .eq('credential_public_id', publicId)
+    .maybeSingle();
+
+  if (row?.course_id) {
+    found = true;
+    certTitle = typeof row.title === 'string' && row.title.trim() ? row.title.trim() : null;
+    issuedAt = typeof row.created_at === 'string' ? row.created_at : null;
+    const { data: course } = await supabase.from('courses').select('title').eq('id', row.course_id).maybeSingle();
+    courseTitle = (course?.title as string) ?? null;
+  }
+}
+
+if (!found) {
+  Astro.response.status = 404;
+}
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{found ? 'Credencial verificada' : 'Credencial no encontrada'} · Superhuman School</title>
+  </head>
+  <body class="min-h-screen bg-[#0a0a0b] text-white antialiased">
+    <main class="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-16">
+      {found ? (
+        <>
+          <p class="text-xs font-semibold uppercase tracking-widest text-lime">Superhuman School</p>
+          <h1 class="mt-2 font-work-sans text-2xl font-semibold tracking-tight">Credencial verificada</h1>
+          <p class="mt-4 text-sm text-white/70">
+            Esta credencial corresponde a un certificado emitido por nuestra plataforma.
+          </p>
+          <dl class="mt-8 space-y-4 text-sm">
+            <div>
+              <dt class="text-[11px] font-medium uppercase tracking-wider text-white/45">Curso</dt>
+              <dd class="mt-1 text-white/90">{courseTitle ?? '—'}</dd>
+            </div>
+            {certTitle && (
+              <div>
+                <dt class="text-[11px] font-medium uppercase tracking-wider text-white/45">Título del certificado</dt>
+                <dd class="mt-1 text-white/90">{certTitle}</dd>
+              </div>
+            )}
+            <div>
+              <dt class="text-[11px] font-medium uppercase tracking-wider text-white/45">ID de credencial</dt>
+              <dd class="mt-1 font-mono text-xs text-white/80">{publicId}</dd>
+            </div>
+            {issuedAt && (
+              <div>
+                <dt class="text-[11px] font-medium uppercase tracking-wider text-white/45">Registro</dt>
+                <dd class="mt-1 text-white/80">
+                  {new Date(issuedAt).toLocaleDateString('es', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    timeZone: 'UTC',
+                  })}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </>
+      ) : (
+        <>
+          <h1 class="font-work-sans text-2xl font-semibold tracking-tight">No encontramos esta credencial</h1>
+          <p class="mt-4 text-sm text-white/70">
+            El código no coincide con ningún certificado activo. Si copiaste el enlace, comprobá que esté completo.
+          </p>
+        </>
+      )}
+      <p class="mt-12 text-center text-xs text-white/40">
+        <a href="/" class="text-lime/90 hover:text-lime hover:underline">Volver al inicio</a>
+      </p>
+    </main>
+  </body>
+</html>
