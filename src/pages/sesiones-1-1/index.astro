@@ -2,6 +2,7 @@
 import '../../styles/global.css';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
+import { getPreviewContext, setPreviewCookie, withPreviewParams } from '../../lib/preview';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -10,16 +11,28 @@ if (!isAuthenticated || !userId) {
 
 const supabase = getSupabaseServiceRoleClient();
 const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
-const role = (userRow?.role as string) ?? 'student';
+const dbRole = (userRow?.role as string) ?? 'student';
+const { preview, previewAs } = getPreviewContext(Astro);
 
-if (role === 'student') {
+if (dbRole === 'admin' && preview) {
+  setPreviewCookie(Astro, previewAs);
+}
+
+/** Panel de gestión (admin real). Si eres admin con vista previa de estudiante, ves la misma UI que un alumno. */
+const isAdminView = dbRole === 'admin' && !preview;
+
+if (dbRole === 'admin' && preview && previewAs === 'on_demand') {
+  return Astro.redirect(withPreviewParams('/sesion-grupal', true, 'on_demand'));
+}
+
+if (!isAdminView) {
   const { data: enrollments } = await supabase
     .from('enrollments')
     .select('access_type')
     .eq('user_id', userId);
   const hasOnlyOnDemand = (enrollments ?? []).length > 0 && (enrollments ?? []).every((e) => (e.access_type as string) === 'on_demand');
   if (hasOnlyOnDemand) {
-    return Astro.redirect('/sesion-grupal');
+    return Astro.redirect(withPreviewParams('/sesion-grupal', dbRole === 'admin' && preview, previewAs));
   }
 }
 
@@ -39,7 +52,7 @@ let onDemandStudents: { id: string; display_name: string; asistenciasCount: numb
 type SesionGrupalItem = { id: number; title: string | null; link_url: string; fecha_label: string | null; order_index: number };
 let sesionesGrupalesList: SesionGrupalItem[] = [];
 
-if (role === 'admin') {
+if (isAdminView) {
   const { data: allCourses } = await supabase
     .from('courses')
     .select('id, title, slug, ends_at, calendly_link_1to1')
@@ -63,7 +76,8 @@ if (role === 'admin') {
       .from('enrollments')
       .select('user_id, users(id, display_name)')
       .eq('course_id', c.id)
-      .neq('access_type', 'on_demand');
+      // NULL o distinto de on_demand = cohort/live (neq solo no incluye NULL en SQL)
+      .or('access_type.is.null,access_type.neq.on_demand');
     const liveStudents = (liveEnrollments ?? []).map((e) => {
       const u = (e as { users?: { id: string; display_name: string | null } | null }).users;
       return { id: u?.id ?? (e as { user_id: string }).user_id, display_name: u?.display_name ?? 'Sin nombre' };
@@ -126,18 +140,14 @@ if (role === 'admin') {
     .from('enrollments')
     .select('course_id')
     .eq('user_id', userId)
-    .neq('access_type', 'on_demand');
+    .or('access_type.is.null,access_type.neq.on_demand');
   const liveCourseIds = (enrollments ?? []).map((r) => (r as { course_id: string }).course_id).filter(Boolean);
   if (liveCourseIds.length > 0) {
     const { data: courseRows } = await supabase
       .from('courses')
       .select('id, title, slug, ends_at, calendly_link_1to1')
-      .in('id', liveCourseIds)
-      .not('calendly_link_1to1', 'is', null);
-    const today = new Date().toISOString().slice(0, 10);
+      .in('id', liveCourseIds);
     for (const c of courseRows ?? []) {
-      const endsAt = c.ends_at ? String(c.ends_at).slice(0, 10) : null;
-      if (endsAt && endsAt < today) continue;
       const { count } = await supabase
         .from('one_on_one_bookings')
         .select('*', { count: 'exact', head: true })
@@ -164,6 +174,20 @@ if (role === 'admin') {
   }
 }
 
+const todayYmd = new Date().toISOString().slice(0, 10);
+
+/** Misma regla que el botón “Reservar”: aún puede agendar en este curso. */
+function studentCanBook1to1(course: Course1to1, ymd: string): boolean {
+  const endDay = course.ends_at ? String(course.ends_at).slice(0, 10) : null;
+  const ended = endDay ? endDay < ymd : false;
+  const link = typeof course.calendly_link_1to1 === 'string' ? course.calendly_link_1to1.trim() : '';
+  return !ended && course.bookingCount < 2 && link.length > 0;
+}
+
+/** Tiene cursos listados pero ya no puede reservar en ninguno (cuota agotada, curso terminado o sin Calendly aún). */
+const showStudent1to1SettledBanner =
+  !isAdminView && courses1to1.length > 0 && courses1to1.every((c) => !studentCanBook1to1(c, todayYmd));
+
 function formatBookingDate(iso: string) {
   try {
     return new Date(iso).toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' });
@@ -173,8 +197,8 @@ function formatBookingDate(iso: string) {
 }
 
 ---
-<DashboardLayout role={role === 'admin' ? 'admin' : 'student'}>
-  {courses1to1.some((c) => c.calendly_link_1to1) && role !== 'admin' && (
+<DashboardLayout role={isAdminView ? 'admin' : 'student'}>
+  {courses1to1.some((c) => c.calendly_link_1to1) && !isAdminView && (
     <Fragment slot="head">
       <link href="https://assets.calendly.com/assets/external/widget.css" rel="stylesheet" />
     </Fragment>
@@ -189,20 +213,35 @@ function formatBookingDate(iso: string) {
     <header>
       <h1 class="text-2xl font-semibold tracking-tight text-white">Sesiones 1:1</h1>
       <p class="mt-1 text-sm text-muted">
-        {role === 'admin'
+        {isAdminView
           ? 'Cursos con Calendly configurado. Los alumnos en vivo pueden reservar hasta 2 sesiones por curso mientras esté activo.'
           : 'Tienes hasta 2 sesiones 1:1 por curso (en vivo). Reserva desde el enlace de Calendly antes de que termine el curso.'}
       </p>
     </header>
 
+    {showStudent1to1SettledBanner && (
+      <div
+        class="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/90"
+        role="status"
+      >
+        <p class="font-medium text-white">Por ahora no puedes reservar más sesiones 1:1</p>
+        <p class="mt-1.5 text-muted">
+          Ya usaste tu cuota, el curso terminó o aún no hay enlace de reserva activo. Abajo sigues viendo el detalle por curso y tu historial.
+        </p>
+        <p class="mt-2 text-muted">
+          Si más adelante te inscribes a <span class="text-white/80">otro curso en vivo</span> con este beneficio, volverá a aparecer aquí tu nueva cuota (hasta 2 sesiones por curso).
+        </p>
+      </div>
+    )}
+
     {courses1to1.length === 0 ? (
       <div class="rounded-xl border border-transparent bg-surface p-6">
         <p class="text-sm text-muted">
-          {role === 'admin'
+          {isAdminView
             ? 'No hay cursos con link de Calendly 1:1. Edita un curso y añade el enlace + fecha fin.'
-            : 'No tienes cursos en vivo con sesiones 1:1 disponibles, o el curso ya terminó.'}
+            : 'No tienes inscripciones en cohort en vivo por ahora. Cuando te inscriban a un curso en vivo con sesiones 1:1, aparecerán aquí. Si crees que falta algo, escríbenos.'}
         </p>
-        {role === 'admin' && (
+        {isAdminView && (
           <p class="mt-3">
             <a href="/admin/courses" class="btn btn-primary">
               Ir a Cursos para editar
@@ -227,13 +266,13 @@ function formatBookingDate(iso: string) {
                       {ended && <span class="ml-1 text-amber-400">(finalizado)</span>}
                     </p>
                   )}
-                  {role !== 'admin' && (
+                  {!isAdminView && (
                     <p class="mt-1 text-sm text-white/80">
                       Sesiones usadas: <span class="font-medium text-lime">{course.bookingCount}/2</span>
                     </p>
                   )}
                 </div>
-                {canBook && role !== 'admin' && (
+                {canBook && !isAdminView && (
                   <button
                     type="button"
                     class="btn btn-primary shrink-0 calendly-open"
@@ -246,10 +285,15 @@ function formatBookingDate(iso: string) {
                     </svg>
                   </button>
                 )}
-                {ended && role !== 'admin' && (
+                {!ended && !isAdminView && !course.calendly_link_1to1 && course.bookingCount < 2 && (
+                  <p class="max-w-sm shrink-0 text-xs text-muted">
+                    El enlace de reserva (Calendly) aún no está publicado para este curso. Vuelve más tarde o pregunta al equipo.
+                  </p>
+                )}
+                {ended && !isAdminView && (
                   <p class="text-xs text-muted shrink-0">Ya no puedes agendar; el curso terminó.</p>
                 )}
-                {!ended && role !== 'admin' && course.bookingCount >= 2 && (
+                {!ended && !isAdminView && course.bookingCount >= 2 && (
                   <div class="shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-left">
                     <p class="text-sm font-medium text-amber-200">Ya usaste tus 2 sesiones 1:1 para este curso.</p>
                     <p class="mt-1 text-xs text-muted">Si necesitas más ayuda, contáctanos directamente.</p>
@@ -259,14 +303,14 @@ function formatBookingDate(iso: string) {
               {course.bookings.length > 0 && (
                 <div class="mt-4 border-t border-white/10 pt-4">
                   <h3 class="text-xs font-medium text-muted">
-                    {role === 'admin' ? 'Últimas reservas del curso' : 'Tus reservas'}
+                    {isAdminView ? 'Últimas reservas del curso' : 'Tus reservas'}
                   </h3>
                   <ul class="mt-2 space-y-1.5">
                     {course.bookings.map((b) => (
                       <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background/60 px-3 py-2 text-sm">
                         <div class="min-w-0">
                           <span class="text-white">{formatBookingDate(b.scheduled_at)}</span>
-                          {role === 'admin' && b.display_name && <span class="ml-2 text-muted">· {b.display_name}</span>}
+                          {isAdminView && b.display_name && <span class="ml-2 text-muted">· {b.display_name}</span>}
                         </div>
                         <span
                           class={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
@@ -280,7 +324,7 @@ function formatBookingDate(iso: string) {
                   </ul>
                 </div>
               )}
-              {role === 'admin' && course.liveStudents && course.liveStudents.length > 0 && (
+              {isAdminView && course.liveStudents && course.liveStudents.length > 0 && (
                 <form method="post" action="/api/admin/one-on-one-bookings" class="mt-4 border-t border-white/10 pt-4">
                   <input type="hidden" name="course_id" value={course.id} />
                   <input type="hidden" name="redirect_to" value="/sesiones-1-1" />
@@ -329,7 +373,7 @@ function formatBookingDate(iso: string) {
       </ul>
     )}
 
-    {role === 'admin' && (
+    {isAdminView && (
       <div class="mt-10 rounded-xl border border-transparent bg-surface p-5">
         <h2 class="text-lg font-semibold text-white">Sesión grupal (on-demand)</h2>
         <p class="mt-0.5 text-sm text-muted">
@@ -435,10 +479,10 @@ function formatBookingDate(iso: string) {
     )}
   </section>
 
-  {courses1to1.some((c) => c.calendly_link_1to1) && role !== 'admin' && (
+  {courses1to1.some((c) => c.calendly_link_1to1) && !isAdminView && (
     <script is:inline src="https://assets.calendly.com/assets/external/widget.js" async></script>
   )}
-  {courses1to1.some((c) => c.calendly_link_1to1) && role !== 'admin' && (
+  {courses1to1.some((c) => c.calendly_link_1to1) && !isAdminView && (
     <script is:inline>
       (function () {
         function openCalendly(url) {
@@ -461,7 +505,7 @@ function formatBookingDate(iso: string) {
       })();
     </script>
   )}
-  {role === 'admin' && (
+  {isAdminView && (
     <script>
       import flatpickr from 'flatpickr';
       import { Spanish } from 'flatpickr/dist/l10n/es.js';
