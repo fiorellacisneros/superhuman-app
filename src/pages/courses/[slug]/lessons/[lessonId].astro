@@ -3,7 +3,7 @@ import '../../../../styles/global.css';
 import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../../lib/supabase';
 import { formatDayAndDate, formatTime } from '../../../../lib/format-date';
-import { getPreviewContext } from '../../../../lib/preview';
+import { getPreviewContext, withPreviewParams } from '../../../../lib/preview';
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -41,7 +41,7 @@ if (!course) {
 }
 const resolvedCourseSlug = typeof course.slug === 'string' && course.slug.trim() ? course.slug.trim() : course.id;
 
-const { preview } = getPreviewContext(Astro);
+const { preview, previewAs } = getPreviewContext(Astro);
 const isPreviewingThisCourse = isAdmin && preview;
 
 let isOnDemand = false;
@@ -59,6 +59,12 @@ if (!isAdmin && !isPreviewingThisCourse) {
 }
 
 const showAdminView = isAdmin && !isPreviewingThisCourse;
+const courseHubHref = isAdmin
+  ? withPreviewParams(`/courses/${resolvedCourseSlug}`, true, previewAs)
+  : `/courses/${resolvedCourseSlug}`;
+const clasesPageHref = isAdmin
+  ? withPreviewParams(`/courses/${resolvedCourseSlug}/clases`, true, previewAs)
+  : `/courses/${resolvedCourseSlug}/clases`;
 
 const { data: lesson, error: lessonError } = await supabase
   .from('lessons')
@@ -67,14 +73,18 @@ const { data: lesson, error: lessonError } = await supabase
   .eq('course_id', course.id)
   .maybeSingle();
 if (lessonError || !lesson) {
-  return Astro.redirect(`/courses/${resolvedCourseSlug}`);
+  return Astro.redirect(courseHubHref);
 }
 
 const hasRecording = Boolean(lesson.recording_url && String(lesson.recording_url).trim());
+const recordingPasscodeTrimmed =
+  lesson.recording_passcode && String(lesson.recording_passcode).trim()
+    ? String(lesson.recording_passcode).trim()
+    : '';
 const hasPpt = Boolean(lesson.ppt_url && String(lesson.ppt_url).trim());
 const hasContent = hasRecording || hasPpt;
 if (isOnDemand && !hasContent) {
-  return Astro.redirect(`/courses/${resolvedCourseSlug}`);
+  return Astro.redirect(courseHubHref);
 }
 type ResourceItem = { label?: string; url?: string; type?: string };
 const rawResources = Array.isArray(lesson.resources)
@@ -109,7 +119,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
       <span class="mx-1">/</span>
       <a href="/courses" class="hover:text-white">Mis cursos</a>
       <span class="mx-1">/</span>
-      <a href={`/courses/${resolvedCourseSlug}/clases`} class="hover:text-white">{course.title}</a>
+      <a href={clasesPageHref} class="hover:text-white">{course.title}</a>
       <span class="mx-1">/</span>
       <span class="text-white">{lesson.title}</span>
     </nav>
@@ -133,6 +143,12 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
             target="_blank"
             rel="noopener noreferrer"
             class="inline-flex shrink-0 items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
+            {...(recordingPasscodeTrimmed
+              ? {
+                  'data-recording-passcode': recordingPasscodeTrimmed,
+                  title: 'Se copia el código de acceso al abrir el enlace',
+                }
+              : {})}
           >
             Ver grabación
             <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -154,10 +170,27 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
           </a>
         )}
       </div>
-      {hasRecording && lesson.recording_passcode && String(lesson.recording_passcode).trim() && (
-        <p class="mt-2 text-xs text-muted">
-          Código para acceder: <span class="font-mono font-medium text-white">{lesson.recording_passcode}</span>
-        </p>
+      {hasRecording && recordingPasscodeTrimmed && (
+        <div class="mt-3 space-y-1.5">
+          <div class="flex flex-wrap items-center gap-2 text-xs text-muted">
+            <span class="shrink-0">Código para acceder:</span>
+            <span class="inline-flex max-w-full items-center gap-2 rounded-lg border border-white/10 bg-surface-2/90 px-2.5 py-1.5 font-mono text-sm font-medium text-white">
+              <span class="min-w-0 break-all">{recordingPasscodeTrimmed}</span>
+              <button
+                type="button"
+                class="js-copy-recording-code inline-flex shrink-0 items-center gap-1 rounded-md border border-white/15 bg-background/50 px-2 py-1 text-[11px] font-medium text-lime transition hover:bg-white/10"
+                data-code={recordingPasscodeTrimmed}
+                aria-label="Copiar código de acceso"
+              >
+                <i class="bi bi-clipboard" aria-hidden="true"></i>
+                <span class="copy-label">Copiar</span>
+              </button>
+            </span>
+          </div>
+          <p class="text-[11px] leading-snug text-muted">
+            Al pulsar «Ver grabación», el código se copia solo al portapapeles; pégalo cuando Zoom (u otra app) lo pida.
+          </p>
+        </div>
       )}
 
       {(hasClassResources || hasSharedResources) && (
@@ -208,7 +241,7 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
     </div>
 
     <p>
-      <a href={`/courses/${resolvedCourseSlug}`} class="inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
+      <a href={courseHubHref} class="inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
         </svg>
@@ -216,5 +249,36 @@ const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone 
       </a>
     </p>
   </section>
+
+  <script is:inline>
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('a[data-recording-passcode]').forEach((el) => {
+        el.addEventListener('click', () => {
+          const c = el.getAttribute('data-recording-passcode');
+          if (c) void navigator.clipboard.writeText(c);
+        });
+      });
+      document.querySelectorAll('.js-copy-recording-code[data-code]').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const code = btn.getAttribute('data-code');
+          if (!code) return;
+          try {
+            await navigator.clipboard.writeText(code);
+            const label = btn.querySelector('.copy-label');
+            if (label) {
+              const prev = label.textContent;
+              label.textContent = 'Copiado';
+              setTimeout(() => {
+                label.textContent = prev || 'Copiar';
+              }, 2000);
+            }
+          } catch {
+            /* ignore */
+          }
+        });
+      });
+    });
+  </script>
 </DashboardLayout>
 

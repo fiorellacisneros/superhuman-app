@@ -205,7 +205,16 @@ let enrolledCourses: { id: string; slug: string; title: string; cover_image: str
 let leaderboard: { id: string; name: string; avatarId: string | null; points: number }[] = [];
 let pointsBreakdownByCourse: CoursePointsBreakdown[] = [];
 let badgeEarnGuideRows: BadgeEarnRow[] = [];
-type UpcomingLesson = { id: string; title: string; scheduled_at: string; zoom_link: string | null; recording_url: string | null; courseTitle: string; courseSlug: string };
+type UpcomingLesson = {
+  id: string;
+  title: string;
+  scheduled_at: string;
+  zoom_link: string | null;
+  recording_url: string | null;
+  recording_passcode: string | null;
+  courseTitle: string;
+  courseSlug: string;
+};
 let upcomingLessons: UpcomingLesson[] = [];
 let upcomingByMonth: { monthLabel: string; lessons: UpcomingLesson[] }[] = [];
 /** Solo cohort en vivo: lecciones pasadas con grabación (acceso rápido al lado del horario). */
@@ -376,6 +385,7 @@ if (role !== 'admin' || preview) {
             scheduled_at: l.scheduled_at as string,
             zoom_link: zoomUrl,
             recording_url: null,
+            recording_passcode: null,
             courseTitle: course?.title ?? 'Curso',
             courseSlug: (course?.slug ?? l.course_id) as string,
           };
@@ -392,7 +402,7 @@ if (role !== 'admin' || preview) {
 
         const { data: recLessonRows } = await supabase
           .from('lessons')
-          .select('id, title, scheduled_at, recording_url, course_id, courses(title, slug)')
+          .select('id, title, scheduled_at, recording_url, recording_passcode, course_id, courses(title, slug)')
           .in('course_id', enrolledIds)
           .not('scheduled_at', 'is', null)
           .not('recording_url', 'is', null)
@@ -403,12 +413,17 @@ if (role !== 'admin' || preview) {
           .map((l) => {
             const course = l.courses as { title: string | null; slug: string | null } | null;
             const recUrl = (l.recording_url && String(l.recording_url).trim()) || null;
+            const recPass =
+              l.recording_passcode && String(l.recording_passcode).trim()
+                ? String(l.recording_passcode).trim()
+                : null;
             return {
               id: l.id,
               title: l.title ?? 'Clase',
               scheduled_at: l.scheduled_at as string,
               zoom_link: null,
               recording_url: recUrl,
+              recording_passcode: recPass,
               courseTitle: course?.title ?? 'Curso',
               courseSlug: (course?.slug ?? l.course_id) as string,
             };
@@ -426,7 +441,7 @@ if (role !== 'admin' || preview) {
       } else {
         const { data: lessonRows } = await supabase
           .from('lessons')
-          .select('id, title, scheduled_at, recording_url, course_id, courses(title, slug)')
+          .select('id, title, scheduled_at, recording_url, recording_passcode, course_id, courses(title, slug)')
           .in('course_id', enrolledIds)
           .not('scheduled_at', 'is', null)
           .not('recording_url', 'is', null)
@@ -437,12 +452,17 @@ if (role !== 'admin' || preview) {
           .map((l) => {
             const course = l.courses as { title: string | null; slug: string | null } | null;
             const recUrl = (l.recording_url && String(l.recording_url).trim()) || null;
+            const recPass =
+              l.recording_passcode && String(l.recording_passcode).trim()
+                ? String(l.recording_passcode).trim()
+                : null;
             return {
               id: l.id,
               title: l.title ?? 'Clase',
               scheduled_at: l.scheduled_at as string,
               zoom_link: null,
               recording_url: recUrl,
+              recording_passcode: recPass,
               courseTitle: course?.title ?? 'Curso',
               courseSlug: (course?.slug ?? l.course_id) as string,
             };
@@ -925,6 +945,9 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
                   <div>
                     <h2 class="font-manrope text-2xl font-semibold text-[#1A1A1A]">Grabaciones</h2>
                     <p class="mt-0.5 text-xs text-[#404040]">Acceso rápido a clases pasadas.</p>
+                    <p class="mt-1 text-[11px] leading-snug text-[#737373]">
+                      Si la clase tiene código de acceso, puedes copiarlo aquí; en la lección también se copia al abrir el enlace de la grabación.
+                    </p>
                   </div>
                   <a
                     href={firstCourseHref}
@@ -958,12 +981,34 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
                                     </p>
                                     <p class="mt-0.5 text-[10px] text-[#737373]">{lesson.courseTitle}</p>
                                   </div>
-                                  <a
-                                    href={lessonHref}
-                                    class="shrink-0 rounded-lg px-2 py-1.5 text-[10px] font-medium text-blue transition-colors hover:bg-[oklab(0.43797_-0.026316_-0.256138_/_0.15)]"
-                                  >
-                                    Ver grabación
-                                  </a>
+                                  <div class="flex shrink-0 flex-col items-end gap-1.5">
+                                    {lesson.recording_passcode && (
+                                      <div class="flex max-w-[10.5rem] items-center gap-1 rounded-md border border-[#d0d0d0] bg-[#F8F8F8] px-1.5 py-1">
+                                        <span
+                                          class="min-w-0 truncate font-mono text-[10px] text-[#1A1A1A]"
+                                          title={lesson.recording_passcode}
+                                        >
+                                          {lesson.recording_passcode}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          class="dashboard-copy-recording-code inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#012EDC] transition hover:bg-black/8"
+                                          data-code={lesson.recording_passcode}
+                                          aria-label="Copiar código de la grabación"
+                                          title="Copiar código"
+                                        >
+                                          <i class="bi bi-clipboard text-sm leading-none" aria-hidden="true"></i>
+                                        </button>
+                                      </div>
+                                    )}
+                                    <a
+                                      href={lessonHref}
+                                      title={lesson.recording_passcode ? 'En la lección, al abrir el enlace de Zoom se copia el código' : undefined}
+                                      class="shrink-0 rounded-lg px-2 py-1.5 text-[10px] font-medium text-blue transition-colors hover:bg-[oklab(0.43797_-0.026316_-0.256138_/_0.15)]"
+                                    >
+                                      Ver grabación
+                                    </a>
+                                  </div>
                                 </div>
                               </li>
                             );
@@ -1018,12 +1063,34 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
                                   </p>
                                   <p class="mt-0.5 text-[10px] text-[#737373]">{lesson.courseTitle}</p>
                                 </div>
-                                <a
-                                  href={lessonHref}
-                                  class="shrink-0 rounded-lg px-2 py-1.5 text-[10px] font-medium text-blue transition-colors hover:bg-[oklab(0.43797_-0.026316_-0.256138_/_0.15)]"
-                                >
-                                  Ver grabación
-                                </a>
+                                <div class="flex shrink-0 flex-col items-end gap-1.5">
+                                  {lesson.recording_passcode && (
+                                    <div class="flex max-w-[10.5rem] items-center gap-1 rounded-md border border-[#d0d0d0] bg-[#F8F8F8] px-1.5 py-1">
+                                      <span
+                                        class="min-w-0 truncate font-mono text-[10px] text-[#1A1A1A]"
+                                        title={lesson.recording_passcode}
+                                      >
+                                        {lesson.recording_passcode}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        class="dashboard-copy-recording-code inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#012EDC] transition hover:bg-black/8"
+                                        data-code={lesson.recording_passcode}
+                                        aria-label="Copiar código de la grabación"
+                                        title="Copiar código"
+                                      >
+                                        <i class="bi bi-clipboard text-sm leading-none" aria-hidden="true"></i>
+                                      </button>
+                                    </div>
+                                  )}
+                                  <a
+                                    href={lessonHref}
+                                    title={lesson.recording_passcode ? 'En la lección, al abrir el enlace de Zoom se copia el código' : undefined}
+                                    class="shrink-0 rounded-lg px-2 py-1.5 text-[10px] font-medium text-blue transition-colors hover:bg-[oklab(0.43797_-0.026316_-0.256138_/_0.15)]"
+                                  >
+                                    Ver grabación
+                                  </a>
+                                </div>
                               </div>
                             </li>
                           );
@@ -1259,6 +1326,25 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
           if (e.key !== 'Escape') return;
           if (badge.modal && !badge.modal.classList.contains('hidden')) badge.closeModal();
           else if (points.modal && !points.modal.classList.contains('hidden')) points.closeModal();
+        });
+
+        document.addEventListener('click', (e) => {
+          const t = e.target;
+          if (!(t instanceof Element)) return;
+          const btn = t.closest('.dashboard-copy-recording-code');
+          if (!btn || btn.tagName !== 'BUTTON') return;
+          const code = btn.getAttribute('data-code');
+          if (!code) return;
+          e.preventDefault();
+          void navigator.clipboard.writeText(code).then(() => {
+            const icon = btn.querySelector('i');
+            if (icon) {
+              icon.className = 'bi bi-check-lg text-sm leading-none';
+              setTimeout(() => {
+                icon.className = 'bi bi-clipboard text-sm leading-none';
+              }, 1400);
+            }
+          });
         });
       });
     </script>
