@@ -68,7 +68,7 @@ export const getBadgeDefinition = (slug: BadgeSlug): BadgeDefinition | undefined
 
 type SupabaseClient = import('@supabase/supabase-js').SupabaseClient;
 
-/** After a submission is approved, check conditions and award badges (first_submission, early_bird). */
+/** After a submission is approved, check conditions and award badges. */
 export async function checkBadgesAfterApproval(
   supabase: SupabaseClient,
   userId: string,
@@ -86,12 +86,12 @@ export async function checkBadgesAfterApproval(
     .eq('approved', true);
   const isFirstSubmission = (approvedCount ?? 0) === 1;
 
+  // Early bird: first to submit this challenge, and that submission is approved.
   const { data: firstSubmitted } = await supabase
     .from('submissions')
     .select('user_id')
     .eq('challenge_id', challengeId)
-    .eq('approved', true)
-    .order('reviewed_at', { ascending: true })
+    .order('submitted_at', { ascending: true })
     .limit(1)
     .maybeSingle();
   const isEarlyBird = firstSubmitted?.user_id === userId;
