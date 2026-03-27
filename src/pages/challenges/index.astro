@@ -256,4 +256,32 @@ const nowMs = Date.now();
       </div>
     )}
   </section>
+
+  <script>
+    import confetti from 'canvas-confetti';
+
+    function fireSubmissionConfetti() {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const colors = ['#bef264', '#d9f99d', '#fde047', '#22d3ee', '#ffffff'];
+      confetti({
+        particleCount: 110,
+        spread: 76,
+        origin: { y: 0.68 },
+        colors,
+      });
+      window.setTimeout(() => {
+        confetti({ particleCount: 48, angle: 58, spread: 54, origin: { x: 0, y: 0.65 }, colors });
+        confetti({ particleCount: 48, angle: 122, spread: 54, origin: { x: 1, y: 0.65 }, colors });
+      }, 180);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('celebrate') !== '1') return;
+      params.delete('celebrate');
+      const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash || ''}`;
+      window.history.replaceState({}, '', next);
+      fireSubmissionConfetti();
+    });
+  </script>
 </DashboardLayout>

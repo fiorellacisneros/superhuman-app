@@ -4,7 +4,7 @@ import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 import { formatDayAndDate, formatTime } from '../../../lib/format-date';
 import { isLessonCompleted } from '../../../lib/lessons';
-import { getPreviewContext } from '../../../lib/preview';
+import { getPreviewContext, withPreviewParams } from '../../../lib/preview';
 
 const { isAuthenticated, userId, sessionClaims, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -42,8 +42,12 @@ if (!course) {
 }
 const resolvedCourseSlug = typeof course.slug === 'string' && course.slug.trim() ? course.slug.trim() : course.id;
 
-const { preview } = getPreviewContext(Astro);
+const { preview, previewAs } = getPreviewContext(Astro);
 const isPreviewingThisCourse = isAdmin && preview;
+/** Hub del curso como lo ve el alumno (admin sin ?preview ve la vista de gestión). */
+const courseHubHref = isAdmin
+  ? withPreviewParams(`/courses/${resolvedCourseSlug}`, true, previewAs)
+  : `/courses/${resolvedCourseSlug}`;
 
 if (!isAdmin && !isPreviewingThisCourse) {
   const { data: enrollment } = await supabase
@@ -112,7 +116,7 @@ if (noModule.length > 0) {
       <span class="mx-1">/</span>
       <a href="/courses" class="hover:text-white">Mis cursos</a>
       <span class="mx-1">/</span>
-      <a href={`/courses/${resolvedCourseSlug}`} class="hover:text-white">{course.title}</a>
+      <a href={courseHubHref} class="hover:text-white">{course.title}</a>
       <span class="mx-1">/</span>
       <span class="text-white">Clases</span>
     </nav>

@@ -19,7 +19,12 @@ export function sanitizeHttpUrl(input: FormDataEntryValue | null): string | null
   }
 }
 
-export function withToastParams(path: string, message: string, type: 'success' | 'error' | 'info' = 'success'): string {
+export function withToastParams(
+  path: string,
+  message: string,
+  type: 'success' | 'error' | 'info' = 'success',
+  options?: { celebrate?: boolean },
+): string {
   const safeMessage = message.trim().slice(0, 180);
   if (!safeMessage) return path;
   try {
@@ -27,6 +32,9 @@ export function withToastParams(path: string, message: string, type: 'success' |
     const url = new URL(base, 'http://localhost');
     url.searchParams.set('toast', safeMessage);
     url.searchParams.set('toast_type', type);
+    if (options?.celebrate) {
+      url.searchParams.set('celebrate', '1');
+    }
     const out = `${url.pathname}${url.search}`;
     return hash ? `${out}#${hash}` : out;
   } catch {

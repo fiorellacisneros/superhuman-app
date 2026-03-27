@@ -71,7 +71,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (mode === 'update') {
       await db.from('submissions').update({ link: linkStr }).eq('id', existing.id);
       const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
-      const url = withToastParams(redirect, 'Entrega actualizada', 'success');
+      const url = withToastParams(redirect, 'Entrega actualizada', 'success', { celebrate: true });
       return new Response(null, { status: 303, headers: { Location: url } });
     }
     const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
@@ -87,6 +87,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
   });
 
   const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
-  const url = withToastParams(redirect, 'Entrega enviada correctamente', 'success');
+  const url = withToastParams(redirect, 'Entrega enviada correctamente', 'success', { celebrate: true });
   return new Response(null, { status: 303, headers: { Location: url } });
 };
