@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { parseAdminDateTimeLocalToIsoUtc } from '../../../lib/challenge-deadline';
 import { safeRedirectPath, sanitizeHttpUrl, withToastParams } from '../../../lib/request-security';
 import { requireAdmin } from '../../../lib/api-admin';
 import { isRateLimited } from '../../../lib/rate-limit';
@@ -52,8 +53,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const module_idRaw = formData.get('module_id');
   const module_id = typeof module_idRaw === 'string' && module_idRaw.trim() ? module_idRaw.trim() : null;
   const scheduled_atRaw = formData.get('scheduled_at');
-  const scheduled_at = typeof scheduled_atRaw === 'string' && scheduled_atRaw.trim() ? scheduled_atRaw.trim() : null;
-  if (scheduled_at && Number.isNaN(Date.parse(scheduled_at))) {
+  const scheduledTrim =
+    typeof scheduled_atRaw === 'string' && scheduled_atRaw.trim() ? scheduled_atRaw.trim() : null;
+  /** ISO UTC: el admin elige hora en Perú (Lima), igual que en retos — evita guardar 19:00 como UTC (se veía 14:00 PE). */
+  const scheduled_at = scheduledTrim ? parseAdminDateTimeLocalToIsoUtc(scheduledTrim) : null;
+  if (scheduledTrim && !scheduled_at) {
     return new Response(JSON.stringify({ error: 'scheduled_at must be a valid date' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },

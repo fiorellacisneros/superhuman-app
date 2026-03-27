@@ -737,14 +737,18 @@ function isActive(href: string): boolean {
           if (isOpen()) close();
         });
 
-        document.addEventListener('click', (e) => {
-          if (!isOpen()) return;
-          const t = e.target;
-          if (!(t instanceof Node)) return;
-          if (menu.contains(t)) return;
-          if (backdrop && (t === backdrop || backdrop.contains(t))) return;
-          requestAnimationFrame(close);
-        });
+        document.addEventListener(
+          'click',
+          (e) => {
+            if (!isOpen()) return;
+            const t = e.target;
+            if (!(t instanceof Node)) return;
+            if (menu.contains(t)) return;
+            if (backdrop && (t === backdrop || backdrop.contains(t))) return;
+            requestAnimationFrame(close);
+          },
+          { passive: true },
+        );
 
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape' && isOpen()) {
@@ -818,7 +822,20 @@ function isActive(href: string): boolean {
       });
 
       document.addEventListener('DOMContentLoaded', () => {
-        const selects = Array.from(document.querySelectorAll('.custom-select'));
+        /** INP: defer heavy custom-select setup so first paint/input stays responsive. */
+        const scheduleAfterPaint = (fn) => {
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(fn, { timeout: 900 });
+          } else {
+            setTimeout(fn, 0);
+          }
+        };
+
+        scheduleAfterPaint(() => {
+        const mainPanel = document.getElementById('main-content-panel');
+        const selects = Array.from(
+          (mainPanel ?? document.body).querySelectorAll('.custom-select'),
+        );
         if (!selects.length) return;
         let openSelect = null;
         const closeSelect = (el) => {
@@ -943,15 +960,19 @@ function isActive(href: string): boolean {
           }
           updateVisual(hidden.value);
         }
-        document.addEventListener('click', (e) => {
-          if (!openSelect) return;
-          const target = e.target;
-          if (!(target instanceof Node) || openSelect.contains(target)) return;
-          requestAnimationFrame(() => {
-            closeSelect(openSelect);
-            openSelect = null;
-          });
-        }, true);
+        document.addEventListener(
+          'click',
+          (e) => {
+            if (!openSelect) return;
+            const target = e.target;
+            if (!(target instanceof Node) || openSelect.contains(target)) return;
+            requestAnimationFrame(() => {
+              closeSelect(openSelect);
+              openSelect = null;
+            });
+          },
+          { capture: true, passive: true },
+        );
         document.addEventListener('keydown', (e) => {
           if (e.key !== 'Escape' || !openSelect) return;
           closeSelect(openSelect);
@@ -970,7 +991,9 @@ function isActive(href: string): boolean {
         document.addEventListener('custom-select-reinit', (e) => {
           const container = e.detail?.container;
           if (!container) return;
-          const toInit = Array.from(container.querySelectorAll('.custom-select')).filter((s) => !s.hasAttribute('data-custom-select-initialized'));
+          const toInit = Array.from(container.querySelectorAll('.custom-select')).filter(
+            (s) => !s.hasAttribute('data-custom-select-initialized'),
+          );
           for (const select of toInit) {
             const trigger = select.querySelector('.custom-select-trigger');
             const panel = select.querySelector('.custom-select-panel');
@@ -1020,30 +1043,38 @@ function isActive(href: string): boolean {
             updateVisual(hidden.value);
           }
         });
+        });
       });
 
       // Fallback: ensure Cerrar sesión works if Clerk script loads after the SignOutButton script
-      document.addEventListener('click', (e) => {
-        const target = e.target.closest('[data-clerk-unstyled-id]');
-        if (!target) return;
-        e.preventDefault();
-        e.stopPropagation();
-        requestAnimationFrame(() => {
-          const doSignOut = () => {
-            if (window.Clerk && typeof window.Clerk.signOut === 'function') {
-              window.Clerk.signOut({ redirectUrl: '/' });
-              return true;
+      document.addEventListener(
+        'click',
+        (e) => {
+          const node = e.target;
+          const el = node instanceof Element ? node : node?.parentElement;
+          if (!el) return;
+          const target = el.closest('[data-clerk-unstyled-id]');
+          if (!target) return;
+          e.preventDefault();
+          e.stopPropagation();
+          requestAnimationFrame(() => {
+            const doSignOut = () => {
+              if (window.Clerk && typeof window.Clerk.signOut === 'function') {
+                window.Clerk.signOut({ redirectUrl: '/' });
+                return true;
+              }
+              return false;
+            };
+            if (!doSignOut()) {
+              const interval = setInterval(() => {
+                if (doSignOut()) clearInterval(interval);
+              }, 100);
+              setTimeout(() => clearInterval(interval), 5000);
             }
-            return false;
-          };
-          if (!doSignOut()) {
-            const interval = setInterval(() => {
-              if (doSignOut()) clearInterval(interval);
-            }, 100);
-            setTimeout(() => clearInterval(interval), 5000);
-          }
-        });
-      }, true);
+          });
+        },
+        true,
+      );
     </script>
     <DeleteConfirmModal />
   </body>
