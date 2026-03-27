@@ -1,6 +1,7 @@
 ---
 import '../../../../../../styles/global.css';
 import DashboardLayout from '../../../../../../layouts/DashboardLayout.astro';
+import { utcIsoToAdminLocalFlatpickr } from '../../../../../../lib/challenge-deadline';
 import { getSupabaseServiceRoleClient } from '../../../../../../lib/supabase';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
@@ -64,18 +65,7 @@ const resources = Array.isArray(lesson.resources)
   : [];
 const resourceInputs = Array.from({ length: 5 }, (_, i) => resources[i] ?? { label: '', url: '', type: 'class' as const });
 
-function toDateTimeLocal(value: string | null): string {
-  if (!value) return '';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const mm = pad(d.getMonth() + 1);
-  const dd = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const min = pad(d.getMinutes());
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
-}
+const lessonScheduledFlatpickr = utcIsoToAdminLocalFlatpickr(lesson.scheduled_at);
 ---
 
 <DashboardLayout>
@@ -258,13 +248,13 @@ function toDateTimeLocal(value: string | null): string {
 
       <div class="grid gap-6 sm:grid-cols-2">
         <div>
-          <label for="lesson-scheduled" class="block text-xs font-medium text-muted">Programada (fecha y hora)</label>
+          <label for="lesson-scheduled" class="block text-xs font-medium text-muted">Programada (fecha y hora, Perú — Lima)</label>
           <div class="relative mt-1.5">
             <input
               id="lesson-scheduled"
               type="text"
               name="scheduled_at"
-              value={toDateTimeLocal(lesson.scheduled_at)}
+              value={lessonScheduledFlatpickr}
               readonly
               class="w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
               placeholder="Elegir fecha y hora"
