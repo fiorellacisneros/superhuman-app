@@ -39,9 +39,24 @@ const submissionsByChallenge = new Map<string, { total: number; pending: number 
 if (challengeIds.length > 0) {
   const { data: submissionRows } = await supabase
     .from('submissions')
-    .select('challenge_id, reviewed')
+    .select('challenge_id, reviewed, user_id, submitted_at')
     .in('challenge_id', challengeIds);
+  // Una fila por alumno+reto: la más reciente por submitted_at (alineado con /admin/submissions).
+  const byPair = new Map<string, (typeof submissionRows)[number]>();
   for (const row of submissionRows ?? []) {
+    const cid = row.challenge_id as string;
+    const uid = row.user_id as string;
+    const k = `${uid}::${cid}`;
+    const cur = byPair.get(k);
+    if (!cur) {
+      byPair.set(k, row);
+      continue;
+    }
+    const tNew = new Date((row.submitted_at as string) || 0).getTime();
+    const tCur = new Date((cur.submitted_at as string) || 0).getTime();
+    if ((Number.isFinite(tNew) ? tNew : 0) > (Number.isFinite(tCur) ? tCur : 0)) byPair.set(k, row);
+  }
+  for (const row of byPair.values()) {
     const key = row.challenge_id as string;
     const current = submissionsByChallenge.get(key) ?? { total: 0, pending: 0 };
     current.total += 1;

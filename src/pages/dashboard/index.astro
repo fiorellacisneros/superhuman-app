@@ -70,9 +70,9 @@ let adminBirthdaysToday: string[] = [];
 let adminBirthdaysUpcoming: { name: string; daysUntil: number }[] = [];
 
 if (role === 'admin' && !preview) {
-  const [studentsCountRes, pendingCountRes, activeCountRes, cohortRowsRes, subRowsRes, pointsRowsRes, coursesRes, enrollmentsRes, lessonsCountRes, studentBirthdaysRes] = await Promise.all([
+  const [studentsCountRes, pendingRowsRes, activeCountRes, cohortRowsRes, subRowsRes, pointsRowsRes, coursesRes, enrollmentsRes, lessonsCountRes, studentBirthdaysRes] = await Promise.all([
     supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
-    supabase.from('submissions').select('*', { count: 'exact', head: true }).eq('reviewed', false),
+    supabase.from('submissions').select('user_id, challenge_id').eq('reviewed', false),
     supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('users').select('id, display_name, avatar_id').eq('role', 'student'),
     supabase
@@ -88,7 +88,9 @@ if (role === 'admin' && !preview) {
     supabase.from('users').select('display_name, birthday').eq('role', 'student').not('birthday', 'is', null),
   ]);
   totalStudents = studentsCountRes.count ?? 0;
-  pendingSubmissionsCount = pendingCountRes.count ?? 0;
+  pendingSubmissionsCount = new Set(
+    (pendingRowsRes.data ?? []).map((r) => `${r.user_id as string}:${r.challenge_id as string}`),
+  ).size;
   activeChallengesCount = activeCountRes.count ?? 0;
 
   const pointsByUser = new Map<string, number>();
