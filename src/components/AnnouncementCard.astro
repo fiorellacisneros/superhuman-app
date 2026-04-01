@@ -1,0 +1,128 @@
+---
+import { renderMarkdown } from '../lib/markdown';
+import type { AnnouncementRecord, AnnouncementButton } from '../lib/announcements';
+
+interface Props {
+  announcement: AnnouncementRecord;
+}
+
+const { announcement: a } = Astro.props;
+
+const bodyHtml =
+  a.content_mode === 'text' && a.body_text?.trim() ? renderMarkdown(a.body_text) : '';
+
+const bullets =
+  a.content_mode === 'bullets'
+    ? a.body_items.map((it) => ({
+        icon: it.icon,
+        html: renderMarkdown(it.text),
+      }))
+    : [];
+
+function btnClasses(btn: AnnouncementButton): string {
+  const base =
+    'inline-flex shrink-0 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition hover:opacity-90 active:scale-[0.98]';
+  if (btn.variant === 'outline') {
+    return `${base} border border-neutral-300 bg-white text-neutral-900 hover:bg-neutral-50`;
+  }
+  return `${base} border border-neutral-900 bg-neutral-900 text-white`;
+}
+---
+
+<article
+  class="announcement-card overflow-hidden rounded-3xl border border-neutral-200/80 bg-white text-neutral-900 shadow-[0_20px_50px_rgba(0,0,0,0.12)]"
+  aria-labelledby={`ann-title-${a.id}`}
+>
+  <div class="p-6 sm:p-8">
+    <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+      <div class="min-w-0 flex-1 space-y-3">
+        {a.badge_text?.trim() && (
+          <p class="inline-flex w-fit rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
+            {a.badge_text.trim()}
+          </p>
+        )}
+        {(a.title?.trim() || a.subtitle?.trim()) && (
+          <div class="space-y-1">
+            {a.title?.trim() && (
+              <h2 id={`ann-title-${a.id}`} class="font-manrope text-2xl font-bold tracking-tight text-neutral-950 sm:text-[1.65rem]">
+                {a.title.trim()}
+              </h2>
+            )}
+            {a.subtitle?.trim() && (
+              <p class="text-sm text-neutral-500 sm:text-base">{a.subtitle.trim()}</p>
+            )}
+          </div>
+        )}
+      </div>
+      {a.image_url?.trim() && (
+        <div class="shrink-0 lg:max-w-[220px]">
+          <img
+            src={a.image_url.trim()}
+            alt=""
+            class="mx-auto max-h-40 w-auto max-w-full rounded-2xl object-contain sm:max-h-48"
+            width="220"
+            height="192"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+      )}
+    </div>
+
+    {a.content_mode === 'text' && bodyHtml && (
+      <div class="announcement-card-body mt-6 text-sm leading-relaxed text-neutral-700 [&_a]:font-medium [&_a]:text-[#012EDC] [&_a]:underline [&_strong]:text-neutral-900 [&_ul]:mt-2 [&_ul]:list-disc [&_ul]:pl-5" set:html={bodyHtml} />
+    )}
+
+    {a.content_mode === 'bullets' && bullets.length > 0 && (
+      <div class="mt-6 space-y-3">
+        {(a.body_section_label?.trim() || 'Cómo funciona:') && (
+          <p class="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+            {a.body_section_label?.trim() || 'Cómo funciona:'}
+          </p>
+        )}
+        <ul class="space-y-3">
+          {bullets.map((row) => (
+            <li class="flex gap-3 rounded-xl bg-neutral-50/80 px-3 py-3 sm:px-4">
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white" aria-hidden="true">
+                <i class={`bi ${row.icon} text-sm`} />
+              </span>
+              <div
+                class="min-w-0 flex-1 text-sm leading-relaxed text-neutral-700 [&_a]:font-medium [&_a]:text-[#012EDC] [&_a]:underline [&_strong]:text-neutral-900"
+                set:html={row.html}
+              />
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    {a.buttons.length > 0 && (
+      <div class="mt-8 space-y-3 border-t border-neutral-100 pt-6">
+        <p class="text-xs font-medium text-neutral-400">Accion principal</p>
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          {a.buttons.slice(0, 1).map((btn) =>
+            btn.type === 'link' ? (
+              <a
+                href={btn.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                class={btnClasses(btn)}
+              >
+                {btn.label}
+              </a>
+            ) : (
+              <button
+                type="button"
+                class={`${btnClasses(btn)} announcement-copy-btn`}
+                data-announcement-copy={btn.url}
+              >
+                <i class="bi bi-link-45deg text-base" aria-hidden="true" />
+                <span class="announcement-copy-label">{btn.label}</span>
+              </button>
+            ),
+          )}
+        </div>
+      </div>
+    )}
+  </div>
+</article>

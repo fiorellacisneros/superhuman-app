@@ -9,7 +9,11 @@ export type PreviewAs = 'live' | 'on_demand';
  * - preview: true si está en modo "ver como estudiante" (URL o cookie)
  * - previewAs: 'live' | 'on_demand' para forzar tipo de estudiante en la vista previa
  */
-export function getPreviewContext(context: APIContext): { preview: boolean; previewAs: PreviewAs; courseSlug: string | null } {
+export function getPreviewContext(context: APIContext): {
+  preview: boolean;
+  previewAs: PreviewAs;
+  courseSlug: string | null;
+} {
   const url = context.url;
   const previewFromUrl = url.searchParams.get('preview') === 'true';
   const courseFromUrl = url.searchParams.get('course');
@@ -45,7 +49,11 @@ export function clearPreviewCookie(context: APIContext): void {
 /**
  * Añade los query params de preview a una URL.
  */
-export function withPreviewParams(href: string, preview: boolean, previewAs: PreviewAs = 'live'): string {
+export function withPreviewParams(
+  href: string,
+  preview: boolean,
+  previewAs: PreviewAs = 'live',
+): string {
   if (!preview) return href;
   const sep = href.includes('?') ? '&' : '?';
   return `${href}${sep}preview=true&as=${previewAs}`;

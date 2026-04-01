@@ -82,6 +82,7 @@ const adminNav = [
   { label: 'Asistencia', href: '/admin/attendance', icon: 'bi-calendar2-check-fill' },
   { label: 'Kahoot', href: '/admin/kahoot', icon: 'bi-trophy-fill' },
   { label: 'Submissions', href: '/admin/submissions', icon: 'bi-inbox-fill' },
+  { label: 'Avisos', href: '/admin/avisos', icon: 'bi-megaphone-fill' },
   { label: 'Certificados', href: '/certificados', icon: 'bi-patch-check' },
   { label: 'SuperHumans', href: '/superhumans', icon: 'bi-stars' },
 ] as const;
@@ -110,7 +111,7 @@ const adminMobileMenuSpec = [
   { title: 'Panel', hrefs: ['/dashboard', '/admin/courses'] },
   {
     title: 'Gestión',
-    hrefs: ['/admin/challenges', '/sesiones-1-1', '/admin/attendance', '/admin/kahoot', '/admin/students', '/admin/submissions', '/certificados'],
+    hrefs: ['/admin/challenges', '/sesiones-1-1', '/admin/attendance', '/admin/kahoot', '/admin/students', '/admin/submissions', '/admin/avisos', '/certificados'],
   },
   { title: 'Comunidad', hrefs: ['/superhumans'] },
 ] as const;
@@ -621,7 +622,7 @@ function isActive(href: string): boolean {
       </div>
     </div>
 
-    <div id="toast-root" class="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(92vw,360px)] flex-col gap-2"></div>
+    <div id="toast-root" class="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(92vw,400px)] flex-col gap-2"></div>
 
     <script>
       document.addEventListener('DOMContentLoaded', () => {
@@ -774,33 +775,68 @@ function isActive(href: string): boolean {
         const type = params.get('toast_type') || 'success';
         if (!message) return;
 
-        const styles = {
-          success: 'border-lime/40 bg-surface text-white',
-          error: 'border-red-500/40 bg-surface text-white',
-          info: 'border-amber-400/40 bg-surface text-white',
-        };
+        const titles = { success: 'Listo', error: 'Error', info: 'Aviso' };
         const icons = {
-          success: 'bi-check-circle-fill text-lime',
-          error: 'bi-x-circle-fill text-red-400',
-          info: 'bi-info-circle-fill text-amber-300',
+          success: 'bi-check-lg',
+          error: 'bi-exclamation-triangle-fill',
+          info: 'bi-info-lg',
         };
         const toastType = type === 'error' || type === 'info' ? type : 'success';
 
         const item = document.createElement('div');
-        item.className = `pointer-events-auto rounded-xl border px-3 py-2.5 shadow-[0_12px_30px_rgba(0,0,0,0.35)] backdrop-blur transition ${styles[toastType]}`;
+        item.className = `ds-toast ds-toast--${toastType} pointer-events-auto transition-[opacity,transform] duration-200 ease-out`;
+        item.setAttribute('role', 'status');
+        item.setAttribute('aria-live', 'polite');
         item.style.opacity = '0';
         item.style.transform = 'translateY(-6px)';
 
+        let hideTimer = null;
+        const dismiss = () => {
+          if (hideTimer !== null) {
+            clearTimeout(hideTimer);
+            hideTimer = null;
+          }
+          item.style.opacity = '0';
+          item.style.transform = 'translateY(-6px)';
+          setTimeout(() => item.remove(), 220);
+        };
+
+        const shine = document.createElement('div');
+        shine.className = 'ds-toast-shine';
+        shine.setAttribute('aria-hidden', 'true');
+
         const row = document.createElement('div');
-        row.className = 'flex items-start gap-2.5';
+        row.className = 'relative z-[1] flex items-center gap-3 px-3.5 py-3';
+
+        const iconWrap = document.createElement('div');
+        iconWrap.className = `ds-toast-icon ds-toast-icon--${toastType}`;
         const icon = document.createElement('i');
-        icon.className = `bi ${icons[toastType]} mt-0.5 text-sm`;
+        icon.className = `bi ${icons[toastType]}`;
         icon.setAttribute('aria-hidden', 'true');
-        const text = document.createElement('p');
-        text.className = 'text-sm leading-5';
-        text.textContent = message;
-        row.appendChild(icon);
-        row.appendChild(text);
+        iconWrap.appendChild(icon);
+
+        const body = document.createElement('div');
+        body.className = 'min-w-0 flex-1';
+        const titleEl = document.createElement('p');
+        titleEl.className = 'ds-toast-title';
+        titleEl.textContent = titles[toastType];
+        const descEl = document.createElement('p');
+        descEl.className = 'ds-toast-desc';
+        descEl.textContent = message;
+        body.appendChild(titleEl);
+        body.appendChild(descEl);
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ds-toast-action';
+        btn.textContent = toastType === 'error' ? 'Cerrar' : 'Entendido';
+        btn.setAttribute('aria-label', 'Cerrar notificación');
+        btn.addEventListener('click', dismiss);
+
+        row.appendChild(iconWrap);
+        row.appendChild(body);
+        row.appendChild(btn);
+        item.appendChild(shine);
         item.appendChild(row);
         toastRoot.appendChild(item);
 
@@ -809,11 +845,7 @@ function isActive(href: string): boolean {
           item.style.transform = 'translateY(0)';
         });
 
-        setTimeout(() => {
-          item.style.opacity = '0';
-          item.style.transform = 'translateY(-6px)';
-          setTimeout(() => item.remove(), 220);
-        }, 3600);
+        hideTimer = window.setTimeout(dismiss, 3600);
 
         params.delete('toast');
         params.delete('toast_type');
@@ -882,24 +914,19 @@ function isActive(href: string): boolean {
             panel.style.overflowY = 'auto';
             panel.style.zIndex = '85';
           } else {
+            // Anclar al trigger con las clases CSS (absolute bajo .custom-select). Evita
+            // position:fixed + getBoundingClientRect que desalinea el menú en formularios anchos / scroll.
             const spaceBelow = window.innerHeight - tr.bottom - margin;
-            const spaceAbove = tr.top - margin;
-            let top = tr.bottom + 4;
-            let maxH = Math.min(maxPanelH, spaceBelow - 4);
-            if (maxH < 100 && spaceAbove > spaceBelow) {
-              maxH = Math.min(maxPanelH, spaceAbove - 4);
-              top = Math.max(margin, tr.top - 4 - maxH);
-            }
-            const left = Math.max(margin, Math.min(tr.left, window.innerWidth - tr.width - margin));
-            panel.style.position = 'fixed';
-            panel.style.left = `${left}px`;
-            panel.style.width = `${tr.width}px`;
-            panel.style.top = `${top}px`;
-            panel.style.maxHeight = `${Math.max(100, maxH)}px`;
+            const maxH = Math.min(maxPanelH, Math.max(100, spaceBelow - 4));
+            panel.style.position = '';
+            panel.style.left = '';
+            panel.style.top = '';
+            panel.style.width = '';
+            panel.style.right = '';
+            panel.style.minWidth = '';
+            panel.style.maxHeight = `${maxH}px`;
             panel.style.overflowY = 'auto';
             panel.style.zIndex = '85';
-            panel.style.right = 'auto';
-            panel.style.minWidth = '';
           }
           openSelect = el;
         };

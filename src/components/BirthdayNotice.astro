@@ -1,0 +1,104 @@
+---
+/**
+ * Cumpleaños: variante "celebration" (estudiante) — mensaje alentador, sin estilo de alerta.
+ * Variante "compact" (admin cohort) — bloque discreto informativo.
+ */
+interface Props {
+  id?: string;
+  role?: 'region' | 'status';
+  'aria-labelledby'?: string;
+  panelTitle?: string;
+  class?: string;
+  /** Estudiante: tarjeta cálida y celebratoria. Admin cohort: lista compacta. */
+  variant?: 'celebration' | 'compact';
+  /** Primer nombre para el saludo (ej. de display_name). */
+  firstName?: string;
+}
+
+const {
+  id,
+  role = 'status',
+  'aria-labelledby': ariaLabelledby,
+  panelTitle,
+  class: className = '',
+  variant = 'celebration',
+  firstName: firstNameProp,
+} = Astro.props;
+
+const name = (firstNameProp && String(firstNameProp).trim()) || 'superHuman';
+---
+
+{variant === 'compact' ? (
+  <div
+    id={id}
+    class:list={[
+      'rounded-2xl border border-white/10 bg-surface-2/70 px-4 py-3.5 sm:px-5 sm:py-4',
+      className,
+    ]}
+    role={role}
+    aria-labelledby={ariaLabelledby}
+    title={panelTitle}
+  >
+    <div class="flex items-start gap-3 sm:gap-4">
+      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-lime/15 text-lime" aria-hidden="true">
+        <i class="bi bi-balloon-heart-fill text-xl leading-none"></i>
+      </div>
+      <div class="min-w-0 flex-1 space-y-1.5 text-sm">
+        <slot />
+      </div>
+    </div>
+  </div>
+) : (
+  <div
+    id={id}
+    class:list={[
+      'relative overflow-hidden rounded-3xl border border-amber-400/25 shadow-[0_20px_56px_rgba(0,0,0,0.45)]',
+      className,
+    ]}
+    role={role}
+    aria-labelledby={ariaLabelledby}
+    title={panelTitle}
+  >
+    <div
+      class="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-[#FFBE00]/20 blur-3xl"
+      aria-hidden="true"
+    />
+    <div
+      class="pointer-events-none absolute -bottom-20 -left-10 h-48 w-48 rounded-full bg-[#012EDC]/25 blur-3xl"
+      aria-hidden="true"
+    />
+    <div
+      class="relative border-t border-white/10 bg-gradient-to-br from-[#1f1a14]/95 via-[#141210] to-[#0d0d0d] px-5 py-6 sm:px-8 sm:py-7"
+    >
+      <div class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
+        <div class="min-w-0 flex-1 space-y-3">
+          <slot />
+          <div class="space-y-1">
+            <p class="font-manrope text-xl font-semibold leading-snug text-white sm:text-2xl">
+              ¡Feliz cumpleaños, {name}!
+            </p>
+            <p class="max-w-md text-sm leading-relaxed text-amber-50/80">
+              Hoy es tu día: te deseamos mucha alegría y que sigas disfrutando cada paso de tu camino en Superhuman.
+            </p>
+          </div>
+        </div>
+        <div
+          class="flex shrink-0 items-center justify-center sm:pr-2 [&_svg]:h-[4.5rem] [&_svg]:w-[4.5rem] sm:[&_svg]:h-[5.5rem] sm:[&_svg]:w-[5.5rem]"
+          aria-hidden="true"
+        >
+          <slot name="graphic">
+            <svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="128" cy="128" r="128" class="fill-blue"></circle>
+              <circle cx="119.883" cy="112.39" r="7.49268" class="fill-lime"></circle>
+              <circle cx="68.6834" cy="117.385" r="6.2439" class="fill-lime"></circle>
+              <path
+                class="fill-lime"
+                d="M66.4247 141.942C66.2638 141.261 65.8244 140.659 65.2247 140.265C64.6238 139.871 63.9118 139.717 63.2238 139.84C62.5357 139.963 61.9217 140.355 61.4951 140.934C61.0697 141.512 60.8667 142.229 60.9523 142.923C60.9523 142.923 60.9523 142.923 60.9523 142.923C61.1519 144.475 61.4627 146.014 61.877 147.527C65.3028 160.853 78.6022 173.859 94.9871 171.418C111.007 168.732 120.873 156.056 127.989 144.605C128.767 143.325 129.535 141.994 130.295 140.611C131.252 138.89 131.46 136.894 130.817 135.035C130.177 133.177 128.739 131.608 126.875 130.701C125.01 129.793 122.888 129.629 121.032 130.271C119.172 130.911 117.729 132.306 116.965 134.121C116.965 134.121 116.965 134.121 116.965 134.121C116.431 135.395 115.891 136.618 115.346 137.791C110.374 148.453 103.059 158.755 93.1124 161.399C83.31 164.31 71.7335 156.584 67.6008 145.653C67.1247 144.447 66.7297 143.206 66.4247 141.942Z"
+              ></path>
+            </svg>
+          </slot>
+        </div>
+      </div>
+    </div>
+  </div>
+)}

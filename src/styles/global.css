@@ -294,7 +294,135 @@ span.flatpickr-weekday {
   background-image: none;
 }
 
+/* Panel debajo del trigger; el JS solo ajusta max-height. (Picker flotante usa top en px inline.) */
+.custom-select.relative .custom-select-panel.absolute {
+  top: 100%;
+}
+
 /* Variante single: sin checkboxes, solo texto (evita confusión con multi-select) */
 .custom-select--single .custom-select-option > span:first-child {
   display: none;
+}
+
+/* Toasts (?toast=): glass + reflejo diagonal (layout: icono | título + texto | acción) */
+.ds-toast {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.ds-toast-shine {
+  pointer-events: none;
+  position: absolute;
+  left: -15%;
+  top: -80%;
+  width: 42%;
+  height: 220%;
+  background: linear-gradient(
+    118deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.05) 38%,
+    transparent 68%
+  );
+  transform: rotate(-14deg);
+  z-index: 0;
+}
+
+.ds-toast--success {
+  border-color: color-mix(in srgb, var(--color-lime) 35%, transparent);
+}
+
+.ds-toast--error {
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.ds-toast--info {
+  border-color: rgba(251, 191, 36, 0.28);
+}
+
+.ds-toast-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.ds-toast-icon--success {
+  background: color-mix(in srgb, var(--color-lime) 22%, transparent);
+  color: var(--color-lime);
+}
+
+.ds-toast-icon--error {
+  background: rgba(248, 113, 113, 0.22);
+  color: #f87171;
+}
+
+.ds-toast-icon--info {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fcd34d;
+}
+
+.ds-toast-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-white);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.ds-toast-desc {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  line-height: 1.35;
+  margin-top: 0.125rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.ds-toast-action {
+  flex-shrink: 0;
+  margin-left: auto;
+  border-radius: 9999px;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.ds-toast-action:hover {
+  opacity: 0.92;
+}
+
+.ds-toast-action:active {
+  transform: scale(0.97);
+}
+
+.ds-toast--success .ds-toast-action,
+.ds-toast--info .ds-toast-action {
+  background: rgba(0, 0, 0, 0.45);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--color-white);
+}
+
+.ds-toast--error .ds-toast-action {
+  background: #fafafa;
+  color: #0a0a0a;
+  border-color: rgba(255, 255, 255, 0.2);
 }
