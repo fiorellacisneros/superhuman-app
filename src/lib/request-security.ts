@@ -6,17 +6,31 @@ export function safeRedirectPath(input: FormDataEntryValue | null, fallback: str
   return value;
 }
 
-export function sanitizeHttpUrl(input: FormDataEntryValue | null): string | null {
-  if (typeof input !== 'string') return null;
-  const raw = input.trim();
-  if (!raw) return null;
+function tryParseHttpUrl(s: string): string | null {
   try {
-    const parsed = new URL(raw);
+    const parsed = new URL(s);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
     return parsed.toString();
   } catch {
     return null;
   }
+}
+
+/**
+ * Accepts absolute http(s) URLs. If the user omits the scheme (common for LinkedIn/IG pastes),
+ * retries with https:// — `new URL('linkedin.com/in/…')` would otherwise throw.
+ */
+export function sanitizeHttpUrl(input: FormDataEntryValue | null): string | null {
+  if (typeof input !== 'string') return null;
+  const raw = input.trim();
+  if (!raw) return null;
+  const direct = tryParseHttpUrl(raw);
+  if (direct) return direct;
+  const hasScheme = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(raw);
+  if (hasScheme) return null;
+  const looksLikeHost = /^[\w.-]+\.[a-zA-Z]{2,}/.test(raw);
+  if (!looksLikeHost) return null;
+  return tryParseHttpUrl(`https://${raw.replace(/^\/+/, '')}`);
 }
 
 export function withToastParams(

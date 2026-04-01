@@ -3,6 +3,7 @@ import '../../../styles/global.css';
 import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 import { avatarImagePath } from '../../../lib/avatars';
+import { formatDateTime } from '../../../lib/format-date';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -80,21 +81,6 @@ if (selectedLesson) {
     })
     .filter((s): s is { id: string; name: string; avatarId: string | null } => Boolean(s))
     .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return 'Sin fecha';
-  try {
-    return new Date(iso).toLocaleString('es', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
 }
 ---
 

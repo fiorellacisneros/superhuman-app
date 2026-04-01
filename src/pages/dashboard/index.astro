@@ -7,11 +7,22 @@ import BadgeIcon from '../../components/BadgeIcon.astro';
 import BadgeOutline from '../../components/BadgeOutline.astro';
 import { formatDayAndDate, formatTime, formatDateTime } from '../../lib/format-date';
 import { isLessonCompleted } from '../../lib/lessons';
-import { getPreviewContext, setPreviewCookie, clearPreviewCookie } from '../../lib/preview';
+import {
+  getPreviewContext,
+  setPreviewCookie,
+  clearPreviewCookie,
+} from '../../lib/preview';
 import { ON_DEMAND_BADGE_CONDITION_TYPES } from '../../lib/badges';
 import { badgeDisplayDescription, badgeDisplayName } from '../../lib/badge-display';
 import { getPointsBreakdownByCourse, type CoursePointsBreakdown } from '../../lib/points-breakdown';
 import PointsBreakdownListItem from '../../components/PointsBreakdownListItem.astro';
+import BirthdayNotice from '../../components/BirthdayNotice.astro';
+import AnnouncementCard from '../../components/AnnouncementCard.astro';
+import {
+  fetchActiveAnnouncements,
+  filterAnnouncementsForViewer,
+  type AnnouncementRecord,
+} from '../../lib/announcements';
 import { getBadgeEarnGuideRows, type BadgeEarnRow } from '../../lib/badge-earn-guide';
 import { APP_BIRTHDAY_TIMEZONE, daysUntilBirthdayAnniversary } from '../../lib/birthday';
 
@@ -70,9 +81,9 @@ let adminBirthdaysToday: string[] = [];
 let adminBirthdaysUpcoming: { name: string; daysUntil: number }[] = [];
 
 if (role === 'admin' && !preview) {
-  const [studentsCountRes, pendingCountRes, activeCountRes, cohortRowsRes, subRowsRes, pointsRowsRes, coursesRes, enrollmentsRes, lessonsCountRes, studentBirthdaysRes] = await Promise.all([
+  const [studentsCountRes, pendingRowsRes, activeCountRes, cohortRowsRes, subRowsRes, pointsRowsRes, coursesRes, enrollmentsRes, lessonsCountRes, studentBirthdaysRes] = await Promise.all([
     supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
-    supabase.from('submissions').select('*', { count: 'exact', head: true }).eq('reviewed', false),
+    supabase.from('submissions').select('user_id, challenge_id').eq('reviewed', false),
     supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('users').select('id, display_name, avatar_id').eq('role', 'student'),
     supabase
@@ -88,7 +99,9 @@ if (role === 'admin' && !preview) {
     supabase.from('users').select('display_name, birthday').eq('role', 'student').not('birthday', 'is', null),
   ]);
   totalStudents = studentsCountRes.count ?? 0;
-  pendingSubmissionsCount = pendingCountRes.count ?? 0;
+  pendingSubmissionsCount = new Set(
+    (pendingRowsRes.data ?? []).map((r) => `${r.user_id as string}:${r.challenge_id as string}`),
+  ).size;
   activeChallengesCount = activeCountRes.count ?? 0;
 
   const pointsByUser = new Map<string, number>();
@@ -219,6 +232,7 @@ let upcomingLessons: UpcomingLesson[] = [];
 let upcomingByMonth: { monthLabel: string; lessons: UpcomingLesson[] }[] = [];
 /** Solo cohort en vivo: lecciones pasadas con grabación (acceso rápido al lado del horario). */
 let recordingByMonth: { monthLabel: string; lessons: UpcomingLesson[] }[] = [];
+let studentAnnouncements: AnnouncementRecord[] = [];
 
 if (role !== 'admin' || preview) {
   try {
@@ -502,6 +516,12 @@ if (role !== 'admin' || preview) {
       pointsBreakdownByCourse = await getPointsBreakdownByCourse(supabase, userId, breakdownCourseIds);
     }
     badgeEarnGuideRows = getBadgeEarnGuideRows(hasLiveEnrollment);
+
+    const activeAnn = await fetchActiveAnnouncements(supabase);
+    studentAnnouncements = filterAnnouncementsForViewer(activeAnn, enrolledIds, {
+      userTotalPoints: points,
+      hasLiveEnrollment,
+    });
   } catch (err) {
     console.error('[dashboard] student data error', err);
     // Mantener valores por defecto (vacíos) para que la página cargue
@@ -514,10 +534,18 @@ const displayName =
   (sessionClaims as any)?.name ??
   (role === 'admin' ? 'Admin' : 'Estudiante');
 
+const birthdayFirstName =
+  displayName
+    .split(/\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)[0] || 'superHuman';
+
 const userTimezone = (userRow as { timezone?: string | null } | null)?.timezone ?? null;
 const myBirthdayRaw = (userRow as { birthday?: string | null })?.birthday ?? null;
 const daysUntilMyBirthday = daysUntilBirthdayAnniversary(myBirthdayRaw, APP_BIRTHDAY_TIMEZONE);
-const showStudentBirthdayBanner = (role !== 'admin' || preview) && daysUntilMyBirthday === 0;
+const showStudentBirthdayBanner =
+  (role !== 'admin' || preview) &&
+  daysUntilMyBirthday === 0;
 const recordingHasAny = recordingByMonth.some(({ lessons }) => lessons.length > 0);
 const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug}` : '/courses';
 ---
@@ -530,57 +558,46 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
           <h1 class="font-manrope text-2xl font-semibold tracking-tight text-white">Dashboard de administración</h1>
           <p class="mt-1 text-sm text-muted">Resumen general del cohort, entregas y avance por curso.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-col items-end gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <span class="text-sm text-muted">Ver como estudiante:</span>
-          <a href="/dashboard?preview=true&as=live" class="btn btn-primary">
-            En vivo
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-          </a>
-          <a href="/dashboard?preview=true&as=on_demand" class="btn btn-secondary">
-            On-demand
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-          </a>
+          <div class="flex flex-wrap items-center justify-end gap-2">
+            <a href="/dashboard?preview=true&as=live" class="btn btn-primary">
+              En vivo
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+            <a href="/dashboard?preview=true&as=on_demand" class="btn btn-secondary">
+              On-demand
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          </div>
         </div>
       </header>
 
       {(adminBirthdaysToday.length > 0 || adminBirthdaysUpcoming.length > 0) && (
-        <div
-          class="relative flex flex-wrap items-start gap-3 rounded-xl border border-lime/35 bg-lime/[0.08] px-4 py-3 md:items-center"
-          role="status"
-        >
-          <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime/20 text-lg text-lime" aria-hidden="true">
-            🎂
-          </span>
-          <div class="min-w-0 flex-1 space-y-1.5 text-sm">
-            <p class="font-medium text-white">Cumpleaños del cohort</p>
-            {adminBirthdaysToday.length > 0 && (
-              <p class="text-muted">
-                <span class="font-medium text-lime">Hoy:</span>{' '}
-                {adminBirthdaysToday.join(', ')}
-              </p>
-            )}
-            {adminBirthdaysUpcoming.length > 0 && (
-              <p class="text-muted">
-                <span class="font-medium text-white/90">Próximos (3 días):</span>{' '}
-                {adminBirthdaysUpcoming
-                  .map((u) => `${u.name} (${u.daysUntil === 1 ? 'mañana' : `en ${u.daysUntil} días`})`)
-                  .join(' · ')}
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted transition hover:bg-white/10 hover:text-lime"
-            title={`Fechas según cumpleaños en perfil. Aviso hasta 3 días antes de cada día (zona ${APP_BIRTHDAY_TIMEZONE.replace('_', ' ')}).`}
-            aria-label="Información sobre avisos de cumpleaños"
-          >
-            <i class="bi bi-info-circle text-lg leading-none" aria-hidden="true"></i>
-          </button>
-        </div>
+        <BirthdayNotice variant="compact" role="region" aria-labelledby="admin-birthday-alert-title">
+          <p id="admin-birthday-alert-title" class="font-medium text-white">
+            Cumpleaños del cohort
+          </p>
+          {adminBirthdaysToday.length > 0 && (
+            <p class="truncate text-xs text-muted">
+              <span class="font-medium text-lime">Hoy:</span> {adminBirthdaysToday.join(', ')}
+            </p>
+          )}
+          {adminBirthdaysUpcoming.length > 0 && (
+            <p class="truncate text-xs text-muted">
+              <span class="font-medium text-lime">Próximos:</span>{' '}
+              {adminBirthdaysUpcoming
+                .map((u) =>
+                  `${u.name} (${u.daysUntil === 1 ? 'mañana' : `en ${u.daysUntil} días`})`,
+                )
+                .join(' · ')}
+            </p>
+          )}
+        </BirthdayNotice>
       )}
 
       <div class="grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -720,53 +737,55 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
 ) : (
   <DashboardLayout role={preview ? 'student' : role}>
     {role === 'admin' && preview && (
-      <div class="-mx-4 -mt-6 mb-6 flex flex-wrap items-center justify-between gap-2 bg-background/95 px-4 py-3 md:-mx-6 md:mb-8 md:gap-4 md:px-6">
-        <span class="flex items-center gap-2 text-sm font-medium text-lime">
-          <span aria-hidden="true">👁</span>
-          Vista previa: Estudiante {previewAs === 'on_demand' ? 'on-demand' : 'en vivo'}
-        </span>
-        <div class="flex flex-wrap items-center gap-2">
-          <a
-            href={previewAs === 'live' ? '#' : `${Astro.url.pathname}?preview=true&as=live`}
-            class={`inline-flex items-center gap-1.5 rounded-[40px] border px-3 py-1.5 text-sm font-medium transition ${previewAs === 'live' ? 'border-lime bg-lime/15 text-lime' : 'border-white bg-transparent text-white hover:bg-white/10'}`}
-          >
-            En vivo
-          </a>
-          <a
-            href={previewAs === 'on_demand' ? '#' : `${Astro.url.pathname}?preview=true&as=on_demand`}
-            class={`inline-flex items-center gap-1.5 rounded-[40px] border px-3 py-1.5 text-sm font-medium transition ${previewAs === 'on_demand' ? 'border-lime bg-lime/15 text-lime' : 'border-white bg-transparent text-white hover:bg-white/10'}`}
-          >
-            On-demand
-          </a>
-          <a href="/dashboard?exitPreview=1" class="inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Volver al dashboard de admin
-          </a>
+      <div class="-mx-4 -mt-6 mb-6 flex flex-col gap-2 bg-background/95 px-4 py-3 md:-mx-6 md:mb-8 md:px-6">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="flex flex-wrap items-center gap-2 text-sm font-medium text-lime">
+            <span aria-hidden="true">👁</span>
+            <span>
+              Vista previa: Estudiante {previewAs === 'on_demand' ? 'on-demand' : 'en vivo'}
+            </span>
+          </span>
+          <div class="flex flex-wrap items-center gap-2">
+            <a
+              href={`${Astro.url.pathname}?preview=true&as=live`}
+              class={`inline-flex items-center gap-1.5 rounded-[40px] border px-3 py-1.5 text-sm font-medium transition ${previewAs === 'live' ? 'border-lime bg-lime/15 text-lime' : 'border-white bg-transparent text-white hover:bg-white/10'}`}
+            >
+              En vivo
+            </a>
+            <a
+              href={`${Astro.url.pathname}?preview=true&as=on_demand`}
+              class={`inline-flex items-center gap-1.5 rounded-[40px] border px-3 py-1.5 text-sm font-medium transition ${previewAs === 'on_demand' ? 'border-lime bg-lime/15 text-lime' : 'border-white bg-transparent text-white hover:bg-white/10'}`}
+            >
+              On-demand
+            </a>
+            <a href="/dashboard?exitPreview=1" class="inline-flex items-center gap-1.5 rounded-[40px] border border-white bg-transparent px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Volver al dashboard de admin
+            </a>
+          </div>
         </div>
       </div>
     )}
     {showStudentBirthdayBanner && (
-      <div
-        class="group relative mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-lime/40 bg-gradient-to-r from-lime/15 via-lime/5 to-transparent px-4 py-3 md:mb-8"
+      <BirthdayNotice
+        id="student-birthday-banner"
+        variant="celebration"
+        firstName={birthdayFirstName}
         role="status"
-        title="Te lo mostramos en tu cumple según la fecha de tu perfil (zona horaria Lima)."
-      >
-        <span class="text-2xl" aria-hidden="true">🎉</span>
-        <div class="min-w-0 flex-1">
-          <p class="text-base font-semibold text-white">¡Feliz cumpleaños, superHuman!</p>
-          <p class="mt-0.5 text-sm text-muted">Que tengas un gran día.</p>
-        </div>
-        <span
-          class="inline-flex h-8 w-8 shrink-0 cursor-help items-center justify-center rounded-full text-muted"
-          aria-hidden="true"
-        >
-          <i class="bi bi-info-circle text-lg leading-none" aria-hidden="true"></i>
-        </span>
-      </div>
+        class="mb-6 md:mb-8"
+        panelTitle="Mensaje especial el día de tu cumple según tu perfil (zona Lima)."
+      />
     )}
     <section class="max-w-5xl space-y-8 xl:max-w-6xl">
+      {studentAnnouncements.length > 0 && (
+        <div class="space-y-5">
+          {studentAnnouncements.map((ann) => (
+            <AnnouncementCard announcement={ann} />
+          ))}
+        </div>
+      )}
       <header class="space-y-2">
         <h1 class="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
           {enrolledIds.length > 0 ? 'Tu viaje a ser un superhuman empieza aquí.' : 'Gracias por confiar en Superhuman'}
@@ -1287,7 +1306,31 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
     </div>
 
     <script>
+      import confetti from 'canvas-confetti';
+
+      function fireBirthdayConfetti() {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const colors = ['#bef264', '#d9f99d', '#fde047', '#22d3ee', '#ffffff', '#FFBE00'];
+        confetti({
+          particleCount: 125,
+          spread: 78,
+          origin: { y: 0.58 },
+          colors,
+        });
+        window.setTimeout(() => {
+          confetti({ particleCount: 52, angle: 58, spread: 56, origin: { x: 0, y: 0.68 }, colors });
+          confetti({ particleCount: 52, angle: 122, spread: 56, origin: { x: 1, y: 0.68 }, colors });
+        }, 200);
+        window.setTimeout(() => {
+          confetti({ particleCount: 70, spread: 110, startVelocity: 32, origin: { y: 0.32 }, colors });
+        }, 420);
+      }
+
       document.addEventListener('DOMContentLoaded', () => {
+        if (document.getElementById('student-birthday-banner')) {
+          fireBirthdayConfetti();
+        }
+
         function syncBodyScroll() {
           const badge = document.getElementById('badge-guide-modal');
           const points = document.getElementById('points-breakdown-modal');
@@ -1328,6 +1371,21 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
         document.addEventListener('click', (e) => {
           const t = e.target;
           if (!(t instanceof Element)) return;
+          const copyAnn = t.closest('.announcement-copy-btn');
+          if (copyAnn instanceof HTMLButtonElement) {
+            const url = copyAnn.getAttribute('data-announcement-copy');
+            if (!url) return;
+            e.preventDefault();
+            const labelEl = copyAnn.querySelector('.announcement-copy-label');
+            const prev = labelEl?.textContent?.trim() || '';
+            void navigator.clipboard.writeText(url).then(() => {
+              if (labelEl) labelEl.textContent = '¡Copiado!';
+              window.setTimeout(() => {
+                if (labelEl) labelEl.textContent = prev;
+              }, 2000);
+            });
+            return;
+          }
           const btn = t.closest('.dashboard-copy-recording-code');
           if (!btn || btn.tagName !== 'BUTTON') return;
           const code = btn.getAttribute('data-code');

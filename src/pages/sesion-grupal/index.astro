@@ -2,7 +2,11 @@
 import '../../styles/global.css';
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { getSupabaseServiceRoleClient } from '../../lib/supabase';
-import { getPreviewContext, setPreviewCookie, withPreviewParams } from '../../lib/preview';
+import {
+  getPreviewContext,
+  setPreviewCookie,
+  withPreviewParams,
+} from '../../lib/preview';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {

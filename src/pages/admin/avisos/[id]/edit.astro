@@ -1,0 +1,118 @@
+---
+import '../../../../styles/global.css';
+import DashboardLayout from '../../../../layouts/DashboardLayout.astro';
+import AnnouncementFormFields from '../../../../components/AnnouncementFormFields.astro';
+import { getSupabaseServiceRoleClient } from '../../../../lib/supabase';
+import {
+  normalizeBodyItems,
+  normalizeButtons,
+  resolveVisibilityConditionsFromRow,
+  type AnnouncementRecord,
+} from '../../../../lib/announcements';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+if ((userRow?.role as string) !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+const id = Astro.params.id;
+if (!id) {
+  return Astro.redirect('/admin/avisos');
+}
+
+const { data: raw, error } = await supabase.from('announcements').select('*').eq('id', id).maybeSingle();
+if (error || !raw) {
+  return Astro.redirect('/admin/avisos');
+}
+
+const rawRec = raw as Record<string, unknown>;
+const initial: AnnouncementRecord = {
+  id: raw.id as string,
+  is_active: Boolean(raw.is_active),
+  sort_order: Number(raw.sort_order) || 0,
+  badge_text: (raw.badge_text as string | null) ?? null,
+  title: (raw.title as string | null) ?? null,
+  subtitle: (raw.subtitle as string | null) ?? null,
+  image_url: (raw.image_url as string | null) ?? null,
+  content_mode: raw.content_mode === 'bullets' ? 'bullets' : 'text',
+  body_section_label: (raw.body_section_label as string | null) ?? null,
+  body_text: (raw.body_text as string | null) ?? null,
+  body_items: normalizeBodyItems(raw.body_items),
+  buttons: normalizeButtons(raw.buttons),
+  audience: raw.audience === 'course' ? 'course' : 'all',
+  course_id: (raw.course_id as string | null) ?? null,
+  starts_at: (raw.starts_at as string | null) ?? null,
+  ends_at: (raw.ends_at as string | null) ?? null,
+  min_points: (() => {
+    const v = rawRec.min_points;
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(999999, Math.max(0, Math.trunc(n))) : null;
+  })(),
+  require_enrolled_course_id: (rawRec.require_enrolled_course_id as string | null) ?? null,
+  visibility_conditions: resolveVisibilityConditionsFromRow(rawRec),
+};
+
+const { data: coursesRows } = await supabase.from('courses').select('id, title').order('title');
+const courses = (coursesRows ?? []).map((c) => ({ id: c.id as string, title: (c.title as string) ?? 'Curso' }));
+const formSuffix = id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24) || 'edit';
+---
+
+<DashboardLayout>
+  <Fragment slot="head">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js" defer></script>
+  </Fragment>
+  <section class="max-w-5xl space-y-8 xl:max-w-6xl">
+    <header class="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <a href="/admin/avisos" class="text-xs font-medium text-lime hover:underline">← Volver a avisos</a>
+        <h1 class="mt-2 text-2xl font-semibold tracking-tight text-white">Editar aviso</h1>
+        <p class="mt-1 text-sm text-muted">Los cambios se reflejan en el dashboard de los estudiantes según audiencia y fechas.</p>
+      </div>
+    </header>
+
+    <form method="post" action="/api/admin/announcements" enctype="multipart/form-data" class="space-y-8 rounded-xl border border-transparent bg-surface p-5 sm:p-6">
+      <AnnouncementFormFields
+        mode="update"
+        announcementId={id}
+        redirectTo={`/admin/avisos/${id}/edit`}
+        courses={courses}
+        initial={initial}
+        formSuffix={formSuffix}
+      />
+      <div class="flex flex-wrap gap-3">
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        <a href="/admin/avisos" class="btn btn-secondary">Cancelar</a>
+      </div>
+    </form>
+  </section>
+</DashboardLayout>
+
+<script is:inline define:vars={{ formSuffix }}>
+  (function () {
+    var fpOpts = { enableTime: true, dateFormat: 'Y-m-d H:i', locale: 'es', time_24hr: true, allowInput: false };
+    function init() {
+      if (typeof window.flatpickr !== 'function') return;
+      var s = document.getElementById('ann-starts-' + formSuffix);
+      var e = document.getElementById('ann-ends-' + formSuffix);
+      if (s && !s.dataset.flatpickrInit) {
+        window.flatpickr(s, fpOpts);
+        s.dataset.flatpickrInit = '1';
+      }
+      if (e && !e.dataset.flatpickrInit) {
+        window.flatpickr(e, fpOpts);
+        e.dataset.flatpickrInit = '1';
+      }
+      document.dispatchEvent(new CustomEvent('custom-select-reinit', { detail: { container: document.body } }));
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+  })();
+</script>

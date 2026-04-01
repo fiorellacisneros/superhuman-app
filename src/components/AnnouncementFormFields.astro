@@ -1,0 +1,593 @@
+---
+import {
+  ANNOUNCEMENT_BULLET_ICONS,
+  getVisibilityConditionsForForm,
+  type AnnouncementRecord,
+} from '../lib/announcements';
+import { utcIsoToAdminLocalFlatpickr } from '../lib/challenge-deadline';
+
+interface Props {
+  mode: 'create' | 'update';
+  announcementId?: string;
+  redirectTo: string;
+  courses: { id: string; title: string }[];
+  initial: AnnouncementRecord | null;
+  formSuffix: string;
+}
+
+const { mode, announcementId, redirectTo, courses, initial, formSuffix } = Astro.props;
+
+const i = initial;
+const bullets = i?.body_items ?? [];
+const btns = i?.buttons ?? [];
+
+const startsVal = i?.starts_at ? utcIsoToAdminLocalFlatpickr(i.starts_at) : '';
+const endsVal = i?.ends_at ? utcIsoToAdminLocalFlatpickr(i.ends_at) : '';
+const contentMode = i?.content_mode ?? 'text';
+const audience = i?.audience ?? 'all';
+const courseIdVal = i?.course_id ?? '';
+const visForm = getVisibilityConditionsForForm(i);
+const VIS_ROW_COUNT = 6;
+---
+
+<input type="hidden" name="redirect_to" value={redirectTo} />
+<input type="hidden" name="action" value={mode === 'create' ? 'create' : 'update'} />
+{mode === 'update' && announcementId && <input type="hidden" name="announcement_id" value={announcementId} />}
+
+<div class="grid gap-6 sm:grid-cols-2">
+  <div class="sm:col-span-2">
+    <label for={`badge-${formSuffix}`} class="block text-xs font-medium text-muted">Etiqueta superior (opcional)</label>
+    <input
+      id={`badge-${formSuffix}`}
+      type="text"
+      name="badge_text"
+      value={i?.badge_text ?? ''}
+      maxlength={120}
+      class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+      placeholder="Ej: Gana 10+ créditos"
+    />
+  </div>
+  <div>
+    <label for={`title-${formSuffix}`} class="block text-xs font-medium text-muted">Título (opcional)</label>
+    <input
+      id={`title-${formSuffix}`}
+      type="text"
+      name="title"
+      value={i?.title ?? ''}
+      maxlength={200}
+      class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+      placeholder="Título principal"
+    />
+  </div>
+  <div>
+    <label for={`subtitle-${formSuffix}`} class="block text-xs font-medium text-muted">Subtítulo (opcional)</label>
+    <input
+      id={`subtitle-${formSuffix}`}
+      type="text"
+      name="subtitle"
+      value={i?.subtitle ?? ''}
+      maxlength={400}
+      class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+      placeholder="Texto secundario"
+    />
+  </div>
+</div>
+
+<div class="rounded-xl border border-transparent bg-surface-2/40 p-4">
+  <p class="text-xs font-medium text-muted">Imagen (opcional)</p>
+  <p class="mt-1 text-[11px] text-muted/80">Enlace HTTPS o sube un archivo (máx. 2 MB, JPG/PNG/WebP/GIF). Requiere bucket <code class="text-lime/90">announcement-images</code> en Supabase.</p>
+  <input
+    type="url"
+    name="image_url"
+    value={i?.image_url ?? ''}
+    class="mt-3 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+    placeholder="https://..."
+  />
+  <input
+    type="file"
+    name="image_file"
+    accept="image/jpeg,image/png,image/webp,image/gif"
+    class="mt-2 block w-full text-xs text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-lime/15 file:px-3 file:py-2 file:text-sm file:font-medium file:text-lime"
+  />
+</div>
+
+<fieldset class="space-y-3">
+  <legend class="text-xs font-medium text-muted">Contenido principal</legend>
+  <div class="flex flex-wrap gap-4 text-sm">
+    <label class="inline-flex cursor-pointer items-center gap-2 text-white">
+      <input type="radio" name="content_mode" value="text" checked={contentMode === 'text'} class="accent-lime" />
+      Texto libre (Markdown)
+    </label>
+    <label class="inline-flex cursor-pointer items-center gap-2 text-white">
+      <input type="radio" name="content_mode" value="bullets" checked={contentMode === 'bullets'} class="accent-lime" />
+      Lista con iconos
+    </label>
+  </div>
+  <div>
+    <label for={`section-lbl-${formSuffix}`} class="block text-xs font-medium text-muted">Encabezado de la lista (solo modo lista)</label>
+    <input
+      id={`section-lbl-${formSuffix}`}
+      type="text"
+      name="body_section_label"
+      value={i?.body_section_label ?? ''}
+      maxlength={120}
+      class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+      placeholder="Cómo funciona:"
+    />
+  </div>
+  <div id={`ann-text-block-${formSuffix}`} class={contentMode === 'bullets' ? 'hidden' : ''}>
+    <label for={`body-text-${formSuffix}`} class="block text-xs font-medium text-muted">Cuerpo</label>
+    <textarea
+      id={`body-text-${formSuffix}`}
+      name="body_text"
+      rows={6}
+      class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+      placeholder="Párrafos, **negrita**, [enlaces](url)"
+    >{i?.body_text ?? ''}</textarea>
+    <p class="mt-1 text-[11px] text-muted/80">Markdown: **negrita**, *cursiva*, listas, enlaces.</p>
+  </div>
+  <div id={`ann-bullets-block-${formSuffix}`} class={contentMode === 'text' ? 'hidden' : 'space-y-3'}>
+    <p class="text-[11px] text-muted">Hasta 12 ítems. Markdown permitido en cada texto.</p>
+    {Array.from({ length: 8 }).map((_, idx) => {
+      const row = bullets[idx];
+      return (
+        <div class="flex flex-col gap-2 rounded-lg bg-surface-2/60 p-3 sm:flex-row sm:items-center">
+          <label class="sr-only" for={`bullet-icon-${formSuffix}-${idx}`}>
+            Icono {idx + 1}
+          </label>
+          <select
+            id={`bullet-icon-${formSuffix}-${idx}`}
+            name={`bullet_icon_${idx}`}
+            class="w-full shrink-0 rounded-lg border border-transparent bg-surface-2 px-2 py-2 text-sm text-white sm:w-44"
+          >
+            {ANNOUNCEMENT_BULLET_ICONS.map((opt) => (
+              <option value={opt.value} selected={row?.icon === opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            name={`bullet_text_${idx}`}
+            value={row?.text ?? ''}
+            maxlength={800}
+            class="min-w-0 flex-1 rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+            placeholder={`Ítem ${idx + 1}`}
+          />
+        </div>
+      );
+    })}
+  </div>
+</fieldset>
+
+<div class="space-y-3 rounded-xl border border-transparent bg-surface-2/40 p-4">
+  <p class="text-xs font-medium text-white">Botón principal (opcional, máximo 1)</p>
+  {(() => {
+    const b = btns[0];
+    const isCopy = b?.type === 'copy';
+    const href = b?.type === 'link' ? b.href : b?.type === 'copy' ? b.url : '';
+    return (
+      <div class="grid gap-2 rounded-lg bg-surface-2/50 p-3 sm:grid-cols-12 sm:items-end">
+        <div class="sm:col-span-4">
+          <label class="mb-1 block text-[10px] text-muted">Texto</label>
+          <input
+            type="text"
+            name="btn_label_0"
+            value={b?.label ?? ''}
+            maxlength={80}
+            class="w-full rounded-lg border border-transparent bg-surface-2 px-2 py-2 text-sm text-white"
+            placeholder="Ej: Ir al enlace"
+          />
+        </div>
+        <div class="sm:col-span-3">
+          <label class="mb-1 block text-[10px] text-muted">Tipo</label>
+          <select name="btn_kind_0" class="w-full rounded-lg border border-transparent bg-surface-2 px-2 py-2 text-sm text-white">
+            <option value="link" selected={!isCopy}>
+              Enlace
+            </option>
+            <option value="copy" selected={isCopy}>
+              Copiar URL
+            </option>
+          </select>
+        </div>
+        <div class="sm:col-span-3">
+          <label class="mb-1 block text-[10px] text-muted">URL (https)</label>
+          <input
+            type="url"
+            name="btn_url_0"
+            value={href}
+            class="w-full rounded-lg border border-transparent bg-surface-2 px-2 py-2 text-sm text-white"
+            placeholder="https://..."
+          />
+        </div>
+        <div class="sm:col-span-2">
+          <label class="mb-1 block text-[10px] text-muted">Estilo</label>
+          <select name="btn_variant_0" class="w-full rounded-lg border border-transparent bg-surface-2 px-2 py-2 text-sm text-white">
+            <option value="primary" selected={b?.variant !== 'outline'}>
+              Sólido
+            </option>
+            <option value="outline" selected={b?.variant === 'outline'}>
+              Contorno
+            </option>
+          </select>
+        </div>
+      </div>
+    );
+  })()}
+</div>
+
+<fieldset class="space-y-3">
+  <legend class="text-xs font-medium text-muted">Quién lo ve</legend>
+  <div class="flex flex-wrap gap-4 text-sm">
+    <label class="inline-flex cursor-pointer items-center gap-2 text-white">
+      <input type="radio" name="audience" value="all" checked={audience === 'all'} class="accent-lime" />
+      Todos los estudiantes
+    </label>
+    <label class="inline-flex cursor-pointer items-center gap-2 text-white">
+      <input type="radio" name="audience" value="course" checked={audience === 'course'} class="accent-lime" />
+      Solo un curso
+    </label>
+  </div>
+  <div id={`ann-course-wrap-${formSuffix}`} class={audience === 'course' ? '' : 'hidden'}>
+    <label for={`ann-course-${formSuffix}`} class="block text-xs font-medium text-muted">Curso</label>
+    <div class="custom-select custom-select--single relative mt-1" data-name="course_id">
+      <input id={`ann-course-${formSuffix}`} type="hidden" name="course_id" value={courseIdVal} />
+      <button
+        type="button"
+        class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+        aria-expanded="false"
+      >
+        <span class="custom-select-label truncate">
+          {courses.find((c) => c.id === courseIdVal)?.title ?? '— Elige curso —'}
+        </span>
+        <svg class="h-4 w-4 shrink-0 text-muted transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
+        </svg>
+      </button>
+      <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-transparent bg-surface p-2 shadow-2xl">
+        {courses.map((c) => (
+          <button
+            type="button"
+            class={`custom-select-option mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition first:mt-0 hover:bg-surface-2 ${
+              c.id === courseIdVal ? 'bg-lime/10 text-lime' : 'text-white'
+            }`}
+            data-value={c.id}
+            data-label={c.title}
+          >
+            <span
+              class={`flex h-4 w-4 items-center justify-center rounded-[4px] border ${
+                c.id === courseIdVal ? 'border-lime bg-lime text-background' : 'border-muted'
+              }`}
+            >
+              {c.id === courseIdVal && <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />}
+            </span>
+            <span class="truncate">{c.title}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  </div>
+</fieldset>
+
+<fieldset
+  class="space-y-4 rounded-xl border border-white/10 bg-surface-2/30 p-4"
+  data-vis-root={formSuffix}
+>
+  <legend class="px-1 text-xs font-medium text-white">Condiciones de visibilidad (opcional)</legend>
+  <p class="text-[11px] leading-relaxed text-muted/90">
+    Se evalúan <strong class="text-white/95">después</strong> de audiencia y fechas. Añade filas con el dato a comprobar (puntos, curso, modalidad). Vacías no cuentan.
+  </p>
+  <div class="rounded-lg border border-white/5 bg-background/40 px-3 py-3">
+    <p class="text-[11px] font-medium text-muted">Si en este grupo se cumple…</p>
+    <div class="mt-2 flex flex-wrap gap-4 text-sm text-white">
+      <label class="inline-flex cursor-pointer items-center gap-2">
+        <input type="radio" name="vis_match" value="all" checked={visForm.match !== 'any'} class="accent-lime" />
+        Todas las condiciones
+      </label>
+      <label class="inline-flex cursor-pointer items-center gap-2">
+        <input type="radio" name="vis_match" value="any" checked={visForm.match === 'any'} class="accent-lime" />
+        Cualquiera de las condiciones
+      </label>
+    </div>
+  </div>
+  <div class="space-y-3">
+    {Array.from({ length: VIS_ROW_COUNT }).map((_, idx) => {
+      const rule = visForm.rules[idx];
+      const f = rule?.field ?? '';
+      const isPts = f === 'points_total';
+      const isEnr = f === 'enrolled_course';
+      const isCoh = f === 'cohort_mode';
+      const ptsOp = isPts && rule && 'op' in rule ? rule.op : 'gte';
+      const ptsVal = isPts && rule && 'value' in rule ? String(rule.value) : '';
+      const enrId = isEnr && rule && 'courseId' in rule ? rule.courseId : '';
+      const cohVal = isCoh && rule && 'value' in rule ? rule.value : 'live';
+      return (
+        <div
+          class="ann-vis-row space-y-2 rounded-lg border border-white/10 bg-surface-2/50 p-3"
+          data-row-index={idx}
+        >
+          <div class="flex flex-wrap items-end gap-2">
+            <div class="min-w-[min(100%,11rem)] flex-1">
+              <span class="text-[10px] font-medium text-muted">Dato</span>
+              <select
+                name={`vis_field_${idx}`}
+                class="vis-field mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-2 py-2 text-sm text-white"
+              >
+                <option value="" selected={!f}>
+                  — Sin condición —
+                </option>
+                <option value="points_total" selected={f === 'points_total'}>
+                  Puntos totales (dashboard)
+                </option>
+                <option value="enrolled_course" selected={f === 'enrolled_course'}>
+                  Inscrito en curso
+                </option>
+                <option value="cohort_mode" selected={f === 'cohort_mode'}>
+                  Modalidad cohort
+                </option>
+              </select>
+            </div>
+            <div class="min-w-[min(100%,9rem)] w-40">
+              <span class="text-[10px] font-medium text-muted">Condición</span>
+              <select
+                name={`vis_op_${idx}`}
+                class="vis-op mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-2 py-2 text-sm text-white"
+              >
+                {f === 'points_total' ? (
+                  <>
+                    <option value="gte" selected={ptsOp === 'gte'}>
+                      Mayor o igual (≥)
+                    </option>
+                    <option value="lte" selected={ptsOp === 'lte'}>
+                      Menor o igual (≤)
+                    </option>
+                    <option value="eq" selected={ptsOp === 'eq'}>
+                      Igual a (=)
+                    </option>
+                  </>
+                ) : f === 'enrolled_course' ? (
+                  <option value="enrolled" selected>
+                    Está inscrito en
+                  </option>
+                ) : f === 'cohort_mode' ? (
+                  <option value="eq" selected>
+                    Es
+                  </option>
+                ) : (
+                  <option value="">—</option>
+                )}
+              </select>
+            </div>
+          </div>
+          <div class="vis-value-row">
+            <input
+              type="number"
+              name={`vis_points_${idx}`}
+              min={0}
+              max={999999}
+              value={ptsVal}
+              placeholder="Puntos"
+              disabled={!isPts}
+              class:list={[
+                'mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime',
+                !isPts && 'hidden',
+              ]}
+            />
+            <select
+              name={`vis_course_${idx}`}
+              disabled={!isEnr}
+              class:list={[
+                'mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-2 py-2 text-sm text-white',
+                !isEnr && 'hidden',
+              ]}
+            >
+              <option value="">— Elige curso —</option>
+              {courses.map((c) => (
+                <option value={c.id} selected={enrId === c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+            <select
+              name={`vis_cohort_${idx}`}
+              disabled={!isCoh}
+              class:list={[
+                'mt-1 w-full rounded-lg border border-transparent bg-surface-2 px-2 py-2 text-sm text-white',
+                !isCoh && 'hidden',
+              ]}
+            >
+              <option value="live" selected={cohVal === 'live'}>
+                En vivo (tiene cohort live)
+              </option>
+              <option value="on_demand" selected={cohVal === 'on_demand'}>
+                Solo on-demand
+              </option>
+            </select>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+</fieldset>
+
+<div class="grid gap-6 sm:grid-cols-2">
+  <div>
+    <label for={`ann-starts-${formSuffix}`} class="block text-xs font-medium text-muted">Visible desde (opcional, hora Perú)</label>
+    <div class="relative mt-1.5">
+      <input
+        id={`ann-starts-${formSuffix}`}
+        type="text"
+        name="starts_at"
+        value={startsVal}
+        readonly
+        class="w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+        placeholder="Sin fecha de inicio"
+        autocomplete="off"
+      />
+      <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
+    </div>
+  </div>
+  <div>
+    <label for={`ann-ends-${formSuffix}`} class="block text-xs font-medium text-muted">Visible hasta (opcional, hora Perú)</label>
+    <div class="relative mt-1.5">
+      <input
+        id={`ann-ends-${formSuffix}`}
+        type="text"
+        name="ends_at"
+        value={endsVal}
+        readonly
+        class="w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2.5 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+        placeholder="Sin fecha de fin"
+        autocomplete="off"
+      />
+      <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
+    </div>
+  </div>
+  <div>
+    <label for={`sort-${formSuffix}`} class="block text-xs font-medium text-muted">Orden (menor = primero)</label>
+    <input
+      id={`sort-${formSuffix}`}
+      type="number"
+      name="sort_order"
+      value={i?.sort_order ?? 0}
+      min={0}
+      max={9999}
+      class="mt-1.5 w-full rounded-lg border border-transparent bg-surface-2 px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+    />
+  </div>
+  <div class="flex items-end pb-1">
+    <label class="inline-flex cursor-pointer items-center gap-2 text-sm text-white">
+      <input type="checkbox" name="is_active" checked={i?.is_active !== false} class="accent-lime" />
+      Aviso activo
+    </label>
+  </div>
+</div>
+
+<script is:inline define:vars={{ formSuffix }}>
+  (function () {
+    function bindContentMode() {
+      var textBlocks = document.querySelectorAll('[id^="ann-text-block-' + formSuffix + '"]');
+      var bulletBlocks = document.querySelectorAll('[id^="ann-bullets-block-' + formSuffix + '"]');
+      var radios = document.querySelectorAll('input[name="content_mode"]');
+      function sync() {
+        var v = 'text';
+        radios.forEach(function (r) {
+          if (r.checked) v = r.value;
+        });
+        var isBullets = v === 'bullets';
+        textBlocks.forEach(function (el) {
+          el.classList.toggle('hidden', isBullets);
+        });
+        bulletBlocks.forEach(function (el) {
+          el.classList.toggle('hidden', !isBullets);
+          if (isBullets) el.classList.add('space-y-3');
+        });
+      }
+      radios.forEach(function (r) {
+        r.addEventListener('change', sync);
+      });
+      sync();
+    }
+    function bindAudience() {
+      var wraps = document.querySelectorAll('[id^="ann-course-wrap-' + formSuffix + '"]');
+      var radios = document.querySelectorAll('input[name="audience"]');
+      function sync() {
+        var course = false;
+        radios.forEach(function (r) {
+          if (r.checked && r.value === 'course') course = true;
+        });
+        wraps.forEach(function (el) {
+          el.classList.toggle('hidden', !course);
+        });
+      }
+      radios.forEach(function (r) {
+        r.addEventListener('change', sync);
+      });
+      sync();
+    }
+    function fillOpSelect(op, f, keepValue) {
+      op.innerHTML = '';
+      if (f === 'points_total') {
+        [['gte', 'Mayor o igual (≥)'], ['lte', 'Menor o igual (≤)'], ['eq', 'Igual a (=)']].forEach(function (x) {
+          var o = document.createElement('option');
+          o.value = x[0];
+          o.textContent = x[1];
+          op.appendChild(o);
+        });
+        if (keepValue && ['gte', 'lte', 'eq'].indexOf(keepValue) >= 0) op.value = keepValue;
+        else op.value = 'gte';
+      } else if (f === 'enrolled_course') {
+        var o1 = document.createElement('option');
+        o1.value = 'enrolled';
+        o1.textContent = 'Está inscrito en';
+        op.appendChild(o1);
+      } else if (f === 'cohort_mode') {
+        var o2 = document.createElement('option');
+        o2.value = 'eq';
+        o2.textContent = 'Es';
+        op.appendChild(o2);
+      } else {
+        var o3 = document.createElement('option');
+        o3.value = '';
+        o3.textContent = '—';
+        op.appendChild(o3);
+      }
+    }
+    function syncAnnVisRow(row) {
+      var fieldEl = row.querySelector('.vis-field');
+      var op = row.querySelector('.vis-op');
+      var f = fieldEl ? fieldEl.value : '';
+      var prevOp = op ? op.value : '';
+      if (op) fillOpSelect(op, f, prevOp);
+      var pts = row.querySelector('[name^="vis_points_"]');
+      var crs = row.querySelector('[name^="vis_course_"]');
+      var coh = row.querySelector('[name^="vis_cohort_"]');
+      [pts, crs, coh].forEach(function (el) {
+        if (!el) return;
+        el.classList.add('hidden');
+        el.disabled = true;
+      });
+      if (f === 'points_total' && pts) {
+        pts.classList.remove('hidden');
+        pts.disabled = false;
+      }
+      if (f === 'enrolled_course' && crs) {
+        crs.classList.remove('hidden');
+        crs.disabled = false;
+      }
+      if (f === 'cohort_mode' && coh) {
+        coh.classList.remove('hidden');
+        coh.disabled = false;
+      }
+    }
+    function bindAnnVis() {
+      var root = document.querySelector('[data-vis-root="' + formSuffix + '"]');
+      if (!root) return;
+      root.querySelectorAll('.ann-vis-row').forEach(function (row) {
+        syncAnnVisRow(row);
+        var fe = row.querySelector('.vis-field');
+        if (fe)
+          fe.addEventListener('change', function () {
+            syncAnnVisRow(row);
+          });
+      });
+      var form = root.closest('form');
+      if (form) {
+        form.addEventListener('submit', function () {
+          root.querySelectorAll('.ann-vis-row').forEach(syncAnnVisRow);
+        });
+      }
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () {
+        bindContentMode();
+        bindAudience();
+        bindAnnVis();
+      });
+    } else {
+      bindContentMode();
+      bindAudience();
+      bindAnnVis();
+    }
+  })();
+</script>

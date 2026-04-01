@@ -54,37 +54,85 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
   }
 
+  const trimmedChallengeId = challenge_id.trim();
+  const nowIso = new Date().toISOString();
+
   const { data: existing } = await db
     .from('submissions')
-    .select('id, approved')
-    .eq('challenge_id', challenge_id.trim())
+    .select('id, approved, reviewed')
+    .eq('challenge_id', trimmedChallengeId)
     .eq('user_id', userId)
     .order('submitted_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (existing?.approved === true) {
+    const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
+    const url = withToastParams(redirect, 'La entrega ya fue aprobada y no se puede editar', 'info');
+    return new Response(null, { status: 303, headers: { Location: url } });
+  }
+
   if (existing) {
-    if (existing.approved === true) {
+    if (mode !== 'update') {
+      const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
+      const url = withToastParams(redirect, 'La entrega ya fue enviada', 'info');
+      return new Response(null, { status: 303, headers: { Location: url } });
+    }
+    const isRejectedResubmit = existing.reviewed === true && existing.approved === false;
+    const patch: Record<string, unknown> = { link: linkStr, submitted_at: nowIso };
+    if (isRejectedResubmit) {
+      patch.reviewed = false;
+      patch.approved = false;
+      patch.reviewed_at = null;
+      patch.feedback = null;
+    }
+    await db.from('submissions').update(patch).eq('id', existing.id);
+    const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
+    const url = withToastParams(redirect, 'Entrega actualizada', 'success', { celebrate: true });
+    return new Response(null, { status: 303, headers: { Location: url } });
+  }
+
+  const { error: insertError } = await db.from('submissions').insert({
+    challenge_id: trimmedChallengeId,
+    user_id: userId,
+    link: linkStr,
+    submitted_at: nowIso,
+  });
+
+  // Carrera: dos pestañas hacen insert a la vez; el UNIQUE hace fallar el segundo — actualizamos la fila existente.
+  if (insertError?.code === '23505') {
+    const { data: rowAfterRace } = await db
+      .from('submissions')
+      .select('id, approved, reviewed')
+      .eq('challenge_id', trimmedChallengeId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (rowAfterRace?.approved === true) {
       const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
       const url = withToastParams(redirect, 'La entrega ya fue aprobada y no se puede editar', 'info');
       return new Response(null, { status: 303, headers: { Location: url } });
     }
-    if (mode === 'update') {
-      await db.from('submissions').update({ link: linkStr }).eq('id', existing.id);
-      const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
-      const url = withToastParams(redirect, 'Entrega actualizada', 'success', { celebrate: true });
-      return new Response(null, { status: 303, headers: { Location: url } });
+    if (!rowAfterRace) {
+      return new Response(JSON.stringify({ error: 'No se pudo guardar la entrega' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
-    const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
-    const url = withToastParams(redirect, 'La entrega ya fue enviada', 'info');
-    return new Response(null, { status: 303, headers: { Location: url } });
+    const isRejectedResubmit = rowAfterRace.reviewed === true && rowAfterRace.approved === false;
+    const patch: Record<string, unknown> = { link: linkStr, submitted_at: nowIso };
+    if (isRejectedResubmit) {
+      patch.reviewed = false;
+      patch.approved = false;
+      patch.reviewed_at = null;
+      patch.feedback = null;
+    }
+    await db.from('submissions').update(patch).eq('id', rowAfterRace.id);
+  } else if (insertError) {
+    return new Response(JSON.stringify({ error: 'No se pudo guardar la entrega' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
-
-  await db.from('submissions').insert({
-    challenge_id: challenge_id.trim(),
-    user_id: userId,
-    link: linkStr,
-    submitted_at: new Date().toISOString(),
-  });
 
   const redirect = safeRedirectPath(formData.get('redirect_to'), '/challenges');
   const url = withToastParams(redirect, 'Entrega enviada correctamente', 'success', { celebrate: true });
