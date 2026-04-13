@@ -37,6 +37,8 @@ create table if not exists public.announcements (
   min_points int,
   require_enrolled_course_id uuid references public.courses (id) on delete set null,
   visibility_conditions jsonb not null default '{"match":"all","rules":[]}'::jsonb,
+  dismiss_behavior text not null default 'always_show'
+    check (dismiss_behavior in ('always_show', 'remember_dismissal')),
 
   constraint announcements_course_audience_ck check (
     (audience = 'all' and course_id is null)
@@ -53,3 +55,6 @@ create index if not exists announcements_course_idx
   where audience = 'course';
 
 comment on table public.announcements is 'Avisos del dashboard: contenido, audiencia, ventana de fechas.';
+comment on column public.announcements.dismiss_behavior is 'always_show: cierre solo en sesión; remember_dismissal: cierre persistente en el navegador.';
+
+-- Si ya creaste la tabla sin esta columna, ejecuta docs/announcements-dismiss-migration.sql

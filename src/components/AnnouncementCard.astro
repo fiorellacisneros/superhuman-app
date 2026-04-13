@@ -30,10 +30,19 @@ function btnClasses(btn: AnnouncementButton): string {
 ---
 
 <article
-  class="announcement-card overflow-hidden rounded-3xl border border-neutral-200/80 bg-white text-neutral-900 shadow-[0_20px_50px_rgba(0,0,0,0.12)]"
+  class="announcement-card relative overflow-hidden rounded-3xl border border-neutral-200/80 bg-white text-neutral-900 shadow-[0_20px_50px_rgba(0,0,0,0.12)]"
   aria-labelledby={`ann-title-${a.id}`}
+  data-announcement-id={a.id}
+  data-dismiss-behavior={a.dismiss_behavior}
 >
-  <div class="p-6 sm:p-8">
+  <button
+    type="button"
+    class="ann-dismiss absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-neutral-200/90 bg-white/95 text-neutral-500 shadow-sm transition hover:border-neutral-300 hover:text-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#012EDC]"
+    aria-label="Cerrar aviso"
+  >
+    <i class="bi bi-x-lg text-lg leading-none" aria-hidden="true"></i>
+  </button>
+  <div class="p-6 pr-14 pt-5 sm:p-8 sm:pr-16 sm:pt-6">
     <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
       <div class="min-w-0 flex-1 space-y-3">
         {a.badge_text?.trim() && (

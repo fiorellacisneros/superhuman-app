@@ -12,6 +12,7 @@ import {
   hasAnnouncementVisibleContent,
   parseVisibilityRulesFromForm,
   deriveLegacyFromVisibility,
+  parseDismissBehaviorFromForm,
 } from '../../../lib/announcements';
 
 const BUCKET = 'announcement-images';
@@ -101,6 +102,7 @@ function readCommonFields(formData: FormData) {
 
   const visibility_conditions = parseVisibilityRulesFromForm(formData);
   const { min_points, require_enrolled_course_id } = deriveLegacyFromVisibility(visibility_conditions);
+  const dismiss_behavior = parseDismissBehaviorFromForm(formData);
 
   return {
     badge_text,
@@ -123,6 +125,7 @@ function readCommonFields(formData: FormData) {
     visibility_conditions,
     min_points,
     require_enrolled_course_id,
+    dismiss_behavior,
   };
 }
 
@@ -241,6 +244,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     min_points: common.min_points,
     require_enrolled_course_id: common.require_enrolled_course_id,
     visibility_conditions: common.visibility_conditions,
+    dismiss_behavior: common.dismiss_behavior,
   };
 
   if (action === 'create') {
@@ -249,12 +253,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
       .insert({ ...sharedPayload, created_by: userId });
     if (
       insertError &&
-      /min_points|require_enrolled_course_id|visibility_conditions|column/i.test(String(insertError.message))
+      /min_points|require_enrolled_course_id|visibility_conditions|dismiss_behavior|column/i.test(
+        String(insertError.message),
+      )
     ) {
       const fallback = { ...sharedPayload, created_by: userId };
       delete fallback.min_points;
       delete fallback.require_enrolled_course_id;
       delete fallback.visibility_conditions;
+      delete fallback.dismiss_behavior;
       const retry = await db.from('announcements').insert(fallback);
       insertError = retry.error;
     }
@@ -274,12 +281,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
   let { error: updateError } = await db.from('announcements').update(sharedPayload).eq('id', annId.trim());
   if (
     updateError &&
-    /min_points|require_enrolled_course_id|visibility_conditions|column/i.test(String(updateError.message))
+    /min_points|require_enrolled_course_id|visibility_conditions|dismiss_behavior|column/i.test(
+      String(updateError.message),
+    )
   ) {
     const fallback = { ...sharedPayload };
     delete fallback.min_points;
     delete fallback.require_enrolled_course_id;
     delete fallback.visibility_conditions;
+    delete fallback.dismiss_behavior;
     const retry = await db.from('announcements').update(fallback).eq('id', annId.trim());
     updateError = retry.error;
   }

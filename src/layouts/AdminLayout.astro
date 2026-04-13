@@ -30,6 +30,7 @@ const adminNav = [
   { label: 'Asistencia', href: '/admin/attendance', icon: 'bi-calendar2-check-fill' },
   { label: 'Kahoot', href: '/admin/kahoot', icon: 'bi-trophy-fill' },
   { label: 'Alumnos', href: '/admin/students', icon: 'bi-people-fill' },
+  { label: 'SOS', href: '/admin/sos', icon: 'bi-life-preserver' },
   { label: 'Submissions', href: '/admin/submissions', icon: 'bi-inbox-fill' },
   { label: 'Avisos', href: '/admin/avisos', icon: 'bi-megaphone-fill' },
 ] as const;
@@ -220,7 +221,10 @@ function isActive(href: string): boolean {
         </div>
       </div>
     </nav>
-    <div id="toast-root" class="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(92vw,400px)] flex-col gap-2"></div>
+    <div
+      id="toast-root"
+      class="pointer-events-none fixed left-1/2 top-[max(1rem,env(safe-area-inset-top,0px))] z-[200] flex w-[min(calc(100vw-2rem),420px)] -translate-x-1/2 flex-col gap-2 sm:top-24"
+    ></div>
 
     <script>
       document.addEventListener('DOMContentLoaded', () => {

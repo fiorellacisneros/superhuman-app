@@ -1,0 +1,333 @@
+---
+/**
+ * Vista previa lateral del aviso como modal (estudiante). Requiere `formId` del formulario
+ * y `formSuffix` igual al de AnnouncementFormFields.
+ */
+interface Props {
+  formId: string;
+  formSuffix: string;
+}
+
+const { formId, formSuffix } = Astro.props;
+const pid = `ann-prev-${formSuffix.replace(/[^a-zA-Z0-9_-]/g, '') || 'p'}`;
+---
+
+<div
+  class="rounded-xl border border-white/10 bg-black/40 p-4 shadow-lg backdrop-blur-sm"
+  aria-label="Vista previa del aviso"
+  data-ann-preview-root={formSuffix}
+>
+  <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Vista previa (modal)</p>
+  <div
+    class="ann-preview-scale mx-auto max-w-[400px] origin-top scale-[0.92] sm:scale-100"
+    id={pid}
+  >
+    <div
+      class="relative overflow-hidden rounded-[24px] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.35)] ring-1 ring-black/10"
+    >
+      <div
+        class="pointer-events-none absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full text-neutral-400"
+        aria-hidden="true"
+      >
+        <i class="bi bi-x-lg text-base"></i>
+      </div>
+      <div
+        class="relative min-h-[120px] overflow-hidden rounded-t-[24px] bg-gradient-to-b from-neutral-100 via-neutral-100/95 to-neutral-200/70 px-6 pb-4 pt-8"
+      >
+        <div class="pointer-events-none absolute inset-0 opacity-[0.07]" aria-hidden="true">
+          <div class="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-neutral-900"></div>
+        </div>
+        <div class="relative flex justify-center" data-ann-preview-img-slot>
+          <img
+            src=""
+            alt=""
+            class="ann-preview-img hidden max-h-28 w-auto max-w-[200px] object-contain drop-shadow-md"
+            width="200"
+            height="140"
+          />
+          <span
+            class="ann-preview-img-ph flex h-16 w-16 items-center justify-center rounded-2xl bg-white/80 shadow-sm ring-1 ring-neutral-200/80"
+            aria-hidden="true"
+          >
+            <i class="bi bi-megaphone text-2xl text-neutral-500"></i>
+          </span>
+        </div>
+      </div>
+      <div class="px-5 pb-5 pt-1 sm:px-6">
+        <p class="ann-preview-badge mb-2 hidden text-center">
+          <span
+            class="inline-flex rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-semibold text-neutral-700"
+          ></span>
+        </p>
+        <div class="ann-preview-head hidden space-y-1 text-center">
+          <h3 class="font-manrope text-lg font-bold leading-snug tracking-tight text-neutral-950"></h3>
+          <p class="text-xs leading-relaxed text-neutral-500 sm:text-sm"></p>
+        </div>
+        <div
+          class="ann-preview-body-text mt-4 hidden text-left text-xs leading-relaxed text-neutral-600 [&_a]:font-medium [&_a]:text-[#012EDC] [&_a]:underline [&_strong]:text-neutral-900 [&_ul]:mt-2 [&_ul]:list-disc [&_ul]:pl-5"
+        >
+        </div>
+        <div class="ann-preview-bullets mt-4 hidden space-y-2 text-left">
+          <p class="text-center text-[10px] font-semibold uppercase tracking-wide text-neutral-400"></p>
+          <ul class="ann-preview-bullet-ul space-y-2"></ul>
+        </div>
+        <div
+          class="mt-5 flex flex-col-reverse gap-2 border-t border-neutral-100 pt-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span
+            class="w-full rounded-full bg-neutral-100 px-4 py-2 text-center text-[11px] font-semibold text-neutral-900 sm:w-auto"
+          >
+            Ahora no
+          </span>
+          <div class="ann-preview-primary flex w-full flex-1 justify-end sm:w-auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="mt-3 text-[10px] leading-relaxed text-muted/80">
+    Aproximación en vivo; el markdown se renderiza igual que en la modal del estudiante.
+  </p>
+</div>
+
+<script is:inline define:vars={{ formId, formSuffix }}>
+  (function () {
+    var form = document.getElementById(formId);
+    var root = document.querySelector('[data-ann-preview-root="' + formSuffix + '"]');
+    if (!form || !root) return;
+
+    var scaleEl = root.querySelector('.ann-preview-scale');
+    var imgEl = root.querySelector('.ann-preview-img');
+    var imgPh = root.querySelector('.ann-preview-img-ph');
+    var badgeWrap = root.querySelector('.ann-preview-badge');
+    var badgeSpan = badgeWrap && badgeWrap.querySelector('span');
+    var head = root.querySelector('.ann-preview-head');
+    var titleEl = head && head.querySelector('h3');
+    var subEl = head && head.querySelector('p');
+    var bodyText = root.querySelector('.ann-preview-body-text');
+    var bulletsBlock = root.querySelector('.ann-preview-bullets');
+    var sectionLbl = bulletsBlock && bulletsBlock.querySelector('p');
+    var bulletUl = root.querySelector('.ann-preview-bullet-ul');
+    var primarySlot = root.querySelector('.ann-preview-primary');
+
+    var lastFileUrl = null;
+    var mdTimer = null;
+
+    function getVal(name) {
+      var el = form.querySelector('[name="' + name + '"]');
+      if (!el) return '';
+      if (el.type === 'radio') {
+        var c = form.querySelector('[name="' + name + '"]:checked');
+        return c ? c.value : '';
+      }
+      return typeof el.value === 'string' ? el.value : '';
+    }
+
+    function contentMode() {
+      var v = getVal('content_mode');
+      return v === 'bullets' ? 'bullets' : 'text';
+    }
+
+    function syncImage() {
+      var url = (getVal('image_url') || '').trim();
+      var fileInp = form.querySelector('[name="image_file"]');
+      var file = fileInp && fileInp.files && fileInp.files[0];
+      if (lastFileUrl) {
+        try {
+          URL.revokeObjectURL(lastFileUrl);
+        } catch (e) {}
+        lastFileUrl = null;
+      }
+      if (file && file.type && file.type.indexOf('image/') === 0) {
+        lastFileUrl = URL.createObjectURL(file);
+        if (imgEl) {
+          imgEl.src = lastFileUrl;
+          imgEl.classList.remove('hidden');
+        }
+        if (imgPh) imgPh.classList.add('hidden');
+        return;
+      }
+      if (url && (url.indexOf('http://') === 0 || url.indexOf('https://') === 0)) {
+        if (imgEl) {
+          imgEl.src = url;
+          imgEl.classList.remove('hidden');
+          imgEl.onerror = function () {
+            imgEl.classList.add('hidden');
+            if (imgPh) imgPh.classList.remove('hidden');
+          };
+        }
+        if (imgPh) imgPh.classList.add('hidden');
+      } else {
+        if (imgEl) {
+          imgEl.src = '';
+          imgEl.classList.add('hidden');
+        }
+        if (imgPh) imgPh.classList.remove('hidden');
+      }
+    }
+
+    function syncChrome() {
+      var badge = (getVal('badge_text') || '').trim();
+      if (badge && badgeWrap && badgeSpan) {
+        badgeSpan.textContent = badge;
+        badgeWrap.classList.remove('hidden');
+      } else if (badgeWrap) {
+        badgeWrap.classList.add('hidden');
+      }
+
+      var title = (getVal('title') || '').trim();
+      var sub = (getVal('subtitle') || '').trim();
+      if ((title || sub) && head && titleEl && subEl) {
+        titleEl.textContent = title;
+        subEl.textContent = sub;
+        head.classList.remove('hidden');
+      } else if (head) {
+        head.classList.add('hidden');
+      }
+
+      var label = (getVal('btn_label_0') || '').trim();
+      var kind = getVal('btn_kind_0');
+      var u = (getVal('btn_url_0') || '').trim();
+      if (!primarySlot) return;
+      primarySlot.innerHTML = '';
+      if (!label) {
+        var ent = document.createElement('span');
+        ent.className =
+          'inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-neutral-900 px-4 py-2 text-[11px] font-semibold text-white sm:w-auto';
+        ent.innerHTML =
+          '<i class="bi bi-stars text-sm opacity-90" aria-hidden="true"></i> Entendido';
+        primarySlot.appendChild(ent);
+        return;
+      }
+      if (kind === 'copy') {
+        var b = document.createElement('span');
+        b.className =
+          'inline-flex w-full cursor-default items-center justify-center gap-1.5 rounded-full bg-neutral-900 px-4 py-2 text-[11px] font-semibold text-white sm:w-auto';
+        b.innerHTML =
+          '<i class="bi bi-stars text-sm opacity-90" aria-hidden="true"></i> ' +
+          escapeHtml(label);
+        primarySlot.appendChild(b);
+      } else {
+        var a = document.createElement('span');
+        a.className =
+          'inline-flex w-full cursor-default items-center justify-center gap-1.5 rounded-full bg-neutral-900 px-4 py-2 text-[11px] font-semibold text-white sm:w-auto';
+        a.innerHTML =
+          '<i class="bi bi-stars text-sm opacity-90" aria-hidden="true"></i> ' +
+          escapeHtml(label);
+        primarySlot.appendChild(a);
+      }
+    }
+
+    function escapeHtml(s) {
+      var d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function readBullets() {
+      var out = [];
+      for (var i = 0; i < 12; i++) {
+        var iconEl = form.querySelector('[name="bullet_icon_' + i + '"]');
+        var textEl = form.querySelector('[name="bullet_text_' + i + '"]');
+        var icon = iconEl && iconEl.value ? String(iconEl.value).trim() : '';
+        var text = textEl && textEl.value ? String(textEl.value).trim() : '';
+        if (!text) continue;
+        out.push({ icon: icon || 'bi-check-lg', text: text });
+      }
+      return out;
+    }
+
+    function safeBiClass(ic) {
+      var s = String(ic || '').trim();
+      return /^bi-[a-z0-9-]+$/i.test(s) ? s : 'bi-check-lg';
+    }
+
+    function renderBulletsFromApi(items) {
+      if (!bulletUl || !bulletsBlock || !sectionLbl || !bodyText) return;
+      var sec = (getVal('body_section_label') || '').trim() || 'Cómo funciona';
+      sectionLbl.textContent = sec;
+      bulletUl.innerHTML = '';
+      items.forEach(function (it) {
+        var icon = safeBiClass(it.icon);
+        var li = document.createElement('li');
+        li.className = 'flex gap-2 rounded-xl bg-neutral-50 px-2 py-2 ring-1 ring-neutral-100/80';
+        li.innerHTML =
+          '<span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white" aria-hidden="true"><i class="bi ' +
+          icon +
+          ' text-xs"></i></span><div class="min-w-0 flex-1 text-xs leading-relaxed text-neutral-600 [&_a]:font-medium [&_a]:text-[#012EDC]">' +
+          (it.html || '') +
+          '</div>';
+        bulletUl.appendChild(li);
+      });
+      bodyText.classList.add('hidden');
+      bulletsBlock.classList.toggle('hidden', items.length === 0);
+    }
+
+    function fetchMarkdown() {
+      var mode = contentMode();
+      var payload = {
+        content_mode: mode,
+        body_text: getVal('body_text'),
+        body_items: readBullets(),
+      };
+      fetch('/api/admin/announcement-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('preview');
+          return r.json();
+        })
+        .then(function (data) {
+          if (!bodyText || !bulletsBlock) return;
+          if (mode === 'text') {
+            bulletsBlock.classList.add('hidden');
+            var html = data.body_html || '';
+            if (html) {
+              bodyText.innerHTML = html;
+              bodyText.classList.remove('hidden');
+            } else {
+              bodyText.innerHTML =
+                '<p class="text-sm text-neutral-400">Sin cuerpo todavía (modo texto / Markdown).</p>';
+              bodyText.classList.remove('hidden');
+            }
+          } else {
+            bodyText.classList.add('hidden');
+            var items = data.items || [];
+            if (items.length === 0 && bulletUl && bulletsBlock && sectionLbl) {
+              sectionLbl.textContent =
+                (getVal('body_section_label') || '').trim() || 'Cómo funciona';
+              bulletUl.innerHTML =
+                '<li class="text-xs text-neutral-400">Añade ítems en la lista o cambia a texto libre.</li>';
+              bulletsBlock.classList.remove('hidden');
+            } else {
+              renderBulletsFromApi(items);
+            }
+          }
+        })
+        .catch(function () {
+          if (bodyText) {
+            bodyText.textContent = 'No se pudo renderizar el markdown.';
+            bodyText.classList.remove('hidden');
+          }
+        });
+    }
+
+    function scheduleMd() {
+      if (mdTimer) clearTimeout(mdTimer);
+      mdTimer = setTimeout(fetchMarkdown, 300);
+    }
+
+    function onFormChange() {
+      syncImage();
+      syncChrome();
+      scheduleMd();
+    }
+
+    form.addEventListener('input', onFormChange);
+    form.addEventListener('change', onFormChange);
+    syncImage();
+    syncChrome();
+    fetchMarkdown();
+  })();
+</script>

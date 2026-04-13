@@ -34,6 +34,24 @@ export type VisibilityConditions = {
   rules: VisibilityRule[];
 };
 
+/** Cierre del aviso en el dashboard: sesión vs permanente en el navegador. */
+export type AnnouncementDismissBehavior = 'always_show' | 'remember_dismissal';
+
+export function normalizeDismissBehavior(raw: unknown): AnnouncementDismissBehavior {
+  return raw === 'remember_dismissal' ? 'remember_dismissal' : 'always_show';
+}
+
+export function parseDismissBehaviorFromForm(formData: FormData): AnnouncementDismissBehavior {
+  const v = formData.get('dismiss_behavior');
+  return v === 'remember_dismissal' ? 'remember_dismissal' : 'always_show';
+}
+
+export function dismissBehaviorLabel(b: AnnouncementDismissBehavior): string {
+  return b === 'remember_dismissal'
+    ? 'Si lo cierra, no volver a mostrar'
+    : 'Mostrar en cada visita al dashboard';
+}
+
 const EMPTY_VISIBILITY: VisibilityConditions = { match: 'all', rules: [] };
 
 function normalizeOneRule(item: unknown): VisibilityRule | null {
@@ -222,6 +240,7 @@ export type AnnouncementRecord = {
   min_points: number | null;
   require_enrolled_course_id: string | null;
   visibility_conditions: VisibilityConditions;
+  dismiss_behavior: AnnouncementDismissBehavior;
 };
 
 const ALLOWED_ICON = new Set(ANNOUNCEMENT_BULLET_ICONS.map((o) => o.value));
@@ -408,6 +427,7 @@ export async function fetchActiveAnnouncements(
       min_points,
       require_enrolled_course_id,
       visibility_conditions,
+      dismiss_behavior: normalizeDismissBehavior(rec.dismiss_behavior),
     };
   });
 }

@@ -2,9 +2,15 @@
 import '../../../styles/global.css';
 import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 import AnnouncementFormFields from '../../../components/AnnouncementFormFields.astro';
+import AnnouncementPreview from '../../../components/AnnouncementPreview.astro';
 import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
 import { formatDateTime } from '../../../lib/format-date';
-import { formatVisibilitySummary, resolveVisibilityConditionsFromRow } from '../../../lib/announcements';
+import {
+  dismissBehaviorLabel,
+  formatVisibilitySummary,
+  normalizeDismissBehavior,
+  resolveVisibilityConditionsFromRow,
+} from '../../../lib/announcements';
 
 const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
 if (!isAuthenticated || !userId) {
@@ -29,6 +35,7 @@ type Row = {
   created_at: string;
   min_points?: number | null;
   require_enrolled_course_id?: string | null;
+  dismiss_behavior?: string | null;
 };
 
 let rows: Row[] = [];
@@ -57,7 +64,8 @@ const announcementListItems = rows.map((r) => {
   const courseTitle = r.course_id ? (courseTitleById.get(r.course_id) ?? null) : null;
   const vis = resolveVisibilityConditionsFromRow(r as unknown as Record<string, unknown>);
   const visLine = formatVisibilitySummary(vis, courseTitleById);
-  return { r, courseTitle, vis, visLine };
+  const dismiss = dismissBehaviorLabel(normalizeDismissBehavior(r.dismiss_behavior));
+  return { r, courseTitle, vis, visLine, dismiss };
 });
 ---
 
@@ -66,11 +74,11 @@ const announcementListItems = rows.map((r) => {
     <script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js" defer></script>
   </Fragment>
-  <section class="max-w-5xl space-y-8 xl:max-w-6xl">
+  <section class="max-w-5xl space-y-8 xl:max-w-[90rem]">
     <header>
       <h1 class="text-2xl font-semibold tracking-tight text-white">Avisos</h1>
       <p class="mt-1 text-sm text-muted">
-        Tarjetas informativas en el dashboard del estudiante: texto o lista, imagen y botones; audiencia, fechas, puntos mínimos o curso de inscripción obligatorio.
+        Los estudiantes los ven como una <strong class="text-white/90">modal</strong> al entrar a <code class="text-lime/90">/dashboard</code> (no en la vista de administración). En pantallas anchas verás una <strong class="text-white/90">vista previa</strong> al lado del formulario; para verlo en contexto real, abre el dashboard con <strong class="text-white/90">Ver como estudiante</strong>.
       </p>
     </header>
 
@@ -79,53 +87,65 @@ const announcementListItems = rows.map((r) => {
         Falta la tabla en Supabase. Ejecuta el SQL en{' '}
         <code class="rounded bg-black/30 px-1.5 py-0.5 text-xs">docs/announcements-migration.sql</code>
         y crea el bucket público <code class="rounded bg-black/30 px-1.5 py-0.5 text-xs">announcement-images</code> si quieres subir imágenes. Para condiciones (puntos / curso) ejecuta también{' '}
-        <code class="rounded bg-black/30 px-1.5 py-0.5 text-xs">docs/announcements-conditions-migration.sql</code>.
+        <code class="rounded bg-black/30 px-1.5 py-0.5 text-xs">docs/announcements-conditions-migration.sql</code>
+        {' '}y{' '}
+        <code class="rounded bg-black/30 px-1.5 py-0.5 text-xs">docs/announcements-dismiss-migration.sql</code> para el comportamiento al cerrar.
       </div>
     )}
 
-    <div class="rounded-xl border border-transparent bg-surface">
-      <button
-        type="button"
-        id="toggle-create-ann"
-        aria-expanded="false"
-        aria-controls="create-ann-form"
-        class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-white transition hover:bg-surface-2/60"
-      >
-        <span>Crear aviso</span>
-        <svg
-          id="toggle-create-ann-icon"
-          class="h-5 w-5 shrink-0 text-muted transition-transform"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      <div id="create-ann-form" class="hidden border-t border-transparent px-5 pb-6 pt-5" role="region">
-        <form method="post" action="/api/admin/announcements" enctype="multipart/form-data" class="space-y-8">
-          <AnnouncementFormFields
-            mode="create"
-            redirectTo="/admin/avisos"
-            courses={courses}
-            initial={null}
-            formSuffix="create"
-          />
-          <button type="submit" class="btn btn-primary w-full sm:w-auto">Publicar aviso</button>
-        </form>
-      </div>
-    </div>
+    <div
+      class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_min(300px,34%)] lg:items-start xl:gap-10 xl:grid-cols-[minmax(0,1fr)_min(340px,32%)]"
+    >
+      <div class="min-w-0 space-y-8">
+        <div class="rounded-xl border border-transparent bg-surface">
+          <button
+            type="button"
+            id="toggle-create-ann"
+            aria-expanded="false"
+            aria-controls="create-ann-form"
+            class="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-white transition hover:bg-surface-2/60"
+          >
+            <span>Crear aviso</span>
+            <svg
+              id="toggle-create-ann-icon"
+              class="h-5 w-5 shrink-0 text-muted transition-transform"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div id="create-ann-form" class="hidden border-t border-transparent px-5 pb-6 pt-5" role="region">
+            <form
+              id="announcement-admin-form-create"
+              method="post"
+              action="/api/admin/announcements"
+              enctype="multipart/form-data"
+              class="space-y-8"
+            >
+              <AnnouncementFormFields
+                mode="create"
+                redirectTo="/admin/avisos"
+                courses={courses}
+                initial={null}
+                formSuffix="create"
+              />
+              <button type="submit" class="btn btn-primary w-full sm:w-auto">Publicar aviso</button>
+            </form>
+          </div>
+        </div>
 
-    <div class="space-y-3">
-      <h2 class="text-sm font-semibold text-white">Publicados</h2>
+        <div class="space-y-3">
+          <h2 class="text-sm font-semibold text-white">Publicados</h2>
       {rows.length === 0 ? (
         <p class="rounded-xl border border-dashed border-white/15 bg-surface-2/30 px-4 py-8 text-center text-sm text-muted">
           Aún no hay avisos. Crea uno con el formulario de arriba.
         </p>
       ) : (
         <ul class="space-y-3">
-          {announcementListItems.map(({ r, courseTitle, vis, visLine }) => (
+          {announcementListItems.map(({ r, courseTitle, vis, visLine, dismiss }) => (
               <li class="rounded-xl border border-transparent bg-surface p-4 sm:flex sm:items-start sm:justify-between sm:gap-4">
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-2">
@@ -153,6 +173,7 @@ const announcementListItems = rows.map((r) => {
                       </>
                     )}
                   </p>
+                  <p class="mt-1 text-[10px] text-muted/85">Cierre: {dismiss}</p>
                   <p class="mt-0.5 text-[10px] text-muted/80">
                     Desde {fmt(r.starts_at)} · Hasta {fmt(r.ends_at)}
                   </p>
@@ -191,6 +212,12 @@ const announcementListItems = rows.map((r) => {
           ))}
         </ul>
       )}
+        </div>
+      </div>
+
+      <aside class="min-w-0 lg:sticky lg:top-6 lg:self-start">
+        <AnnouncementPreview formId="announcement-admin-form-create" formSuffix="create" />
+      </aside>
     </div>
   </section>
 </DashboardLayout>
