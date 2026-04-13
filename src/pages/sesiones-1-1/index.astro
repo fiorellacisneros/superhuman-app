@@ -199,6 +199,14 @@ function formatBookingDate(iso: string) {
   }
 }
 
+/** Valor para input datetime-local (hora local del navegador al editar). */
+function toDatetimeLocalValue(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 ---
 <DashboardLayout role={isAdminView ? 'admin' : 'student'}>
   {courses1to1.some((c) => c.calendly_link_1to1) && !isAdminView && (
@@ -309,10 +317,12 @@ function formatBookingDate(iso: string) {
                     {isAdminView ? 'Últimas reservas del curso' : 'Tus reservas'}
                   </h3>
                   <ul class="mt-2 space-y-1.5">
-                    {course.bookings.map((b) => (
-                      <li class="rounded-lg bg-background/60 px-3 py-2 text-sm">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                          <div class="min-w-0">
+                    {course.bookings.map((b) => {
+                      const deleteConfirmLabel = `${formatBookingDate(b.scheduled_at)}${b.display_name ? ` · ${b.display_name}` : ''}`;
+                      return (
+                      <li class="rounded-lg bg-background/60 px-3 py-2 text-sm" data-booking-row>
+                        <div class="flex flex-wrap items-center gap-2" data-booking-view>
+                          <div class="min-w-0 flex-1">
                             <span class="text-white">{formatBookingDate(b.scheduled_at)}</span>
                             {isAdminView && b.display_name && <span class="ml-2 text-muted">· {b.display_name}</span>}
                           </div>
@@ -323,35 +333,65 @@ function formatBookingDate(iso: string) {
                           >
                             {b.status === 'scheduled' ? 'Programada' : b.status === 'completed' ? 'Realizada' : 'Cancelada'}
                           </span>
+                          {isAdminView && (
+                            <div class="flex shrink-0 items-center gap-1">
+                              <button
+                                type="button"
+                                class="btn btn-ghost btn-icon h-8 w-8"
+                                title="Editar"
+                                aria-label="Editar reserva"
+                                data-booking-edit-open
+                              >
+                                <i class="bi bi-pencil" aria-hidden="true"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="btn btn-danger btn-icon h-8 w-8"
+                                title="Eliminar"
+                                aria-label="Eliminar reserva"
+                                data-delete-confirm
+                                data-confirm-label={deleteConfirmLabel}
+                                data-delete-form-id={`booking-del-${b.id}`}
+                              >
+                                <i class="bi bi-trash" aria-hidden="true"></i>
+                              </button>
+                            </div>
+                          )}
                         </div>
                         {isAdminView && (
-                          <details class="mt-2 border-t border-white/5 pt-2">
-                            <summary class="cursor-pointer select-none text-[11px] font-medium text-lime/90 hover:text-lime">
-                              Editar reserva
-                            </summary>
+                          <>
+                            <form
+                              id={`booking-del-${b.id}`}
+                              method="post"
+                              action="/api/admin/one-on-one-bookings"
+                              class="hidden"
+                              aria-hidden="true"
+                            >
+                              <input type="hidden" name="_action" value="delete" />
+                              <input type="hidden" name="booking_id" value={b.id} />
+                              <input type="hidden" name="course_id" value={course.id} />
+                              <input type="hidden" name="redirect_to" value="/sesiones-1-1" />
+                            </form>
                             <form
                               method="post"
                               action="/api/admin/one-on-one-bookings"
-                              class="mt-3 flex flex-wrap items-end gap-3"
+                              class="hidden mt-3 flex flex-wrap items-end gap-3 border-t border-white/5 pt-3"
+                              data-booking-edit
                             >
+                              <input type="hidden" name="_action" value="update" />
                               <input type="hidden" name="booking_id" value={b.id} />
                               <input type="hidden" name="course_id" value={course.id} />
                               <input type="hidden" name="redirect_to" value="/sesiones-1-1" />
                               <div>
                                 <label for={`edit-date-${b.id}`} class="block text-[11px] text-muted">Fecha y hora</label>
-                                <div class="relative mt-0.5">
-                                  <input
-                                    id={`edit-date-${b.id}`}
-                                    type="text"
-                                    name="scheduled_at"
-                                    required
-                                    readonly
-                                    autocomplete="off"
-                                    data-default={b.scheduled_at}
-                                    class="flatpickr-booking-edit min-w-[200px] w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
-                                  />
-                                  <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
-                                </div>
+                                <input
+                                  id={`edit-date-${b.id}`}
+                                  type="datetime-local"
+                                  name="scheduled_at"
+                                  required
+                                  value={toDatetimeLocalValue(b.scheduled_at)}
+                                  class="mt-0.5 min-w-[200px] rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                                />
                               </div>
                               <div>
                                 <label for={`edit-status-${b.id}`} class="block text-[11px] text-muted">Estado</label>
@@ -366,14 +406,24 @@ function formatBookingDate(iso: string) {
                                   <option value="cancelled" selected={b.status === 'cancelled'}>Cancelada</option>
                                 </select>
                               </div>
-                              <button type="submit" class="btn btn-secondary text-sm">
-                                Guardar cambios
+                              <button type="submit" class="btn btn-primary btn-icon h-9 w-9 shrink-0" title="Guardar" aria-label="Guardar cambios">
+                                <i class="bi bi-check-lg" aria-hidden="true"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="btn btn-secondary btn-icon h-9 w-9 shrink-0"
+                                title="Cancelar"
+                                aria-label="Cancelar edición"
+                                data-booking-edit-cancel
+                              >
+                                <i class="bi bi-x-lg" aria-hidden="true"></i>
                               </button>
                             </form>
-                          </details>
+                          </>
                         )}
                       </li>
-                    ))}
+                    );
+                    })}
                   </ul>
                 </div>
               )}
@@ -437,13 +487,106 @@ function formatBookingDate(iso: string) {
           <h3 class="text-sm font-medium text-white">Sesiones programadas</h3>
           {sesionesGrupalesList.length > 0 ? (
             <ul class="mt-2 space-y-2">
-              {sesionesGrupalesList.map((s) => (
-                <li class="flex flex-wrap items-center gap-2 rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm">
-                  <span class="font-medium text-white">{s.title ?? 'Sesión grupal'}</span>
-                  {s.fecha_label && <span class="text-muted">· {s.fecha_label}</span>}
-                  <a href={s.link_url} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline">Ver enlace</a>
+              {sesionesGrupalesList.map((s) => {
+                const sgDeleteLabel = (s.title ?? '').trim() || (s.fecha_label ?? '').trim() || 'Sesión grupal';
+                return (
+                <li class="rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm" data-sg-row>
+                  <div class="flex flex-wrap items-center gap-x-2 gap-y-1" data-sg-view>
+                    <span class="font-medium text-white">{s.title ?? 'Sesión grupal'}</span>
+                    {s.fecha_label && <span class="text-muted">· {s.fecha_label}</span>}
+                    <a href={s.link_url} target="_blank" rel="noopener noreferrer" class="text-lime hover:underline sm:ml-1">
+                      Ver enlace
+                    </a>
+                    <div class="ml-auto flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-icon h-8 w-8"
+                        title="Editar"
+                        aria-label="Editar sesión grupal"
+                        data-sg-edit-open
+                      >
+                        <i class="bi bi-pencil" aria-hidden="true"></i>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-danger btn-icon h-8 w-8"
+                        title="Eliminar"
+                        aria-label="Eliminar sesión grupal"
+                        data-delete-confirm
+                        data-confirm-label={sgDeleteLabel}
+                        data-delete-form-id={`sg-del-${s.id}`}
+                      >
+                        <i class="bi bi-trash" aria-hidden="true"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <form
+                    id={`sg-del-${s.id}`}
+                    method="post"
+                    action="/api/admin/sesion-grupal-sesiones"
+                    class="hidden"
+                    aria-hidden="true"
+                  >
+                    <input type="hidden" name="sg_action" value="delete" />
+                    <input type="hidden" name="session_id" value={s.id} />
+                    <input type="hidden" name="redirect_to" value="/sesiones-1-1" />
+                  </form>
+                  <form
+                    method="post"
+                    action="/api/admin/sesion-grupal-sesiones"
+                    class="mt-3 hidden flex flex-wrap items-end gap-3 border-t border-white/10 pt-3"
+                    data-sg-edit
+                  >
+                    <input type="hidden" name="sg_action" value="update" />
+                    <input type="hidden" name="session_id" value={s.id} />
+                    <input type="hidden" name="redirect_to" value="/sesiones-1-1" />
+                    <div>
+                      <label for={`sg-edit-title-${s.id}`} class="block text-[11px] text-muted">Título (opcional)</label>
+                      <input
+                        id={`sg-edit-title-${s.id}`}
+                        type="text"
+                        name="title"
+                        value={s.title ?? ''}
+                        class="mt-0.5 min-w-[160px] rounded-lg border border-transparent bg-background px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                      />
+                    </div>
+                    <div>
+                      <label for={`sg-edit-link-${s.id}`} class="block text-[11px] text-muted">Enlace</label>
+                      <input
+                        id={`sg-edit-link-${s.id}`}
+                        type="url"
+                        name="link_url"
+                        required
+                        value={s.link_url}
+                        class="mt-0.5 min-w-[200px] rounded-lg border border-transparent bg-background px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                      />
+                    </div>
+                    <div>
+                      <label for={`sg-edit-fecha-${s.id}`} class="block text-[11px] text-muted">Fecha y hora (texto)</label>
+                      <input
+                        id={`sg-edit-fecha-${s.id}`}
+                        type="text"
+                        name="fecha_label"
+                        value={s.fecha_label ?? ''}
+                        class="mt-0.5 min-w-[200px] rounded-lg border border-transparent bg-background px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                      />
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-icon h-9 w-9 shrink-0" title="Guardar" aria-label="Guardar cambios">
+                      <i class="bi bi-check-lg" aria-hidden="true"></i>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-icon h-9 w-9 shrink-0"
+                      title="Cancelar"
+                      aria-label="Cancelar edición"
+                      data-sg-edit-cancel
+                    >
+                      <i class="bi bi-x-lg" aria-hidden="true"></i>
+                    </button>
+                  </form>
                 </li>
-              ))}
+              );
+              })}
             </ul>
           ) : (
             <p class="mt-2 text-sm text-muted">Aún no hay sesiones. Agrega la primera abajo.</p>
@@ -487,7 +630,6 @@ function formatBookingDate(iso: string) {
               />
               <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
             </div>
-            <p class="mt-1 max-w-xs text-[10px] text-muted">Lo verán en su listado; puedes retocar el texto tras elegir (ej. “Perú”, duración).</p>
           </div>
           <button type="submit" class="btn btn-primary">Agregar sesión</button>
         </form>
@@ -582,29 +724,40 @@ function formatBookingDate(iso: string) {
           const allowInput = input.classList.contains('flatpickr-sg-sesion');
           flatpickr(el, { ...pickerOptsBase, allowInput, appendTo: document.body });
         });
-        document.querySelectorAll('.flatpickr-booking-edit').forEach((el) => {
-          const input = el as HTMLInputElement;
-          if (input.dataset.flatpickrInit) return;
-          input.dataset.flatpickrInit = '1';
-          const raw = input.dataset.default;
-          let defaultDate: Date | undefined;
-          if (raw) {
-            const d = new Date(raw);
-            if (!Number.isNaN(d.getTime())) defaultDate = d;
-          }
-          flatpickr(el, {
-            ...pickerOptsBase,
-            allowInput: false,
-            appendTo: document.body,
-            defaultDate,
-          });
-        });
       };
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
       } else {
         init();
       }
+    </script>
+    <script is:inline>
+      document.addEventListener('DOMContentLoaded', function () {
+        function wire(openSel, cancelSel, viewSel, editSel, rowSel) {
+          document.querySelectorAll(openSel).forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var li = btn.closest(rowSel);
+              if (!li) return;
+              var v = li.querySelector(viewSel);
+              var e = li.querySelector(editSel);
+              if (v) v.classList.add('hidden');
+              if (e) e.classList.remove('hidden');
+            });
+          });
+          document.querySelectorAll(cancelSel).forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var li = btn.closest(rowSel);
+              if (!li) return;
+              var v = li.querySelector(viewSel);
+              var e = li.querySelector(editSel);
+              if (v) v.classList.remove('hidden');
+              if (e) e.classList.add('hidden');
+            });
+          });
+        }
+        wire('[data-sg-edit-open]', '[data-sg-edit-cancel]', '[data-sg-view]', '[data-sg-edit]', '[data-sg-row]');
+        wire('[data-booking-edit-open]', '[data-booking-edit-cancel]', '[data-booking-view]', '[data-booking-edit]', '[data-booking-row]');
+      });
     </script>
   )}
 </DashboardLayout>
