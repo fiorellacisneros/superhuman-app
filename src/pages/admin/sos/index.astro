@@ -1,0 +1,204 @@
+---
+import '../../../styles/global.css';
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import { getSupabaseServiceRoleClient } from '../../../lib/supabase';
+import { avatarImagePath } from '../../../lib/avatars';
+import {
+  buildAdminFollowUpReport,
+  FOLLOWUP_ATTENDANCE_DAYS,
+  FOLLOWUP_CRITICAL_ABSENCE_DAYS,
+  FOLLOWUP_KAHOOT_LOW_POINTS_THRESHOLD,
+} from '../../../lib/admin-followup';
+
+const { isAuthenticated, userId, redirectToSignIn } = Astro.locals.auth();
+if (!isAuthenticated || !userId) {
+  return redirectToSignIn();
+}
+
+const supabase = getSupabaseServiceRoleClient();
+const { data: userRow } = await supabase.from('users').select('role').eq('id', userId).maybeSingle();
+if ((userRow?.role as string) !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+const selectedCourseId = Astro.url.searchParams.get('course')?.trim() ?? '';
+
+const { data: coursesRows } = await supabase.from('courses').select('id, title').order('title');
+const courses = (coursesRows ?? []).map((c) => ({ id: c.id as string, title: (c.title as string) ?? 'Sin título' }));
+const selectedCourse = courses.find((c) => c.id === selectedCourseId) ?? null;
+
+const followUpRows = await buildAdminFollowUpReport(supabase, {
+  courseId: selectedCourseId || null,
+});
+
+const totals = followUpRows.reduce(
+  (acc, r) => {
+    acc.students += 1;
+    acc.pendingRetos += r.pendingChallengeCount;
+    acc.absences += r.recentMissedClassCount;
+    acc.kahootLow += r.kahootLowScoreCount;
+    return acc;
+  },
+  { students: 0, pendingRetos: 0, absences: 0, kahootLow: 0 },
+);
+
+const counts = {
+  withChallenges: followUpRows.filter((r) => r.pendingChallengeCount > 0).length,
+  withAttendance: followUpRows.filter((r) => r.recentMissedClassCount > 0).length,
+  withKahootLow: followUpRows.filter((r) => r.kahootLowScoreCount > 0).length,
+};
+---
+
+<DashboardLayout>
+  <section class="max-w-5xl space-y-8 xl:max-w-6xl">
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight text-white">SOS — Seguimiento</h1>
+      <p class="mt-1 text-sm text-muted">
+        <strong class="text-white/90">Retos activos sin entregar</strong> (cualquier vencimiento), faltas a clases{' '}
+        <strong class="text-white/90">live en los últimos {FOLLOWUP_CRITICAL_ABSENCE_DAYS} días</strong>, y{' '}
+        <strong class="text-white/90">Kahoot con puntaje bajo</strong> (menos de {FOLLOWUP_KAHOOT_LOW_POINTS_THRESHOLD}{' '}
+        pts donde ya hay resultados guardados; si no apareció en el Kahoot de esa clase, no cuenta aquí). Clases
+        consideradas: últimos {FOLLOWUP_ATTENDANCE_DAYS} días.
+      </p>
+    </header>
+
+    <div class="rounded-xl border border-transparent bg-surface p-5">
+      <form method="get" action="/admin/sos" class="flex flex-wrap items-end gap-3">
+        <div class="min-w-[240px]">
+          <label for="sos-course" class="block text-xs font-medium text-muted">Curso (opcional)</label>
+          <div class="custom-select custom-select--single relative mt-1" data-name="course">
+            <input type="hidden" id="sos-course" name="course" value={selectedCourseId} />
+            <button
+              type="button"
+              class="custom-select-trigger flex w-full cursor-pointer items-center justify-between rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-left text-sm text-white transition hover:border-lime/50 focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+              aria-expanded="false"
+              aria-haspopup="listbox"
+            >
+              <span class="custom-select-label truncate">{selectedCourse?.title ?? 'Todos los cursos'}</span>
+              <svg class="h-4 w-4 shrink-0 text-muted transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 8l4 4 4-4" />
+              </svg>
+            </button>
+            <div class="custom-select-panel absolute left-0 right-0 z-40 mt-2 hidden max-h-64 overflow-y-auto rounded-xl border border-transparent bg-surface p-2 shadow-2xl" role="listbox">
+              <button
+                type="button"
+                class={`custom-select-option flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${!selectedCourseId ? 'bg-lime/10 text-lime' : 'text-white'}`}
+                data-value=""
+                data-label="Todos los cursos"
+              >
+                <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${!selectedCourseId ? 'border-lime bg-lime text-background' : 'border-transparent bg-surface-2 text-transparent'}`}>
+                  <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
+                </span>
+                <span class="truncate">Todos los cursos</span>
+              </button>
+              {courses.map((c) => {
+                const isSelected = selectedCourseId === c.id;
+                return (
+                  <button
+                    type="button"
+                    class={`custom-select-option mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition hover:bg-surface-2 ${isSelected ? 'bg-lime/10 text-lime' : 'text-white'}`}
+                    data-value={c.id}
+                    data-label={c.title}
+                  >
+                    <span class={`flex h-4 w-4 items-center justify-center rounded-[4px] border transition ${isSelected ? 'border-lime bg-lime text-background' : 'border-transparent bg-surface-2 text-transparent'}`}>
+                      <i class="bi bi-check2 text-[12px] leading-none" aria-hidden="true" />
+                    </span>
+                    <span class="truncate">{c.title}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Aplicar</button>
+      </form>
+    </div>
+
+    {followUpRows.length === 0 ? (
+      <div class="rounded-xl border border-dashed border-white/15 bg-surface-2/30 px-6 py-12 text-center">
+        <p class="text-sm font-medium text-white">Sin alertas críticas</p>
+        <p class="mt-2 text-sm text-muted">Nadie cumple estos criterios con el filtro actual.</p>
+      </div>
+    ) : (
+      <>
+        <div class="rounded-xl border border-white/10 bg-surface p-4 sm:p-5">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">Resumen global</p>
+          <p class="mt-2 text-sm leading-relaxed text-white/90">
+            <span class="font-semibold text-white">{totals.students}</span> estudiante{totals.students === 1 ? '' : 's'} con seguimiento urgente
+            <span class="text-muted"> · </span>
+            <span class="text-amber-200/90">{totals.pendingRetos}</span>
+            <span class="text-muted"> reto{totals.pendingRetos === 1 ? '' : 's'} sin entregar (en total)</span>
+            <span class="text-muted"> · </span>
+            <span class="text-red-200/90">{totals.absences}</span>
+            <span class="text-muted"> falta{totals.absences === 1 ? '' : 's'} reciente{totals.absences === 1 ? '' : 's'} (en total)</span>
+            <span class="text-muted"> · </span>
+            <span class="text-violet-200/90">{totals.kahootLow}</span>
+            <span class="text-muted"> Kahoot con puntaje &lt;{FOLLOWUP_KAHOOT_LOW_POINTS_THRESHOLD} pts (en total)</span>
+          </p>
+          <p class="mt-2 text-xs text-muted">
+            Afectados por categoría: retos {counts.withChallenges} · asistencia {counts.withAttendance} · Kahoot bajo{' '}
+            {counts.withKahootLow}
+          </p>
+        </div>
+
+        <div class="relative overflow-x-auto rounded-xl border border-transparent bg-surface shadow-[0_8px_30px_rgba(0,0,0,0.18)]">
+          <table class="w-full min-w-[640px] text-left text-sm">
+            <thead>
+              <tr class="border-b border-white/10 bg-surface-2/40 text-muted">
+                <th class="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.14em]" scope="col">Estudiante</th>
+                <th class="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.14em]" scope="col">Resumen</th>
+                <th class="w-28 px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.14em]" scope="col">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {followUpRows.map((row) => (
+                <tr class="border-b border-white/5 transition-colors hover:bg-surface-2/25 last:border-0">
+                  <td class="align-top px-4 py-4">
+                    <div class="flex items-start gap-3">
+                      <div class="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-transparent bg-surface-2">
+                        {avatarImagePath(row.avatarId) ? (
+                          <img
+                            src={avatarImagePath(row.avatarId)!}
+                            alt=""
+                            class="h-full w-full object-cover"
+                            width="36"
+                            height="36"
+                          />
+                        ) : (
+                          <span class="flex h-full w-full items-center justify-center text-xs font-semibold text-muted">
+                            {(row.name || 'E').charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div class="min-w-0">
+                        <p class="font-medium text-white">{row.name}</p>
+                        {row.email ? (
+                          <a
+                            href={`mailto:${encodeURIComponent(row.email)}`}
+                            class="mt-0.5 block truncate text-xs text-lime/90 underline-offset-2 hover:underline"
+                          >
+                            {row.email}
+                          </a>
+                        ) : (
+                          <p class="mt-0.5 text-xs text-muted">Sin email</p>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td class="align-top px-4 py-4 text-muted">
+                    <p class="text-sm leading-relaxed text-white/85">{row.summaryLine}</p>
+                  </td>
+                  <td class="align-top px-4 py-4 text-right">
+                    <a href={`/admin/students/${row.userId}`} class="btn btn-secondary inline-flex h-8 items-center text-xs whitespace-nowrap">
+                      Perfil
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
+    )}
+  </section>
+</DashboardLayout>

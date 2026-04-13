@@ -70,7 +70,7 @@
     const labelEl = document.getElementById('delete-confirm-label');
     const submitBtn = document.getElementById('delete-confirm-submit') as HTMLButtonElement;
     const cancelBtn = document.getElementById('delete-confirm-cancel');
-    const backdrop = document.querySelector('.delete-modal-backdrop');
+    const backdrop = modal?.querySelector('.delete-modal-backdrop') ?? null;
 
     let pendingConfig: {
       confirmLabel: string;

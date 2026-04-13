@@ -251,6 +251,10 @@ input:disabled,
   border-color: transparent !important;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
 }
+/* Por encima del header sticky (z-40): si el calendario quedaba dentro del panel de contenido, se veía tapado. */
+.flatpickr-calendar.open {
+  z-index: 100000 !important;
+}
 .flatpickr-day.selected,
 .flatpickr-day.startRange,
 .flatpickr-day.endRange {

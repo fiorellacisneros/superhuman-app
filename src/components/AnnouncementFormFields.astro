@@ -3,6 +3,7 @@ import {
   ANNOUNCEMENT_BULLET_ICONS,
   getVisibilityConditionsForForm,
   type AnnouncementRecord,
+  type AnnouncementDismissBehavior,
 } from '../lib/announcements';
 import { utcIsoToAdminLocalFlatpickr } from '../lib/challenge-deadline';
 
@@ -28,6 +29,7 @@ const audience = i?.audience ?? 'all';
 const courseIdVal = i?.course_id ?? '';
 const visForm = getVisibilityConditionsForForm(i);
 const VIS_ROW_COUNT = 6;
+const dismissVal: AnnouncementDismissBehavior = i?.dismiss_behavior ?? 'always_show';
 ---
 
 <input type="hidden" name="redirect_to" value={redirectTo} />
@@ -269,28 +271,74 @@ const VIS_ROW_COUNT = 6;
   </div>
 </fieldset>
 
-<fieldset
-  class="space-y-4 rounded-xl border border-white/10 bg-surface-2/30 p-4"
-  data-vis-root={formSuffix}
+<section
+  class="rounded-2xl border border-white/12 bg-[#1a1a1f] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+  aria-labelledby={`ann-vis-panel-${formSuffix}`}
 >
-  <legend class="px-1 text-xs font-medium text-white">Condiciones de visibilidad (opcional)</legend>
-  <p class="text-[11px] leading-relaxed text-muted/90">
-    Se evalúan <strong class="text-white/95">después</strong> de audiencia y fechas. Añade filas con el dato a comprobar (puntos, curso, modalidad). Vacías no cuentan.
-  </p>
-  <div class="rounded-lg border border-white/5 bg-background/40 px-3 py-3">
-    <p class="text-[11px] font-medium text-muted">Si en este grupo se cumple…</p>
-    <div class="mt-2 flex flex-wrap gap-4 text-sm text-white">
-      <label class="inline-flex cursor-pointer items-center gap-2">
-        <input type="radio" name="vis_match" value="all" checked={visForm.match !== 'any'} class="accent-lime" />
-        Todas las condiciones
-      </label>
-      <label class="inline-flex cursor-pointer items-center gap-2">
-        <input type="radio" name="vis_match" value="any" checked={visForm.match === 'any'} class="accent-lime" />
-        Cualquiera de las condiciones
-      </label>
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div class="min-w-0 flex-1">
+      <h2 id={`ann-vis-panel-${formSuffix}`} class="text-sm font-semibold tracking-tight text-white">
+        Visibilidad del aviso (modal)
+      </h2>
+      <p class="mt-1.5 text-[11px] leading-relaxed text-muted/90">
+        El aviso se abre en modal al cargar el dashboard del estudiante. Las reglas de abajo se aplican <strong class="text-white/90">después</strong> de audiencia y fechas.
+      </p>
     </div>
+    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lime/10 text-lime" aria-hidden="true">
+      <i class="bi bi-stars text-lg leading-none"></i>
+    </span>
   </div>
-  <div class="space-y-3">
+
+  <div class="mt-5 rounded-xl border border-white/10 bg-black/30 px-4 py-4">
+    <label for={`dismiss-${formSuffix}`} class="text-xs font-medium text-white">Comportamiento al cerrar</label>
+    <p class="mt-1 text-[11px] text-muted/85">
+      La modal incluye «Ahora no», cerrar (X) y fondo: cierran el aviso. Elige si debe volver a mostrarse en la próxima visita.
+    </p>
+    <select
+      id={`dismiss-${formSuffix}`}
+      name="dismiss_behavior"
+      class="mt-3 w-full max-w-2xl rounded-lg border border-white/10 bg-[#25252c] px-3 py-2.5 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+    >
+      <option value="always_show" selected={dismissVal === 'always_show'}>
+        Mostrar en cada visita (cerrar solo oculta hasta cerrar el navegador o la pestaña)
+      </option>
+      <option value="remember_dismissal" selected={dismissVal === 'remember_dismissal'}>
+        Si lo cierra una vez, no volver a mostrar en este navegador
+      </option>
+    </select>
+  </div>
+
+  <fieldset class="mt-5 space-y-4 rounded-xl border border-white/10 bg-black/25 p-4" data-vis-root={formSuffix}>
+    <legend class="px-1 text-xs font-medium text-white">Condiciones adicionales (opcional)</legend>
+    <p class="text-[11px] leading-relaxed text-muted/90">
+      Si no añades filas, el aviso solo depende de audiencia y fechas. Cada fila compara puntos, curso o modalidad del cohort.
+    </p>
+    <div class="rounded-lg border border-white/8 bg-black/35 px-3 py-3">
+      <p class="text-[11px] font-medium text-muted">Si en este grupo se cumple…</p>
+      <div
+        class="mt-2.5 inline-flex flex-wrap gap-1 rounded-xl border border-white/10 bg-[#141418] p-1"
+        role="group"
+        aria-label="Combinar condiciones"
+      >
+        <label class="cursor-pointer">
+          <input type="radio" name="vis_match" value="all" checked={visForm.match !== 'any'} class="peer sr-only" />
+          <span
+            class="block rounded-lg px-3 py-2 text-xs font-medium text-muted transition peer-checked:bg-white/12 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-lime"
+          >
+            Todas las condiciones
+          </span>
+        </label>
+        <label class="cursor-pointer">
+          <input type="radio" name="vis_match" value="any" checked={visForm.match === 'any'} class="peer sr-only" />
+          <span
+            class="block rounded-lg px-3 py-2 text-xs font-medium text-muted transition peer-checked:bg-white/12 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-lime"
+          >
+            Cualquiera
+          </span>
+        </label>
+      </div>
+    </div>
+    <div class="space-y-3">
     {Array.from({ length: VIS_ROW_COUNT }).map((_, idx) => {
       const rule = visForm.rules[idx];
       const f = rule?.field ?? '';
@@ -303,7 +351,7 @@ const VIS_ROW_COUNT = 6;
       const cohVal = isCoh && rule && 'value' in rule ? rule.value : 'live';
       return (
         <div
-          class="ann-vis-row space-y-2 rounded-lg border border-white/10 bg-surface-2/50 p-3"
+          class="ann-vis-row space-y-2 rounded-lg border border-white/10 bg-[#25252c]/90 p-3"
           data-row-index={idx}
         >
           <div class="flex flex-wrap items-end gap-2">
@@ -407,8 +455,9 @@ const VIS_ROW_COUNT = 6;
         </div>
       );
     })}
-  </div>
-</fieldset>
+    </div>
+  </fieldset>
+</section>
 
 <div class="grid gap-6 sm:grid-cols-2">
   <div>

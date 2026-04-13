@@ -78,6 +78,7 @@ const adminNav = [
   { label: 'Cursos', href: '/admin/courses', icon: 'bi-journal-richtext' },
   { label: 'Retos', href: '/admin/challenges', icon: 'bi-lightning-charge-fill', showActiveCount: true },
   { label: 'Alumnos', href: '/admin/students', icon: 'bi-people-fill' },
+  { label: 'SOS', href: '/admin/sos', icon: 'bi-life-preserver' },
   { label: 'Sesiones 1:1', href: '/sesiones-1-1', icon: 'bi-calendar-check-fill' },
   { label: 'Asistencia', href: '/admin/attendance', icon: 'bi-calendar2-check-fill' },
   { label: 'Kahoot', href: '/admin/kahoot', icon: 'bi-trophy-fill' },
@@ -111,7 +112,7 @@ const adminMobileMenuSpec = [
   { title: 'Panel', hrefs: ['/dashboard', '/admin/courses'] },
   {
     title: 'Gestión',
-    hrefs: ['/admin/challenges', '/sesiones-1-1', '/admin/attendance', '/admin/kahoot', '/admin/students', '/admin/submissions', '/admin/avisos', '/certificados'],
+    hrefs: ['/admin/challenges', '/sesiones-1-1', '/admin/attendance', '/admin/kahoot', '/admin/students', '/admin/sos', '/admin/submissions', '/admin/avisos', '/certificados'],
   },
   { title: 'Comunidad', hrefs: ['/superhumans'] },
 ] as const;
@@ -622,7 +623,11 @@ function isActive(href: string): boolean {
       </div>
     </div>
 
-    <div id="toast-root" class="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(92vw,400px)] flex-col gap-2"></div>
+    <!-- Centrado y bajo el header: evita solaparse con avatar / nombre / correo (esquina superior derecha). -->
+    <div
+      id="toast-root"
+      class="pointer-events-none fixed left-1/2 top-[max(1rem,env(safe-area-inset-top,0px))] z-[200] flex w-[min(calc(100vw-2rem),420px)] -translate-x-1/2 flex-col gap-2 md:top-28"
+    ></div>
 
     <script>
       document.addEventListener('DOMContentLoaded', () => {

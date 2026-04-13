@@ -104,7 +104,6 @@ if (isAdminView) {
   const { data: allEnrollments } = await supabase.from('enrollments').select('user_id, access_type');
   const userIdsWithLive = new Set((allEnrollments ?? []).filter((e) => (e.access_type as string) !== 'on_demand').map((e) => e.user_id as string));
   const onDemandOnlyUserIds = [...new Set((allEnrollments ?? []).map((e) => e.user_id as string).filter(Boolean))].filter((id) => !userIdsWithLive.has(id));
-  let onDemandStudents: { id: string; display_name: string; asistenciasCount: number }[] = [];
   if (onDemandOnlyUserIds.length > 0) {
     const { data: studentRows } = await supabase.from('users').select('id, display_name').in('id', onDemandOnlyUserIds).eq('role', 'student');
     const countByUser = new Map<string, number>();
@@ -311,18 +310,68 @@ function formatBookingDate(iso: string) {
                   </h3>
                   <ul class="mt-2 space-y-1.5">
                     {course.bookings.map((b) => (
-                      <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background/60 px-3 py-2 text-sm">
-                        <div class="min-w-0">
-                          <span class="text-white">{formatBookingDate(b.scheduled_at)}</span>
-                          {isAdminView && b.display_name && <span class="ml-2 text-muted">· {b.display_name}</span>}
+                      <li class="rounded-lg bg-background/60 px-3 py-2 text-sm">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                          <div class="min-w-0">
+                            <span class="text-white">{formatBookingDate(b.scheduled_at)}</span>
+                            {isAdminView && b.display_name && <span class="ml-2 text-muted">· {b.display_name}</span>}
+                          </div>
+                          <span
+                            class={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                              b.status === 'scheduled' ? 'bg-lime/15 text-lime' : b.status === 'completed' ? 'bg-white/10 text-muted' : 'bg-red-500/15 text-red-400'
+                            }`}
+                          >
+                            {b.status === 'scheduled' ? 'Programada' : b.status === 'completed' ? 'Realizada' : 'Cancelada'}
+                          </span>
                         </div>
-                        <span
-                          class={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                            b.status === 'scheduled' ? 'bg-lime/15 text-lime' : b.status === 'completed' ? 'bg-white/10 text-muted' : 'bg-red-500/15 text-red-400'
-                          }`}
-                        >
-                          {b.status === 'scheduled' ? 'Programada' : b.status === 'completed' ? 'Realizada' : 'Cancelada'}
-                        </span>
+                        {isAdminView && (
+                          <details class="mt-2 border-t border-white/5 pt-2">
+                            <summary class="cursor-pointer select-none text-[11px] font-medium text-lime/90 hover:text-lime">
+                              Editar reserva
+                            </summary>
+                            <form
+                              method="post"
+                              action="/api/admin/one-on-one-bookings"
+                              class="mt-3 flex flex-wrap items-end gap-3"
+                            >
+                              <input type="hidden" name="booking_id" value={b.id} />
+                              <input type="hidden" name="course_id" value={course.id} />
+                              <input type="hidden" name="redirect_to" value="/sesiones-1-1" />
+                              <div>
+                                <label for={`edit-date-${b.id}`} class="block text-[11px] text-muted">Fecha y hora</label>
+                                <div class="relative mt-0.5">
+                                  <input
+                                    id={`edit-date-${b.id}`}
+                                    type="text"
+                                    name="scheduled_at"
+                                    required
+                                    readonly
+                                    autocomplete="off"
+                                    data-default={b.scheduled_at}
+                                    class="flatpickr-booking-edit min-w-[200px] w-full cursor-pointer rounded-lg border border-transparent bg-surface-2 py-2 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                                  />
+                                  <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
+                                </div>
+                              </div>
+                              <div>
+                                <label for={`edit-status-${b.id}`} class="block text-[11px] text-muted">Estado</label>
+                                <select
+                                  id={`edit-status-${b.id}`}
+                                  name="status"
+                                  required
+                                  class="mt-0.5 min-w-[140px] rounded-lg border border-transparent bg-surface-2 px-3 py-2 text-sm text-white focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                                >
+                                  <option value="scheduled" selected={b.status === 'scheduled'}>Programada</option>
+                                  <option value="completed" selected={b.status === 'completed'}>Realizada</option>
+                                  <option value="cancelled" selected={b.status === 'cancelled'}>Cancelada</option>
+                                </select>
+                              </div>
+                              <button type="submit" class="btn btn-secondary text-sm">
+                                Guardar cambios
+                              </button>
+                            </form>
+                          </details>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -425,14 +474,20 @@ function formatBookingDate(iso: string) {
             />
           </div>
           <div>
-            <label for="sg-fecha" class="block text-[11px] text-muted">Fecha y hora (texto, ej. Viernes 27 marzo · 7:00pm Perú)</label>
-            <input
-              id="sg-fecha"
-              type="text"
-              name="fecha_label"
-              placeholder="Viernes 27 marzo · 7:00 – 8:00pm Perú"
-              class="mt-0.5 min-w-[240px] rounded-lg border border-transparent bg-background px-3 py-2 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
-            />
+            <label for="sg-fecha" class="block text-[11px] text-muted">Fecha y hora</label>
+            <div class="relative mt-0.5">
+              <input
+                id="sg-fecha"
+                type="text"
+                name="fecha_label"
+                required
+                autocomplete="off"
+                class="flatpickr-sg-sesion min-w-[240px] w-full rounded-lg border border-transparent bg-background py-2 pl-3 pr-10 text-sm text-white placeholder:text-muted focus:border-lime focus:outline-none focus:ring-1 focus:ring-lime"
+                placeholder="Calendario o escribe la fecha"
+              />
+              <i class="bi bi-calendar3 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
+            </div>
+            <p class="mt-1 max-w-xs text-[10px] text-muted">Lo verán en su listado; puedes retocar el texto tras elegir (ej. “Perú”, duración).</p>
           </div>
           <button type="submit" class="btn btn-primary">Agregar sesión</button>
         </form>
@@ -513,27 +568,35 @@ function formatBookingDate(iso: string) {
     <script>
       import flatpickr from 'flatpickr';
       import { Spanish } from 'flatpickr/dist/l10n/es.js';
+      const pickerOptsBase = {
+        enableTime: true,
+        dateFormat: 'Y-m-d H:i',
+        locale: Spanish,
+        time_24hr: true,
+      };
       const init = () => {
-        document.querySelectorAll('.flatpickr-scheduled').forEach((el) => {
-          if (el.dataset.flatpickrInit) return;
-          el.dataset.flatpickrInit = '1';
-          flatpickr(el, {
-            enableTime: true,
-            dateFormat: 'Y-m-d H:i',
-            locale: Spanish,
-            time_24hr: true,
-            allowInput: false,
-          });
+        document.querySelectorAll('.flatpickr-scheduled, .flatpickr-sesion-grupal, .flatpickr-sg-sesion').forEach((el) => {
+          const input = el as HTMLInputElement;
+          if (input.dataset.flatpickrInit) return;
+          input.dataset.flatpickrInit = '1';
+          const allowInput = input.classList.contains('flatpickr-sg-sesion');
+          flatpickr(el, { ...pickerOptsBase, allowInput, appendTo: document.body });
         });
-        document.querySelectorAll('.flatpickr-sesion-grupal').forEach((el) => {
-          if (el.dataset.flatpickrInit) return;
-          el.dataset.flatpickrInit = '1';
+        document.querySelectorAll('.flatpickr-booking-edit').forEach((el) => {
+          const input = el as HTMLInputElement;
+          if (input.dataset.flatpickrInit) return;
+          input.dataset.flatpickrInit = '1';
+          const raw = input.dataset.default;
+          let defaultDate: Date | undefined;
+          if (raw) {
+            const d = new Date(raw);
+            if (!Number.isNaN(d.getTime())) defaultDate = d;
+          }
           flatpickr(el, {
-            enableTime: true,
-            dateFormat: 'Y-m-d H:i',
-            locale: Spanish,
-            time_24hr: true,
+            ...pickerOptsBase,
             allowInput: false,
+            appendTo: document.body,
+            defaultDate,
           });
         });
       };

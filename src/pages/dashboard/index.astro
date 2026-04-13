@@ -17,7 +17,7 @@ import { badgeDisplayDescription, badgeDisplayName } from '../../lib/badge-displ
 import { getPointsBreakdownByCourse, type CoursePointsBreakdown } from '../../lib/points-breakdown';
 import PointsBreakdownListItem from '../../components/PointsBreakdownListItem.astro';
 import BirthdayNotice from '../../components/BirthdayNotice.astro';
-import AnnouncementCard from '../../components/AnnouncementCard.astro';
+import AnnouncementModal from '../../components/AnnouncementModal.astro';
 import {
   fetchActiveAnnouncements,
   filterAnnouncementsForViewer,
@@ -779,13 +779,7 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
       />
     )}
     <section class="max-w-5xl space-y-8 xl:max-w-6xl">
-      {studentAnnouncements.length > 0 && (
-        <div class="space-y-5">
-          {studentAnnouncements.map((ann) => (
-            <AnnouncementCard announcement={ann} />
-          ))}
-        </div>
-      )}
+      <AnnouncementModal announcements={studentAnnouncements} />
       <header class="space-y-2">
         <h1 class="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
           {enrolledIds.length > 0 ? 'Tu viaje a ser un superhuman empieza aquí.' : 'Gracias por confiar en Superhuman'}
@@ -1334,7 +1328,8 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
         function syncBodyScroll() {
           const badge = document.getElementById('badge-guide-modal');
           const points = document.getElementById('points-breakdown-modal');
-          const anyOpen = [badge, points].some((m) => m && !m.classList.contains('hidden'));
+          const ann = document.getElementById('announcement-modal-root');
+          const anyOpen = [badge, points, ann].some((m) => m && !m.classList.contains('hidden'));
           document.body.style.overflow = anyOpen ? 'hidden' : '';
         }
         function wireModal(modalId, openSelector, closeBtnId, backdropId) {
@@ -1364,6 +1359,12 @@ const firstCourseHref = enrolledCourses[0] ? `/courses/${enrolledCourses[0].slug
         const points = wireModal('points-breakdown-modal', '.open-points-breakdown-trigger', 'close-points-breakdown-modal', 'points-breakdown-modal-backdrop');
         document.addEventListener('keydown', (e) => {
           if (e.key !== 'Escape') return;
+          const annRoot = document.getElementById('announcement-modal-root');
+          if (annRoot && !annRoot.classList.contains('hidden')) {
+            const panel = annRoot.querySelector('[data-ann-modal-panel]:not(.hidden)');
+            panel?.querySelector('.ann-modal-dismiss-secondary')?.click();
+            return;
+          }
           if (badge.modal && !badge.modal.classList.contains('hidden')) badge.closeModal();
           else if (points.modal && !points.modal.classList.contains('hidden')) points.closeModal();
         });
