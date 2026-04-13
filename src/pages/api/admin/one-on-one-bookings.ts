@@ -22,13 +22,51 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const formData = await request.formData();
   const redirectTo = safeRedirectPath(formData.get('redirect_to'), '/sesiones-1-1');
 
+  const action = typeof formData.get('_action') === 'string' ? formData.get('_action')!.toString().trim() : '';
   const bookingIdRaw = formData.get('booking_id');
+
+  if (action === 'delete' && typeof bookingIdRaw === 'string' && bookingIdRaw.trim()) {
+    return handleDelete(db, formData, redirectTo, bookingIdRaw.trim());
+  }
+
   if (typeof bookingIdRaw === 'string' && bookingIdRaw.trim()) {
     return handleUpdate(db, formData, redirectTo, bookingIdRaw.trim());
   }
 
   return handleInsert(db, formData, redirectTo);
 };
+
+async function handleDelete(db: SupabaseClient, formData: FormData, redirectTo: string, bookingId: string) {
+  const courseId = formData.get('course_id');
+  if (typeof courseId !== 'string' || !courseId.trim()) {
+    const url = withToastParams(redirectTo, 'Falta el curso', 'error');
+    return new Response(null, { status: 303, headers: { Location: url } });
+  }
+
+  const { data: row, error: fetchErr } = await db
+    .from('one_on_one_bookings')
+    .select('id, course_id')
+    .eq('id', bookingId)
+    .maybeSingle();
+
+  if (fetchErr || !row) {
+    const url = withToastParams(redirectTo, 'Reserva no encontrada', 'error');
+    return new Response(null, { status: 303, headers: { Location: url } });
+  }
+  if (String((row as { course_id: string }).course_id) !== courseId.trim()) {
+    const url = withToastParams(redirectTo, 'La reserva no pertenece a este curso', 'error');
+    return new Response(null, { status: 303, headers: { Location: url } });
+  }
+
+  const { error } = await db.from('one_on_one_bookings').delete().eq('id', bookingId);
+  if (error) {
+    const url = withToastParams(redirectTo, error.message || 'Error al eliminar', 'error');
+    return new Response(null, { status: 303, headers: { Location: url } });
+  }
+
+  const url = withToastParams(redirectTo, 'Reserva eliminada', 'success');
+  return new Response(null, { status: 303, headers: { Location: url } });
+}
 
 async function handleUpdate(db: SupabaseClient, formData: FormData, redirectTo: string, bookingId: string) {
   const courseId = formData.get('course_id');
